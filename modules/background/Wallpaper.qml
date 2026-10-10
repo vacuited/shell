@@ -81,9 +81,11 @@ Item {
 
     onWeFailedChanged: {
         if (weFailed) {
-            if (displaySource !== settledSource) {
-                applySourceChange();
-            }
+            Qt.callLater(() => {
+                if (displaySource !== settledSource) {
+                    applySourceChange();
+                }
+            });
         }
     }
 
