@@ -15,7 +15,7 @@ Searcher {
 
     readonly property string currentNamePath: `${Paths.state}/wallpaper/path.txt`
     readonly property list<string> smartArg: GlobalConfig.services.smartScheme ? [] : ["--no-smart"]
-    readonly property string fallback: Quickshell.shellPath("assets/wallpaper.webp")
+    readonly property string fallback: Quickshell.shellPath("assets/wallpapers/Material-Wave.png")
 
     property bool showPreview: false
     property bool enableAnimation: true
@@ -36,7 +36,136 @@ Searcher {
     property string lastStatic: ""
     property string lastAnimated: ""
 
+    property string committedWeDir: ""
+    property string storedWeDir: ""
+    property string storedTarget: ""
+    property bool weDirLoaded: false
+    property bool pathLoaded: false
+    property bool _selfSet: false
+    property int selectNonce: 0
+    property var _thumbCache: ({})
+
+    function cleanPath(raw: string): string {
+        if (!raw) return "";
+        let s = String(raw).trim();
+        if (s.indexOf("file://") === 0) {
+            s = s.substring(7).split(/[?#]/)[0];
+            try {
+                s = decodeURIComponent(s);
+            } catch (e) {}
+        }
+        return s;
+    }
+
+    function deriveWeDir(path: string): string {
+        let clean = cleanPath(path);
+        if (!clean) return "";
+        if (clean.endsWith("/project.json")) {
+            return clean.substring(0, clean.length - 13);
+        }
+        if (CUtils.fileExists(clean + "/project.json")) {
+            return clean;
+        }
+        let dir = clean.substring(0, clean.lastIndexOf('/'));
+        if (dir && CUtils.fileExists(dir + "/project.json")) {
+            return dir;
+        }
+        let parentDir = dir ? dir.substring(0, dir.lastIndexOf('/')) : "";
+        if (parentDir && CUtils.fileExists(parentDir + "/project.json")) {
+            try {
+                let json = JSON.parse(CUtils.readFile(parentDir + "/project.json"));
+                if (json.preview && typeof json.preview === "string") {
+                    let expected = parentDir + "/" + json.preview;
+                    if (expected === clean) {
+                        return parentDir;
+                    }
+                }
+            } catch (e) {}
+        }
+        return "";
+    }
+
+    function syncWeDir(allowDiskWrite: bool): void {
+        if (_selfSet || !pathLoaded || !weDirLoaded || !actualCurrent) return;
+
+        if (actualCurrent === storedTarget) {
+            committedWeDir = storedWeDir;
+            return;
+        }
+
+        let derived = deriveWeDir(actualCurrent);
+        committedWeDir = derived;
+        storedWeDir = derived;
+        storedTarget = actualCurrent;
+
+        if (allowDiskWrite) {
+            Quickshell.execDetached(["sh", "-c", 'mkdir -p "$1" && printf "%s\t%s\n" "$2" "$3" > "$1/$4"', "sh", Paths.state + "/wallpaper", derived, actualCurrent, "we_dir.txt"]);
+        }
+    }
+
+    function resolveWallpaperPath(path: string): string {
+        let clean = cleanPath(path);
+        if (!clean) return "";
+        if (CUtils.fileExists(clean + "/project.json")) {
+            clean = clean + "/project.json";
+        }
+        if (!clean.endsWith("/project.json")) {
+            return clean;
+        }
+
+        if (_thumbCache[clean] !== undefined) {
+            return _thumbCache[clean];
+        }
+
+        let target = "";
+        let dir = clean.substring(0, clean.length - 13);
+        try {
+            let content = CUtils.readFile(clean);
+            let json = JSON.parse(content);
+            if (json.preview && typeof json.preview === "string") {
+                if (!json.preview.includes("..") && !json.preview.startsWith("/")) {
+                    let candidate = dir + "/" + json.preview;
+                    if (CUtils.fileExists(candidate)) {
+                        target = candidate;
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn("Failed to parse project.json:", e);
+        }
+
+        if (!target) {
+            const candidates = ["preview.png", "preview.jpg", "preview.gif", "preview.webp"];
+            for (let i = 0; i < candidates.length; i++) {
+                let candidate = dir + "/" + candidates[i];
+                if (CUtils.fileExists(candidate)) {
+                    target = candidate;
+                    break;
+                }
+            }
+        }
+
+        if (target) {
+            _thumbCache[clean] = target;
+            return target;
+        }
+
+        return root.fallback;
+    }
+
     property var _hashCache: ({})
+
+    Timer {
+        id: setWallpaperCliTimer
+        interval: 250
+        repeat: false
+        property string pendingTarget: ""
+        onTriggered: {
+            if (pendingTarget) {
+                Quickshell.execDetached(["caelestia", "wallpaper", "-f", pendingTarget, ...root.smartArg]);
+            }
+        }
+    }
 
     Timer {
         id: colorReleaseTimer
@@ -176,59 +305,59 @@ Searcher {
     }
 
     function setWallpaper(path: string): void {
-        let clean = String(path || "").split(/[?#]/)[0];
-        if (clean.indexOf("file://") === 0) clean = clean.substring(7);
+        let clean = cleanPath(path);
         if (!clean) return;
 
-        let targetPath = clean;
-        if (path.endsWith("project.json")) {
-            let content = CUtils.readFile(path);
-            try {
-                let json = JSON.parse(content);
-                if (json.preview) {
-                    targetPath = path.substring(0, path.length - 12) + json.preview;
-                }
-            } catch (e) {
-                console.warn("Failed to parse project.json:", e);
-            }
-        }
+        let wePath = deriveWeDir(clean);
+        let targetPath = resolveWallpaperPath(clean);
 
+        _selfSet = true;
+        committedWeDir = wePath;
+        storedWeDir = wePath;
+        storedTarget = targetPath;
         actualCurrent = targetPath;
-        isTrackingRollback = false;
+        _selfSet = false;
 
+        Quickshell.execDetached(["sh", "-c", 'mkdir -p "$1" && printf "%s\t%s\n" "$2" "$3" > "$1/$4"', "sh", Paths.state + "/wallpaper", wePath, targetPath, "we_dir.txt"]);
+
+        isTrackingRollback = false;
         previewColourLock = true;
         pendingPreviewClear = false;
 
         if (isVideo(targetPath)) {
             lastAnimated = targetPath;
             wallpaperMode = "animated";
-            Quickshell.execDetached(["sh", "-c", "mkdir -p '" + Paths.state + "/wallpaper' && echo '" + targetPath + "' > '" + Paths.state + "/wallpaper/last_animated.txt'"]);
+            Quickshell.execDetached(["sh", "-c", 'mkdir -p "$1" && printf "%s\n" "$2" > "$1/$3"', "sh", Paths.state + "/wallpaper", targetPath, "last_animated.txt"]);
         } else {
             lastStatic = targetPath;
             wallpaperMode = "static";
-            Quickshell.execDetached(["sh", "-c", "mkdir -p '" + Paths.state + "/wallpaper' && echo '" + targetPath + "' > '" + Paths.state + "/wallpaper/last_static.txt'"]);
+            Quickshell.execDetached(["sh", "-c", 'mkdir -p "$1" && printf "%s\n" "$2" > "$1/$3"', "sh", Paths.state + "/wallpaper", targetPath, "last_static.txt"]);
         }
 
         stopPreview();
 
-        Quickshell.execDetached(["caelestia", "wallpaper", "-f", targetPath, ...smartArg]);
+        setWallpaperCliTimer.pendingTarget = targetPath;
+        setWallpaperCliTimer.restart();
+
+        selectNonce++;
     }
 
     function preview(path: string): void {
         captureRollbackState();
 
-        let clean = String(path || "").split(/[?#]/)[0];
-        if (clean.indexOf("file://") === 0) clean = clean.substring(7);
+        let clean = cleanPath(path);
         if (!clean) return;
 
-        if (previewPath === clean && showPreview) return;
+        let targetPath = resolveWallpaperPath(clean);
 
-        previewPath = clean;
+        if (previewPath === targetPath && showPreview) return;
+
+        previewPath = targetPath;
         showPreview = true;
 
         if (String(Colours.scheme).startsWith("dynamic")) {
             if (!getPreviewColoursProc.running) {
-                getPreviewColoursProc.startFor(clean);
+                getPreviewColoursProc.startFor(targetPath);
             }
         }
     }
@@ -242,7 +371,9 @@ Searcher {
 
         if (isTrackingRollback) {
             wallpaperMode = rollbackMode;
+            _selfSet = true;
             actualCurrent = rollbackPath;
+            _selfSet = false;
             isTrackingRollback = false;
             
             Quickshell.execDetached(["caelestia", "wallpaper", "-f", rollbackPath, ...smartArg]);
@@ -257,22 +388,14 @@ Searcher {
     }
 
     function getThumbnailPath(path: string): string {
-        if (path.endsWith("project.json")) {
-            let content = CUtils.readFile(path);
-            try {
-                let json = JSON.parse(content);
-                if (json.preview) {
-                    return path.substring(0, path.length - 12) + json.preview;
-                }
-            } catch (e) {
-                console.warn("Failed to parse project.json:", e);
-            }
-            return path;
+        let clean = cleanPath(path);
+        if (clean.endsWith("/project.json")) {
+            return resolveWallpaperPath(clean);
         }
-        if (isVideo(path)) {
-            return getWallpaperThumb(path);
+        if (isVideo(clean)) {
+            return getWallpaperThumb(clean);
         }
-        return path;
+        return clean;
     }
 
     onPreviewColourLockChanged: {
@@ -301,6 +424,18 @@ Searcher {
             return root.list.map(w => w.path).join("\n");
         }
 
+        function preview(path: string): void {
+            root.preview(path);
+        }
+
+        function stopPreview(): void {
+            root.stopPreview();
+        }
+
+        function setMode(mode: string): void {
+            root.setWallpaperMode(mode);
+        }
+
         target: "wallpaper"
     }
 
@@ -315,6 +450,33 @@ Searcher {
     }
 
     FileView {
+        path: `${Paths.state}/wallpaper/we_dir.txt`
+        printErrors: false
+        onLoaded: {
+            let raw = text().replace(/\r?\n$/, "");
+            let parts = raw.split("\t");
+            root.storedWeDir = parts[0] || "";
+            root.storedTarget = parts[1] || "";
+            root.weDirLoaded = true;
+            if (root.pathLoaded) {
+                root.syncWeDir(false);
+            }
+        }
+        onLoadFailed: {
+            root.weDirLoaded = true;
+            if (root.pathLoaded) {
+                root.syncWeDir(false);
+            }
+        }
+    }
+
+    onActualCurrentChanged: {
+        if (!root._selfSet && root.weDirLoaded && root.pathLoaded) {
+            root.syncWeDir(true);
+        }
+    }
+
+    FileView {
         path: root.currentNamePath
         watchChanges: true
         printErrors: false
@@ -325,7 +487,11 @@ Searcher {
                 wall = root.fallback;
                 Quickshell.execDetached(["caelestia", "wallpaper", "-f", root.fallback, ...root.smartArg]);
             }
+            let isExternal = (root.pathLoaded && root.storedTarget !== wall);
+            root._selfSet = true;
             root.actualCurrent = wall;
+            root._selfSet = false;
+            root.pathLoaded = true;
             root.previewColourLock = false;
 
             if (root.isVideo(root.actualCurrent)) {
@@ -335,11 +501,21 @@ Searcher {
                 wallpaperMode = "static";
                 if (!root.lastStatic) root.lastStatic = wall;
             }
+
+            if (root.weDirLoaded) {
+                root.syncWeDir(isExternal);
+            }
         }
         onLoadFailed: {
+            root._selfSet = true;
             root.actualCurrent = root.fallback;
+            root._selfSet = false;
+            root.pathLoaded = true;
             root.previewColourLock = false;
             Quickshell.execDetached(["caelestia", "wallpaper", "-f", root.fallback, ...root.smartArg]);
+            if (root.weDirLoaded) {
+                root.syncWeDir(false);
+            }
         }
     }
 
@@ -495,6 +671,12 @@ Searcher {
             root._refreshing = false;
             root.cacheBuster = Date.now().toString();
             root.restoreWallpaperMode = true;
+        }
+    }
+
+    Component.onDestruction: {
+        if (setWallpaperCliTimer.running && setWallpaperCliTimer.pendingTarget) {
+            Quickshell.execDetached(["caelestia", "wallpaper", "-f", setWallpaperCliTimer.pendingTarget, ...root.smartArg]);
         }
     }
 }

@@ -8,6 +8,7 @@ import Caelestia.Config
 import qs.components
 import qs.components.containers
 import qs.services
+import qs.utils
 
 Variants {
     model: Screens.screens.filter(s => GlobalConfig.forScreen(s.name).background.enabled)
@@ -21,8 +22,8 @@ Variants {
         screen: modelData
         name: "background"
         WlrLayershell.exclusionMode: ExclusionMode.Ignore
-        WlrLayershell.layer: (contentItem.Config.background.wallpaperEnabled && !(wallpaper.item && wallpaper.item.weActive)) ? WlrLayer.Background : WlrLayer.Bottom
-        color: contentItem.Config.background.wallpaperEnabled && !(wallpaper.item && wallpaper.item.weActive) ? "black" : "transparent"
+        WlrLayershell.layer: (contentItem.Config.background.wallpaperEnabled && !(wallpaper.item && wallpaper.item.weRunning)) ? WlrLayer.Background : WlrLayer.Bottom
+        color: contentItem.Config.background.wallpaperEnabled && !(wallpaper.item && wallpaper.item.weRunning) ? "black" : "transparent"
         surfaceFormat.opaque: false
 
         anchors.top: true
@@ -34,6 +35,26 @@ Variants {
             screen: win.screen
             slot: "background"
             component: win
+        }
+
+        property bool cleanupDone: false
+
+        Process {
+            id: cleanupProc
+            command: [
+                "sh", "-c",
+                'PIDFILE="$1/engine_$2.pid"; if [ -f "$PIDFILE" ]; then OLD_PID=$(cat "$PIDFILE" 2>/dev/null); rm -f "$PIDFILE"; if [ -n "$OLD_PID" ] && kill -0 "$OLD_PID" 2>/dev/null; then CMD=$(tr "\\0" " " < "/proc/$OLD_PID/cmdline" 2>/dev/null || true); if echo "$CMD" | grep -q "linux-wallpaperengine" && echo "$CMD" | grep -q -- "--layer" && echo "$CMD" | grep -q -- "$2"; then kill "$OLD_PID" 2>/dev/null || true; fi; fi; fi',
+                "sh",
+                Paths.state + "/wallpaper",
+                win.modelData.name
+            ]
+            running: true
+            onRunningChanged: {
+                if (!running) cleanupDone = true;
+            }
+            onExited: {
+                cleanupDone = true;
+            }
         }
 
         Item {
@@ -48,20 +69,69 @@ Variants {
 
                 anchors.fill: parent
                 active: Config.background.wallpaperEnabled
-                opacity: (item && item.weActive) ? 0 : 1
+                opacity: (item && item.weSurfaceVisible) ? 0 : 1
 
                 sourceComponent: Wallpaper {
                     screen: win.modelData
+                    weEngineReady: weProc.engineReady
+                    weFailed: weProc.weFailed
+                }
+            }
+
+            Timer {
+                id: engineReadyTimer
+                interval: weProc.engineReadyDelayMs
+                repeat: false
+                onTriggered: {
+                    if (weProc.alive) {
+                        weProc.engineReady = true;
+                    }
+                }
+            }
+
+            Timer {
+                id: watchdogTimer
+                interval: 2000
+                repeat: false
+                onTriggered: {
+                    if (weProc.stopping && weProc.alive) {
+                        console.warn("linux-wallpaperengine stop timed out, sending SIGKILL");
+                        weProc.signal(9);
+                    }
                 }
             }
 
             Process {
                 id: weProc
-                property string weDir: wallpaper.item ? wallpaper.item.weDir : ""
-                property bool weActive: wallpaper.item ? wallpaper.item.weActive : false
-                
+                property string weDir: Wallpapers.committedWeDir
+                property bool weRunning: wallpaper.item ? wallpaper.item.weRunning : false
+                property bool weFailed: false
+                property bool stopping: false
+                property bool alive: false
+                property bool gotExit: false
+                property bool engineReady: false
+                property int engineReadyDelayMs: 1200
+                property int lastPid: 0
+
+                readonly property bool desiredRun: cleanupDone && weRunning && weDir !== "" && contentItem.Config.background.wallpaperEnabled && !weFailed
+                readonly property bool shouldRun: desiredRun && !stopping
+
+                onShouldRunChanged: {
+                    if (shouldRun) {
+                        gotExit = false;
+                    }
+                }
+
+                onDesiredRunChanged: {
+                    if (!desiredRun && (weProc.running || alive)) {
+                        stopping = true;
+                        watchdogTimer.restart();
+                    }
+                }
+
                 command: {
-                    let cmd = ["linux-wallpaperengine", "--screen-root", win.modelData.name, "--layer", "background"];
+                    let bin = Quickshell.env("CAELESTIA_WE_BIN") || "linux-wallpaperengine";
+                    let cmd = [bin, "--screen-root", win.modelData.name, "--layer", "background"];
                     if (Wallpapers.weSilent) {
                         cmd.push("--silent");
                     } else {
@@ -70,7 +140,77 @@ Variants {
                     cmd.push(weDir);
                     return cmd;
                 }
-                running: weActive && weDir !== "" && contentItem.Config.background.wallpaperEnabled
+
+                running: shouldRun
+
+                property int lastNonce: Wallpapers.selectNonce
+                onLastNonceChanged: {
+                    weFailed = false;
+                }
+
+                onWeDirChanged: {
+                    weFailed = false;
+                    engineReady = false;
+                    engineReadyTimer.stop();
+                    if (weProc.running || alive) {
+                        stopping = true;
+                        watchdogTimer.restart();
+                    }
+                }
+
+                onStarted: {
+                    alive = true;
+                    gotExit = false;
+                    engineReady = false;
+                    engineReadyTimer.restart();
+                    if (processId) {
+                        lastPid = processId;
+                        Quickshell.execDetached(["sh", "-c", 'mkdir -p "$1" && printf "%s\\n" "$2" > "$1/engine_$3.pid"', "sh", Paths.state + "/wallpaper", lastPid.toString(), win.modelData.name]);
+                    }
+                }
+
+                onProcessIdChanged: {
+                    if (processId && running && lastPid !== processId) {
+                        lastPid = processId;
+                        Quickshell.execDetached(["sh", "-c", 'mkdir -p "$1" && printf "%s\\n" "$2" > "$1/engine_$3.pid"', "sh", Paths.state + "/wallpaper", lastPid.toString(), win.modelData.name]);
+                    }
+                }
+
+                onRunningChanged: {
+                    if (!running) {
+                        engineReadyTimer.stop();
+                        engineReady = false;
+                        if (!gotExit) {
+                            console.warn("linux-wallpaperengine failed to start");
+                            weFailed = true;
+                            stopping = false;
+                        }
+                    }
+                }
+
+                onExited: (exitCode, exitStatus) => {
+                    alive = false;
+                    gotExit = true;
+                    watchdogTimer.stop();
+                    engineReadyTimer.stop();
+                    engineReady = false;
+                    const exitedPid = lastPid;
+                    lastPid = 0;
+
+                    if (stopping) {
+                        Qt.callLater(() => {
+                            stopping = false;
+                        });
+                    } else if (weRunning && contentItem.Config.background.wallpaperEnabled) {
+                        console.warn("linux-wallpaperengine exited unexpectedly. Code:", exitCode, "Status:", exitStatus);
+                        weFailed = true;
+                    }
+
+                    if (exitedPid > 0 && (!desiredRun || !weRunning || weFailed)) {
+                        Quickshell.execDetached(["sh", "-c", 'PIDFILE="$1/engine_$2.pid"; if [ -f "$PIDFILE" ] && [ "$(cat "$PIDFILE" 2>/dev/null)" = "$3" ]; then rm -f "$PIDFILE"; fi', "sh", Paths.state + "/wallpaper", win.modelData.name, exitedPid.toString()]);
+                    }
+                }
+
             }
 
 

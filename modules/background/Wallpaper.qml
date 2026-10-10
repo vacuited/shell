@@ -18,23 +18,14 @@ Item {
     property bool completed
     property string settledSource: ""
     property var screen: null
-    property bool weActive: false
-    property string weDir: ""
 
-    function checkWE(path: string): void {
-        if (!path) {
-            weActive = false;
-            return;
-        }
-        let dir = path.substring(0, path.lastIndexOf('/'));
-        let projJson = dir + "/project.json";
-        if (CUtils.fileExists(projJson)) {
-            weDir = dir;
-            weActive = true;
-        } else {
-            weActive = false;
-        }
-    }
+    property bool weEngineReady: false
+    property bool weFailed: false
+
+    readonly property string weDir: Wallpapers.committedWeDir
+    readonly property bool isWE: weDir !== ""
+    readonly property bool weRunning: isWE && !weFailed
+    readonly property bool weSurfaceVisible: weRunning && !Wallpapers.showPreview && weEngineReady
 
     readonly property string currentSchemeName: (Colours.showPreview ? Colours["previewScheme"] : Colours.scheme) || ""
     readonly property string currentVariantName: (Colours.showPreview ? Colours["previewVariant"] : Colours.variant) || ""
@@ -64,7 +55,6 @@ Item {
     }
 
     onSourceChanged: {
-        checkWE(source);
         coalesceTimer.restart();
     }
 
@@ -111,7 +101,6 @@ Item {
 
     Component.onCompleted: {
         if (source) {
-            checkWE(source);
             settledSource = source;
             one.path = settledSource;
             one.state = "active";
@@ -278,7 +267,7 @@ Item {
         Item {
             id: contentItem
             anchors.fill: parent
-            opacity: root.weActive ? 0 : 1
+            opacity: root.weSurfaceVisible ? 0 : 1
 
             layer.enabled: img.needsMask || (root.shouldRecolor && img.renderActive)
             layer.effect: MultiEffect {
