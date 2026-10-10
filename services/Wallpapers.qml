@@ -19,7 +19,7 @@ Searcher {
 
     property bool showPreview: false
     property bool enableAnimation: true
-    readonly property string current: showPreview ? previewPath : actualCurrent
+    readonly property string current: (showPreview && previewWeDir === "") ? previewPath : actualCurrent
     property string previewPath
     property string actualCurrent
     property bool previewColourLock
@@ -37,6 +37,7 @@ Searcher {
     property string lastAnimated: ""
 
     property string committedWeDir: ""
+    property string previewWeDir: ""
     property string storedWeDir: ""
     property string storedTarget: ""
     property bool weDirLoaded: false
@@ -83,6 +84,20 @@ Searcher {
             } catch (e) {}
         }
         return "";
+    }
+
+    function isCurrent(path: string): bool {
+        if (!path) return false;
+        let clean = cleanPath(path);
+        if (!clean) return false;
+        let currentClean = cleanPath(actualCurrent);
+        if (clean === currentClean) return true;
+        let currentWe = committedWeDir || deriveWeDir(currentClean);
+        if (currentWe) {
+            let we = deriveWeDir(clean);
+            if (we && we === currentWe) return true;
+        }
+        return false;
     }
 
     function syncWeDir(allowDiskWrite: bool): void {
@@ -348,6 +363,9 @@ Searcher {
         let clean = cleanPath(path);
         if (!clean) return;
 
+        let weDir = deriveWeDir(clean);
+        previewWeDir = weDir;
+
         let targetPath = resolveWallpaperPath(clean);
 
         if (previewPath === targetPath && showPreview) return;
@@ -364,6 +382,7 @@ Searcher {
 
     function stopPreview(): void {
         showPreview = false;
+        previewWeDir = "";
         
         if (getPreviewColoursProc.running) {
             getPreviewColoursProc.running = false;

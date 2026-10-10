@@ -25,14 +25,15 @@ Item {
     readonly property string weDir: Wallpapers.committedWeDir
     readonly property bool isWE: weDir !== ""
     readonly property bool weRunning: isWE && !weFailed
-    readonly property bool weSurfaceVisible: weRunning && !Wallpapers.showPreview && weEngineReady
+    readonly property bool isPreviewWE: Wallpapers.previewWeDir !== ""
+    readonly property bool weSurfaceVisible: weRunning && (!Wallpapers.showPreview || isPreviewWE) && weEngineReady
 
     property string holdSource: ""
     property bool prevWasWe: false
 
-    readonly property bool isHolding: !root.prevWasWe && root.isWE && !root.weSurfaceVisible && !root.weFailed && !Wallpapers.showPreview && root.holdSource !== ""
+    readonly property bool isHolding: (!root.prevWasWe || isPreviewWE) && root.isWE && !root.weSurfaceVisible && !root.weFailed && (!Wallpapers.showPreview || isPreviewWE) && root.holdSource !== ""
     readonly property string displaySource: root.isHolding ? root.holdSource : root.source
-    readonly property bool isPlaceholder: (root.prevWasWe || !root.holdSource) && root.isWE && !root.weSurfaceVisible && !root.weFailed && !Wallpapers.showPreview
+    readonly property bool isPlaceholder: (root.prevWasWe || !root.holdSource) && root.isWE && !root.weSurfaceVisible && !root.weFailed && (!Wallpapers.showPreview || isPreviewWE)
 
     readonly property string currentSchemeName: (Colours.showPreview ? Colours["previewScheme"] : Colours.scheme) || ""
     readonly property string currentVariantName: (Colours.showPreview ? Colours["previewVariant"] : Colours.variant) || ""
@@ -319,15 +320,15 @@ Item {
                 shadowHorizontalOffset: 5
 
                 blurEnabled: root.isPlaceholder
-                blur: root.isPlaceholder ? 0.6 : 0.0
-                blurMax: 32
-                brightness: root.isPlaceholder ? -0.2 : 0.0
+                blur: root.isPlaceholder ? 0.8 : 0.0
+                blurMax: 64
+                brightness: 0.0
 
-                saturation: (root.shouldRecolor && root.isDynamicMonochrome) ? -1 : 0
-                colorization: (root.shouldRecolor && !root.isDynamicMonochrome) ? (Config.background ? Config.background["wallpaperRecolorStrength"] : 0) : 0
+                saturation: root.isPlaceholder ? 0.0 : ((root.shouldRecolor && root.isDynamicMonochrome) ? -1 : 0)
+                colorization: root.isPlaceholder ? 0.0 : ((root.shouldRecolor && !root.isDynamicMonochrome) ? (Config.background ? Config.background["wallpaperRecolorStrength"] : 0) : 0)
                 colorizationColor: (Colours.palette && Colours.palette.m3primary) || "transparent"
 
-                contrast: (root.shouldRecolor && root.currentFlavourName === "hard") ? 0.45 : 0.0
+                contrast: root.isPlaceholder ? 0.0 : ((root.shouldRecolor && root.currentFlavourName === "hard") ? 0.45 : 0.0)
 
                 Behavior on saturation {
                     enabled: img.animsEnabled && img.state === "active"

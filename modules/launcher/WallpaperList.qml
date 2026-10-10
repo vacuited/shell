@@ -114,7 +114,7 @@ PathView {
             }
         }
         onValuesChanged: {
-            let idx = search ? 0 : values.findIndex(w => w.path === Wallpapers.actualCurrent);
+            let idx = search ? 0 : values.findIndex(w => Wallpapers.isCurrent(w.path));
             root.currentIndex = Math.max(0, idx);
             if (values.length > 0 && root.currentIndex >= 0 && root.currentIndex < values.length) {
                 previewTimer.restart();
@@ -122,7 +122,7 @@ PathView {
         }
     }
 
-    Component.onCompleted: currentIndex = Wallpapers.list.findIndex(w => w.path === Wallpapers.actualCurrent)
+    Component.onCompleted: currentIndex = Math.max(0, scriptModel.values.findIndex(w => Wallpapers.isCurrent(w.path)))
     Component.onDestruction: Wallpapers.stopPreview()
 
     Timer {

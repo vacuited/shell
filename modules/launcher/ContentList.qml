@@ -26,7 +26,7 @@ Item {
         if (showWallpapers) {
             for (let category of Wallpapers.categories) {
                 let walls = Wallpapers.grouped[category] || [];
-                if (walls.some(w => w.path === Wallpapers.actualCurrent)) {
+                if (walls.some(w => Wallpapers.isCurrent(w.path))) {
                     currentWallpaperTab = category;
                     break;
                 }
