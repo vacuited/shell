@@ -31,6 +31,14 @@ Item {
                 text: Tr.tr("Media"),
                 enabled: Config.dashboard.showMedia
             },
+            // >>> caelestia-notes: managed block - do not edit; `install.sh --uninstall` removes it >>>
+            {
+                component: notesComponent,
+                iconName: "edit_note",
+                text: Tr.tr("Notes"),
+                enabled: true
+            },
+            // <<< caelestia-notes <<<
             {
                 component: performanceComponent,
                 iconName: "speed",
@@ -191,6 +199,32 @@ Item {
                     screenState: root.screenState
                 }
             }
+
+            // >>> caelestia-notes: managed block - do not edit; `install.sh --uninstall` removes it >>>
+            Component {
+                id: notesComponent
+
+                // A wrapper Item + URL Loader (not a direct "NotesTab {}") so that a missing or broken
+                // Notes file can never stop this file - and therefore the whole dashboard - from loading.
+                Item {
+                    implicitWidth: notesLoader.item ? notesLoader.item.implicitWidth : 840
+                    implicitHeight: notesLoader.item ? notesLoader.item.implicitHeight : 480
+
+                    Loader {
+                        id: notesLoader
+
+                        anchors.fill: parent
+                        source: Qt.resolvedUrl("NotesTab.qml")
+                    }
+
+                    StyledText {
+                        anchors.centerIn: parent
+                        visible: notesLoader.status === Loader.Error
+                        text: Tr.tr("Notes failed to load. Re-run the Caelestia Notes installer.")
+                    }
+                }
+            }
+            // <<< caelestia-notes <<<
 
             Component {
                 id: performanceComponent

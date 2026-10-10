@@ -25,7 +25,7 @@ import Quickshell.Services.SystemTray
 ShellRoot {
     id: root
 
-    settings.watchFiles: true
+    settings.watchFiles: false
 
     Binding {
         target: ShellState
