@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell
+import Caelestia
 import Caelestia.Config
 import Caelestia.Models
 import qs.components
