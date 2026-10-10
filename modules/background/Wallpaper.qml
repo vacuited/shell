@@ -32,7 +32,7 @@ Item {
     property bool prevWasWe: false
 
     readonly property bool isHolding: (!root.prevWasWe || isPreviewWE) && root.isWE && !root.weSurfaceVisible && !root.weFailed && (!Wallpapers.showPreview || isPreviewWE) && root.holdSource !== ""
-    readonly property string displaySource: root.isHolding ? root.holdSource : root.source
+    readonly property string displaySource: root.isHolding ? root.holdSource : (root.weFailed ? (root.holdSource || Wallpapers.fallback) : root.source)
     readonly property bool isPlaceholder: (root.prevWasWe || !root.holdSource) && root.isWE && !root.weSurfaceVisible && !root.weFailed && (!Wallpapers.showPreview || isPreviewWE)
 
     readonly property string currentSchemeName: (Colours.showPreview ? Colours["previewScheme"] : Colours.scheme) || ""
@@ -360,7 +360,7 @@ Item {
                 // Only GIFs go through the animated-image path; videos are handled
                 // by the video channel loader below and must never reach AnimatedImage.
                 path: img.isGif ? img.verifiedPath : ""
-                playing: !WallpaperPauser.paused
+                playing: !root.isPlaceholder && !WallpaperPauser.paused
                 visible: img.isGif && !img.isVideo
                 asynchronous: true
 
