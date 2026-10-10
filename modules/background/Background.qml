@@ -112,6 +112,34 @@ Variants {
                 property bool engineReady: false
                 property int engineReadyDelayMs: 1200
                 property int lastPid: 0
+                property bool isProcessPaused: false
+
+                function updatePauseState(): void {
+                    if (!alive || lastPid <= 0 || stopping || !engineReady)
+                        return;
+
+                    let shouldPause = WallpaperPauser.paused && !weFailed;
+                    if (shouldPause && !isProcessPaused) {
+                        isProcessPaused = true;
+                        Quickshell.execDetached(["kill", "-STOP", lastPid.toString()]);
+                    } else if (!shouldPause && isProcessPaused) {
+                        isProcessPaused = false;
+                        Quickshell.execDetached(["kill", "-CONT", lastPid.toString()]);
+                    }
+                }
+
+                onEngineReadyChanged: {
+                    if (engineReady) {
+                        updatePauseState();
+                    }
+                }
+
+                onStoppingChanged: {
+                    if (stopping && isProcessPaused && lastPid > 0) {
+                        isProcessPaused = false;
+                        Quickshell.execDetached(["kill", "-CONT", lastPid.toString()]);
+                    }
+                }
 
                 readonly property bool desiredRun: cleanupDone && weRunning && weDir !== "" && contentItem.Config.background.wallpaperEnabled && !weFailed
                 readonly property bool shouldRun: desiredRun && !stopping
@@ -146,6 +174,13 @@ Variants {
                 property int lastNonce: Wallpapers.selectNonce
                 onLastNonceChanged: {
                     weFailed = false;
+                }
+
+                onWeFailedChanged: {
+                    if (weFailed && isProcessPaused && lastPid > 0) {
+                        isProcessPaused = false;
+                        Quickshell.execDetached(["kill", "-CONT", lastPid.toString()]);
+                    }
                 }
 
                 onWeDirChanged: {
@@ -189,6 +224,7 @@ Variants {
                 }
 
                 onExited: (exitCode, exitStatus) => {
+                    isProcessPaused = false;
                     alive = false;
                     gotExit = true;
                     watchdogTimer.stop();
@@ -211,6 +247,13 @@ Variants {
                     }
                 }
 
+            }
+
+            Connections {
+                target: WallpaperPauser
+                function onPausedChanged() {
+                    weProc.updatePauseState();
+                }
             }
 
 
