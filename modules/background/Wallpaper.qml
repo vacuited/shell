@@ -27,6 +27,13 @@ Item {
     readonly property bool weRunning: isWE && !weFailed
     readonly property bool weSurfaceVisible: weRunning && !Wallpapers.showPreview && weEngineReady
 
+    property string holdSource: ""
+    property bool prevWasWe: false
+
+    readonly property bool isHolding: !root.prevWasWe && root.isWE && !root.weSurfaceVisible && !root.weFailed && !Wallpapers.showPreview && root.holdSource !== ""
+    readonly property string displaySource: root.isHolding ? root.holdSource : root.source
+    readonly property bool isPlaceholder: (root.prevWasWe || !root.holdSource) && root.isWE && !root.weSurfaceVisible && !root.weFailed && !Wallpapers.showPreview
+
     readonly property string currentSchemeName: (Colours.showPreview ? Colours["previewScheme"] : Colours.scheme) || ""
     readonly property string currentVariantName: (Colours.showPreview ? Colours["previewVariant"] : Colours.variant) || ""
     readonly property string currentFlavourName: (Colours.showPreview ? Colours["previewFlavour"] : Colours.flavour) || ""
@@ -58,18 +65,44 @@ Item {
         coalesceTimer.restart();
     }
 
+    onDisplaySourceChanged: {
+        coalesceTimer.restart();
+    }
+
+    onWeSurfaceVisibleChanged: {
+        if (weSurfaceVisible) {
+            root.prevWasWe = true;
+            if (displaySource !== settledSource) {
+                applySourceChange();
+            }
+        }
+    }
+
+    onWeFailedChanged: {
+        if (weFailed) {
+            if (displaySource !== settledSource) {
+                applySourceChange();
+            }
+        }
+    }
+
     function applySourceChange() {
-        if (source === settledSource && root.current && root.current.state === "active") {
+        if (displaySource === settledSource && root.current && root.current.state === "active") {
             return;
         }
 
-        settledSource = source;
+        settledSource = displaySource;
 
         if (!settledSource) {
             one.state = "inactive";
             two.state = "inactive";
             current = null;
             return;
+        }
+
+        if (!root.isWE && !Wallpapers.showPreview) {
+            root.prevWasWe = false;
+            root.holdSource = settledSource;
         }
 
         let nextLayer = null;
@@ -101,7 +134,11 @@ Item {
 
     Component.onCompleted: {
         if (source) {
-            settledSource = source;
+            if (!isWE) {
+                holdSource = source;
+            }
+            prevWasWe = isWE;
+            settledSource = displaySource;
             one.path = settledSource;
             one.state = "active";
             root.current = one;
@@ -196,7 +233,7 @@ Item {
         onStateChanged: {
             if (state === "active") {
                 cleanupTimer.stop();
-                if (animsEnabled && root.completed) {
+                if (animsEnabled && root.completed && !root.isPlaceholder) {
                     maskRadius = 0;
                     maskAnim.restart();
                 } else {
@@ -260,7 +297,7 @@ Item {
         }
         
         readonly property bool hasReadyContent: thumbImg.status === Image.Ready || isPlayerPlaying || gifImg.status === Image.Ready
-        readonly property bool needsMask: animsEnabled && img.z === 1 && hasReadyContent && img.maskRadius < (img.maxRadius - 1.5) && !!maskLoader.item
+        readonly property bool needsMask: animsEnabled && !root.isPlaceholder && img.z === 1 && hasReadyContent && img.maskRadius < (img.maxRadius - 1.5) && !!maskLoader.item
 
         Component.onCompleted: maskRadius = maxRadius
 
@@ -269,7 +306,7 @@ Item {
             anchors.fill: parent
             opacity: root.weSurfaceVisible ? 0 : 1
 
-            layer.enabled: img.needsMask || (root.shouldRecolor && img.renderActive)
+            layer.enabled: img.needsMask || (root.shouldRecolor && img.renderActive) || root.isPlaceholder
             layer.effect: MultiEffect {
                 maskEnabled: img.needsMask
 
@@ -280,6 +317,11 @@ Item {
                 shadowBlur: 1.0
                 shadowVerticalOffset: 15
                 shadowHorizontalOffset: 5
+
+                blurEnabled: root.isPlaceholder
+                blur: root.isPlaceholder ? 0.6 : 0.0
+                blurMax: 32
+                brightness: root.isPlaceholder ? -0.2 : 0.0
 
                 saturation: (root.shouldRecolor && root.isDynamicMonochrome) ? -1 : 0
                 colorization: (root.shouldRecolor && !root.isDynamicMonochrome) ? (Config.background ? Config.background["wallpaperRecolorStrength"] : 0) : 0
