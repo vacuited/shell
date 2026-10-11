@@ -15,3 +15,7 @@ my own customized build of [midnight-shell](https://github.com/dim-ghub/midnight
 
 ### hourly weather forecast
 - integrated [caelestia hourly weather](https://github.com/ItsXyzzy/Caelestia-Hourly-Weather) into the weather tab with a scrollable 7-day temperature curve, rain chance, and day summary.
+- **minimal view toggle**: collapsed hourly and 7-day forecasts behind an animated toggle pill (`[ hourly | 7-day ]`) to keep the dashboard compact and clean.
+- **zero-lag transitions**: eliminated per-frame curve re-tessellation, gated initial height animations, and cached active tabs for fluid 144 fps swiping.
+
+![weather preview](assets/weather.png)
