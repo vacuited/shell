@@ -1130,7 +1130,7 @@ Item {
         var enableTools = GlobalConfig.ai.enableCelestialMode;
         var sysPrompt = "You are a helpful AI assistant integrated into the user's OS. You can use tools to assist the user.";
         if (enableTools) {
-            sysPrompt += "\nCRITICAL RULES:\n1. You CAN browse the web using the web_search tool.\n2. DO NOT apologize for errors, simply explain what happened.\n3. When using tools, you don't need to explain that you are using a tool, just do it and respond to the user smoothly.\n4. If a tool call fails or returns an error, do NOT retry it and do NOT try workarounds with other tools. Briefly tell the user what failed and answer from your own knowledge if you can.\n5. After tools give you their results, answer the user directly; only call more tools when the request truly needs them.\n6. You CAN schedule timed reminders with set_reminder or send immediate desktop popups with notify. When the user asks to be reminded or set an alarm/reminder, call set_reminder. When the user asks to send an alert or notification, call notify.";
+            sysPrompt += "\nCRITICAL RULES:\n1. You CAN browse the web using the web_search tool.\n2. DO NOT apologize for errors, simply explain what happened.\n3. When using tools, you don't need to explain that you are using a tool, just do it and respond to the user smoothly.\n4. If a tool call fails or returns an error, do NOT retry it and do NOT try workarounds with other tools. Briefly tell the user what failed and answer from your own knowledge if you can.\n5. After tools give you their results, answer the user directly; only call more tools when the request truly needs them.\n6. You CAN schedule timed reminders with set_reminder or send immediate desktop popups with notify. When the user asks to be reminded or set an alarm/reminder, call set_reminder. When the user asks to send an alert or notification, call notify.\n7. You HAVE Spotify tools: spotify_search (search tracks, albums, artists, playlists), spotify_play (play tracks/albums/playlists via query or URI), and spotify_status (check current player state). Use them whenever the user asks about music, songs, artists, or Spotify playback.";
         }
         
         messages.push({
@@ -1213,6 +1213,7 @@ Item {
             var enableSys = (typeof AiTools !== "undefined") ? AiTools.enableSystemControl : true;
             var enableMem = (typeof AiTools !== "undefined") ? AiTools.enableMemory : true;
             var enableRem = (typeof AiTools !== "undefined") ? AiTools.enableReminders : true;
+            var enableSp = (typeof AiTools !== "undefined") ? AiTools.enableSpotify : true;
 
             if (enableWeb) {
                 toolsList.push({
@@ -1427,6 +1428,50 @@ Item {
                                 "id": { "type": "string", "description": "ID of the reminder to cancel" }
                             },
                             "required": ["id"]
+                        }
+                    }
+                });
+            }
+
+            if (enableSp) {
+                toolsList.push({
+                    "type": "function",
+                    "function": {
+                        "name": "spotify_search",
+                        "description": "Searches Spotify for tracks, albums, artists, or playlists using the Spotify Web API. Returns titles, artists, album names, duration, and Spotify URIs.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "query": { "type": "string", "description": "Search term (e.g. song name, artist, album)" },
+                                "type": { "type": "string", "enum": ["track", "album", "artist", "playlist"], "description": "Type of item to search for (default: track)" },
+                                "limit": { "type": "integer", "description": "Number of results to return (1-20, default: 5)" }
+                            },
+                            "required": ["query"]
+                        }
+                    }
+                });
+                toolsList.push({
+                    "type": "function",
+                    "function": {
+                        "name": "spotify_play",
+                        "description": "Plays a track, album, or playlist in the local Spotify client. Takes an exact Spotify URI or a search query to play automatically.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "query": { "type": "string", "description": "Song, album, or artist to search and play automatically" },
+                                "uri": { "type": "string", "description": "Exact Spotify URI to open and play (e.g. spotify:track:...)" }
+                            }
+                        }
+                    }
+                });
+                toolsList.push({
+                    "type": "function",
+                    "function": {
+                        "name": "spotify_status",
+                        "description": "Gets the currently playing track, artist, album, and playback status from the local Spotify player.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {}
                         }
                     }
                 });

@@ -509,6 +509,188 @@ def tool_cancel_reminder(args):
 
 
 # ---------------------------------------------------------------------------
+# Spotify Web API & Player Controls
+# ---------------------------------------------------------------------------
+
+def _get_spotify_token(client_id="", client_secret=""):
+  if not client_id or not client_secret:
+    try:
+      cfg_path = os.path.expanduser("~/.config/caelestia/ai_tools.json")
+      if os.path.exists(cfg_path):
+        with open(cfg_path, "r", encoding="utf-8") as f:
+          data = json.load(f)
+          client_id = client_id or data.get("spotifyClientId", "")
+          client_secret = client_secret or data.get("spotifyClientSecret", "")
+    except Exception:
+      pass
+
+  if not client_id or not client_secret:
+    return None, "Spotify Client ID and Client Secret are not configured. Configure them in Nexus > AI Tools."
+
+  auth_header = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
+  req = urllib.request.Request(
+      "https://accounts.spotify.com/api/token",
+      data=urllib.parse.urlencode({"grant_type": "client_credentials"}).encode(),
+      headers={
+          "Authorization": f"Basic {auth_header}",
+          "Content-Type": "application/x-www-form-urlencoded"
+      }
+  )
+  try:
+    with urllib.request.urlopen(req, timeout=10) as resp:
+      res_json = json.loads(resp.read().decode())
+      token = res_json.get("access_token")
+      if token:
+        return token, None
+      return None, "Failed to obtain Spotify access token."
+  except Exception as e:
+    return None, f"Spotify authentication failed: {e}"
+
+
+def tool_spotify_search(args, client_id="", client_secret=""):
+  query = str(args.get("query") or args.get("q") or "").strip()
+  if not query:
+    return False, "ERROR: spotify_search requires a 'query'"
+
+  stype = str(args.get("type") or "track").lower().strip()
+  if stype not in ["track", "album", "artist", "playlist"]:
+    stype = "track"
+
+  limit = int(args.get("limit") or 5)
+  limit = max(1, min(limit, 20))
+
+  token, err = _get_spotify_token(client_id, client_secret)
+  if err:
+    return False, err
+
+  params = urllib.parse.urlencode({
+      "q": query,
+      "type": stype,
+      "limit": limit
+  })
+  url = f"https://api.spotify.com/v1/search?{params}"
+  req = urllib.request.Request(url, headers={
+      "Authorization": f"Bearer {token}",
+      "User-Agent": "caelestia-shell/1.0"
+  })
+
+  try:
+    with urllib.request.urlopen(req, timeout=10) as resp:
+      data = json.loads(resp.read().decode())
+  except Exception as e:
+    return False, f"Spotify search request failed: {e}"
+
+  key = stype + "s"
+  items = data.get(key, {}).get("items", [])
+  if not items:
+    return True, f"No Spotify results found for '{query}' ({stype})."
+
+  lines = [f"Spotify Search Results for '{query}' ({stype}):\n"]
+  for idx, it in enumerate(items, 1):
+    name = it.get("name", "Unknown")
+    uri = it.get("uri", "")
+    ext_url = it.get("external_urls", {}).get("spotify", "")
+
+    if stype == "track":
+      artists = ", ".join([a.get("name", "") for a in it.get("artists", []) if a.get("name")])
+      album = it.get("album", {}).get("name", "Single")
+      duration_ms = it.get("duration_ms", 0)
+      mins = int(duration_ms / 60000)
+      secs = int((duration_ms % 60000) / 1000)
+      time_str = f"{mins}:{secs:02d}"
+      lines.append(f"{idx}. **{name}** — {artists}\n   Album: {album} ({time_str}) | URI: `{uri}` | [Listen]({ext_url})")
+    elif stype == "album":
+      artists = ", ".join([a.get("name", "") for a in it.get("artists", []) if a.get("name")])
+      total_tracks = it.get("total_tracks", 0)
+      release = it.get("release_date", "")
+      lines.append(f"{idx}. **{name}** — {artists}\n   Tracks: {total_tracks} | Year: {release[:4]} | URI: `{uri}` | [Listen]({ext_url})")
+    elif stype == "artist":
+      genres = ", ".join(it.get("genres", [])[:3])
+      followers = it.get("followers", {}).get("total", 0)
+      lines.append(f"{idx}. **{name}**\n   Genres: {genres or 'N/A'} | Followers: {followers:,} | URI: `{uri}` | [Profile]({ext_url})")
+    elif stype == "playlist":
+      owner = it.get("owner", {}).get("display_name", "Spotify")
+      tracks_count = it.get("tracks", {}).get("total", 0)
+      lines.append(f"{idx}. **{name}** (by {owner})\n   Tracks: {tracks_count} | URI: `{uri}` | [Listen]({ext_url})")
+
+  return True, "\n".join(lines)
+
+
+def tool_spotify_play(args, client_id="", client_secret=""):
+  uri = str(args.get("uri") or "").strip()
+  query = str(args.get("query") or args.get("track") or "").strip()
+
+  target_uri = uri
+  track_title = ""
+
+  if not target_uri and query:
+    token, err = _get_spotify_token(client_id, client_secret)
+    if err:
+      return False, err
+    params = urllib.parse.urlencode({
+        "q": query,
+        "type": "track",
+        "limit": 1
+    })
+    url = f"https://api.spotify.com/v1/search?{params}"
+    req = urllib.request.Request(url, headers={
+        "Authorization": f"Bearer {token}",
+        "User-Agent": "caelestia-shell/1.0"
+    })
+    try:
+      with urllib.request.urlopen(req, timeout=10) as resp:
+        data = json.loads(resp.read().decode())
+        items = data.get("tracks", {}).get("items", [])
+        if items:
+          target_uri = items[0].get("uri", "")
+          track_title = f"{items[0].get('name')} by {items[0].get('artists', [{}])[0].get('name')}"
+        else:
+          return False, f"Could not find any Spotify track matching '{query}'."
+    except Exception as e:
+      return False, f"Spotify track search failed: {e}"
+
+  if not target_uri:
+    try:
+      subprocess.run(["playerctl", "--player=spotify", "play"], check=True, capture_output=True)
+      return True, "Resumed playback in Spotify."
+    except Exception:
+      pass
+    return False, "No valid Spotify URI or search query provided."
+
+  res = subprocess.run(["playerctl", "--player=spotify", "open", target_uri], capture_output=True, text=True)
+  if res.returncode != 0:
+    try:
+      subprocess.Popen(["xdg-open", target_uri], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception as e:
+      return False, f"Failed to launch Spotify URI: {e}"
+
+  display = track_title or target_uri
+  return True, f"Now playing in Spotify: **{display}**"
+
+
+def tool_spotify_status():
+  try:
+    fmt = "{{status}}:::{{title}}:::{{artist}}:::{{album}}:::{{position}}:::{{mpris:length}}"
+    res = subprocess.run(
+        ["playerctl", "--player=spotify", "metadata", "--format", fmt],
+        capture_output=True,
+        text=True,
+        check=True
+    )
+    out = res.stdout.strip()
+    if not out:
+      return True, "Spotify player is running but no active track metadata is available."
+    parts = out.split(":::")
+    status = parts[0] if len(parts) > 0 else "Unknown"
+    title = parts[1] if len(parts) > 1 else "Unknown"
+    artist = parts[2] if len(parts) > 2 else "Unknown"
+    album = parts[3] if len(parts) > 3 else "Unknown"
+    return True, f"Spotify Player Status: **{status}**\n- Track: **{title}**\n- Artist: {artist}\n- Album: {album}"
+  except Exception as e:
+    return False, "Spotify is not currently running or reachable via MPRIS/playerctl."
+
+
+# ---------------------------------------------------------------------------
 # CLI Dispatcher
 # ---------------------------------------------------------------------------
 
@@ -559,6 +741,12 @@ def main():
     ok, result = tool_list_reminders()
   elif tname == "cancel_reminder":
     ok, result = tool_cancel_reminder(tool_args)
+  elif tname == "spotify_search":
+    ok, result = tool_spotify_search(tool_args, parsed.spotify_id, parsed.spotify_secret)
+  elif tname == "spotify_play":
+    ok, result = tool_spotify_play(tool_args, parsed.spotify_id, parsed.spotify_secret)
+  elif tname == "spotify_status":
+    ok, result = tool_spotify_status()
   elif tname == "caelestia_command":
     ok, result = tool_caelestia_command(tool_args)
   elif tname == "get_weather":
