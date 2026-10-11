@@ -1009,11 +1009,11 @@ Item {
                                     var safeArgs = JSON.stringify(args).replace(/'/g, "'\\''");
                                     var toolCmd = 'python3 "' + scriptPath + '" --tool ' + toolName + " --args '" + safeArgs + "'";
 
-                                    var tavilyKey = GlobalConfig.ai.tavilyApiKey || "";
+                                    var tavilyKey = (typeof AiTools !== "undefined" ? AiTools.tavilyApiKey : "") || "";
                                     if (tavilyKey) toolCmd += " --tavily-key '" + tavilyKey + "'";
-                                    var spId = GlobalConfig.ai.spotifyClientId || "";
+                                    var spId = (typeof AiTools !== "undefined" ? AiTools.spotifyClientId : "") || "";
                                     if (spId) toolCmd += " --spotify-id '" + spId + "'";
-                                    var spSec = GlobalConfig.ai.spotifyClientSecret || "";
+                                    var spSec = (typeof AiTools !== "undefined" ? AiTools.spotifyClientSecret : "") || "";
                                     if (spSec) toolCmd += " --spotify-secret '" + spSec + "'";
 
                                     runAgentCommand(toolCmd, "exec_" + toolName);
@@ -1077,7 +1077,7 @@ Item {
         var enableTools = GlobalConfig.ai.enableCelestialMode;
         var sysPrompt = "You are a helpful AI assistant integrated into the user's OS. You can use tools to assist the user.";
         if (enableTools) {
-            sysPrompt += "\nCRITICAL RULES:\n1. You CAN browse the web using the web_search tool.\n2. DO NOT apologize for errors, simply explain what happened.\n3. When using tools, you don't need to explain that you are using a tool, just do it and respond to the user smoothly.\n4. If a tool call fails or returns an error, do NOT retry it and do NOT try workarounds with other tools. Briefly tell the user what failed and answer from your own knowledge if you can.\n5. After tools give you their results, answer the user directly; only call more tools when the request truly needs them.";
+            sysPrompt += "\nCRITICAL RULES:\n1. You CAN browse the web using the web_search tool.\n2. DO NOT apologize for errors, simply explain what happened.\n3. When using tools, you don't need to explain that you are using a tool, just do it and respond to the user smoothly.\n4. If a tool call fails or returns an error, do NOT retry it and do NOT try workarounds with other tools. Briefly tell the user what failed and answer from your own knowledge if you can.\n5. After tools give you their results, answer the user directly; only call more tools when the request truly needs them.\n6. You CAN schedule timed reminders with set_reminder or send immediate desktop popups with notify. When the user asks to be reminded or set an alarm/reminder, call set_reminder. When the user asks to send an alert or notification, call notify.";
         }
         
         messages.push({
@@ -1154,7 +1154,14 @@ Item {
         if (enableTools) {
             var toolsList = [];
 
-            if (GlobalConfig.ai.enableWebSearch !== false) {
+            var enableWeb = (typeof AiTools !== "undefined") ? AiTools.enableWebSearch : true;
+            var enableVis = (typeof AiTools !== "undefined") ? AiTools.enableVision : true;
+            var enableClip = (typeof AiTools !== "undefined") ? AiTools.enableClipboard : true;
+            var enableSys = (typeof AiTools !== "undefined") ? AiTools.enableSystemControl : true;
+            var enableMem = (typeof AiTools !== "undefined") ? AiTools.enableMemory : true;
+            var enableRem = (typeof AiTools !== "undefined") ? AiTools.enableReminders : true;
+
+            if (enableWeb) {
                 toolsList.push({
                     "type": "function",
                     "function": {
@@ -1185,7 +1192,7 @@ Item {
                 });
             }
 
-            if (GlobalConfig.ai.enableVision !== false) {
+            if (enableVis) {
                 toolsList.push({
                     "type": "function",
                     "function": {
@@ -1199,7 +1206,7 @@ Item {
                 });
             }
 
-            if (GlobalConfig.ai.enableClipboard !== false) {
+            if (enableClip) {
                 toolsList.push({
                     "type": "function",
                     "function": {
@@ -1227,7 +1234,7 @@ Item {
                 });
             }
 
-            if (GlobalConfig.ai.enableSystemControl !== false) {
+            if (enableSys) {
                 toolsList.push({
                     "type": "function",
                     "function": {
@@ -1284,7 +1291,7 @@ Item {
                 });
             }
 
-            if (GlobalConfig.ai.enableMemory !== false) {
+            if (enableMem) {
                 toolsList.push({
                     "type": "function",
                     "function": {
@@ -1308,6 +1315,65 @@ Item {
                         "parameters": {
                             "type": "object",
                             "properties": {}
+                        }
+                    }
+                });
+            }
+
+            if (enableRem) {
+                toolsList.push({
+                    "type": "function",
+                    "function": {
+                        "name": "notify",
+                        "description": "Sends an instant desktop notification popup to the user.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "title": { "type": "string", "description": "Title of the notification" },
+                                "message": { "type": "string", "description": "Message body to display" }
+                            },
+                            "required": ["message"]
+                        }
+                    }
+                });
+                toolsList.push({
+                    "type": "function",
+                    "function": {
+                        "name": "set_reminder",
+                        "description": "Sets a scheduled reminder that triggers a desktop notification after a given delay or at a specific time.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "message": { "type": "string", "description": "Reminder text" },
+                                "delay_seconds": { "type": "number", "description": "Delay in seconds from now (e.g. 60 for 1 min, 3600 for 1 hr)" },
+                                "at_time": { "type": "string", "description": "Target time formatted like '15:30' or '2026-10-11T16:00:00'" }
+                            },
+                            "required": ["message"]
+                        }
+                    }
+                });
+                toolsList.push({
+                    "type": "function",
+                    "function": {
+                        "name": "list_reminders",
+                        "description": "Lists all active upcoming reminders.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {}
+                        }
+                    }
+                });
+                toolsList.push({
+                    "type": "function",
+                    "function": {
+                        "name": "cancel_reminder",
+                        "description": "Cancels an active reminder by ID.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "id": { "type": "string", "description": "ID of the reminder to cancel" }
+                            },
+                            "required": ["id"]
                         }
                     }
                 });

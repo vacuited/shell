@@ -367,6 +367,147 @@ def tool_get_system_info():
   return True, f"{cpu_str}\n\nMemory:\n{mem}\n\nDisk:\n{disk}"
 
 
+REMINDERS_FILE = os.path.expanduser("~/.config/caelestia/ai_reminders.json")
+
+
+def _read_reminders():
+  if not os.path.exists(REMINDERS_FILE):
+    return []
+  try:
+    with open(REMINDERS_FILE, "r", encoding="utf-8") as f:
+      return json.load(f)
+  except Exception:
+    return []
+
+
+def _write_reminders(items):
+  os.makedirs(os.path.dirname(REMINDERS_FILE), exist_ok=True)
+  with open(REMINDERS_FILE, "w", encoding="utf-8") as f:
+    json.dump(items, f, indent=2)
+
+
+def tool_notify(args):
+  title = str(args.get("title") or "Caelestia Assistant").strip()
+  message = str(args.get("message") or "").strip()
+  if not message:
+    return False, "ERROR: notify requires a 'message'"
+  if not shutil.which("notify-send"):
+    return False, "ERROR: notify-send not found"
+  ok, out = run_cmd(
+      ["notify-send", "--app-name=Caelestia Assistant", title, message],
+      timeout=10,
+  )
+  return ok, "Notification sent." if ok else f"Notification failed: {out}"
+
+
+def tool_set_reminder(args):
+  message = str(args.get("message") or "").strip()
+  if not message:
+    return False, "ERROR: set_reminder requires a 'message'"
+  delay = args.get("delay_seconds")
+  at_time = args.get("at_time")
+  if (delay is None) == (at_time is None):
+    return (
+        False,
+        "ERROR: set_reminder requires exactly ONE of 'delay_seconds' or"
+        " 'at_time'",
+    )
+
+  now = time.time()
+  if at_time is not None:
+    try:
+      from datetime import datetime
+
+      at_str = str(at_time).strip()
+      if "T" in at_str or "-" in at_str:
+        dt = datetime.fromisoformat(at_str)
+      else:
+        t_parts = at_str.split(":")
+        today = datetime.now()
+        dt = today.replace(
+            hour=int(t_parts[0]),
+            minute=int(t_parts[1]),
+            second=int(t_parts[2]) if len(t_parts) > 2 else 0,
+            microsecond=0,
+        )
+      fire_at = dt.timestamp()
+      if fire_at <= now:
+        return False, f"ERROR: at_time '{at_time}' is in the past"
+      delay_sec = fire_at - now
+    except Exception as e:
+      return False, f"ERROR parsing at_time: {e}"
+  else:
+    try:
+      delay_sec = float(delay)
+      if delay_sec <= 0:
+        return False, "ERROR: delay_seconds must be positive"
+      fire_at = now + delay_sec
+    except (TypeError, ValueError):
+      return False, f"ERROR: delay_seconds must be a number, got {delay!r}"
+
+  rid = f"rem_{int(now*1000)}"
+  entry = {
+      "id": rid,
+      "message": message,
+      "fire_at": fire_at,
+      "created_at": now,
+  }
+  reminders = _read_reminders()
+  reminders.append(entry)
+  _write_reminders(reminders)
+
+  safe_msg = message.replace('"', '\\"')
+  cmd = f'sleep {int(delay_sec)} && notify-send --app-name="Caelestia Reminder" -u critical "⏰ Reminder" "{safe_msg}"'
+  subprocess.Popen(
+      ["sh", "-c", cmd],
+      stdout=subprocess.DEVNULL,
+      stderr=subprocess.DEVNULL,
+      stdin=subprocess.DEVNULL,
+      start_new_session=True,
+  )
+
+  from datetime import datetime
+
+  fire_dt = datetime.fromtimestamp(fire_at)
+  when = (
+      f"today at {fire_dt.strftime('%H:%M:%S')}"
+      if fire_dt.date() == datetime.now().date()
+      else fire_dt.strftime("%Y-%m-%d %H:%M:%S")
+  )
+  return True, f'Reminder set for {when} (in {int(delay_sec)}s) — "{message}"'
+
+
+def tool_list_reminders():
+  items = _read_reminders()
+  now = time.time()
+  active = [i for i in items if i.get("fire_at", 0) > now]
+  if not active:
+    return True, "No active reminders."
+  from datetime import datetime
+
+  lines = ["Active Reminders:\n"]
+  for idx, r in enumerate(
+      sorted(active, key=lambda x: x.get("fire_at", 0)), 1
+  ):
+    dt_str = datetime.fromtimestamp(r.get("fire_at", 0)).strftime(
+        "%Y-%m-%d %H:%M:%S"
+    )
+    lines.append(f"{idx}. [{r.get('id')}] {dt_str} — {r.get('message')}")
+  return True, "\n".join(lines)
+
+
+def tool_cancel_reminder(args):
+  rid = str(args.get("id") or "").strip()
+  if not rid:
+    return False, "ERROR: cancel_reminder requires an 'id'"
+  items = _read_reminders()
+  filtered = [i for i in items if i.get("id") != rid]
+  if len(filtered) == len(items):
+    return False, f"Reminder with ID '{rid}' not found."
+  _write_reminders(filtered)
+  return True, f"Reminder '{rid}' cancelled."
+
+
 # ---------------------------------------------------------------------------
 # CLI Dispatcher
 # ---------------------------------------------------------------------------
@@ -410,6 +551,14 @@ def main():
     ok, result = tool_save_memory(tool_args)
   elif tname == "list_memories":
     ok, result = tool_list_memories()
+  elif tname == "notify":
+    ok, result = tool_notify(tool_args)
+  elif tname == "set_reminder":
+    ok, result = tool_set_reminder(tool_args)
+  elif tname == "list_reminders":
+    ok, result = tool_list_reminders()
+  elif tname == "cancel_reminder":
+    ok, result = tool_cancel_reminder(tool_args)
   elif tname == "caelestia_command":
     ok, result = tool_caelestia_command(tool_args)
   elif tname == "get_weather":
@@ -431,3 +580,4 @@ def main():
 
 if __name__ == "__main__":
   main()
+

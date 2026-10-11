@@ -6,6 +6,7 @@ import Caelestia.Config
 import Caelestia.I18n
 import qs.components
 import qs.components.controls
+import qs.services
 import qs.modules.nexus.common
 
 PageBase {
@@ -30,12 +31,26 @@ PageBase {
             last: true
             text: qsTr("Enabled")
             subtext: qsTr("Allow the assistant to use desktop and external tools")
-            configNode: root.targetConfig.ai
-            propertyName: "enableCelestialMode"
-            checked: root.targetConfig.ai.enableCelestialMode
+            checked: GlobalConfig.ai.enableCelestialMode
             onToggled: {
-                root.targetConfig.ai.enableCelestialMode = checked;
-                root.targetConfig.save();
+                GlobalConfig.ai.enableCelestialMode = checked;
+                GlobalConfig.save();
+            }
+        }
+
+        SectionHeader {
+            text: qsTr("Reminders & Notifications")
+        }
+
+        ToggleRow {
+            first: true
+            last: true
+            text: qsTr("Reminders & Notifications")
+            subtext: qsTr("Schedule timed reminders and send instant desktop notifications")
+            checked: AiTools.enableReminders
+            onToggled: {
+                AiTools.enableReminders = checked;
+                AiTools.save();
             }
         }
 
@@ -46,13 +61,11 @@ PageBase {
         ToggleRow {
             first: true
             text: qsTr("Web Search")
-            subtext: qsTr("Search the web via Tavily Search API")
-            configNode: root.targetConfig.ai
-            propertyName: "enableWebSearch"
-            checked: root.targetConfig.ai.enableWebSearch !== false
+            subtext: qsTr("Search the web via Tavily Search API or DuckDuckGo")
+            checked: AiTools.enableWebSearch
             onToggled: {
-                root.targetConfig.ai.enableWebSearch = checked;
-                root.targetConfig.save();
+                AiTools.enableWebSearch = checked;
+                AiTools.save();
             }
         }
 
@@ -60,11 +73,11 @@ PageBase {
             last: true
             label: qsTr("Tavily API Key")
             subtext: qsTr("Free 1,000 searches/month from tavily.com")
-            value: root.targetConfig.ai.tavilyApiKey || ""
+            value: AiTools.tavilyApiKey || ""
             placeholderText: "tvly-..."
             onEditingFinished: value => {
-                root.targetConfig.ai.tavilyApiKey = value;
-                root.targetConfig.save();
+                AiTools.tavilyApiKey = value;
+                AiTools.save();
             }
         }
 
@@ -76,23 +89,21 @@ PageBase {
             first: true
             text: qsTr("Spotify Integration")
             subtext: qsTr("Enable Spotify library search, playlists & queue control")
-            configNode: root.targetConfig.ai
-            propertyName: "enableSpotify"
-            checked: root.targetConfig.ai.enableSpotify || false
+            checked: AiTools.enableSpotify
             onToggled: {
-                root.targetConfig.ai.enableSpotify = checked;
-                root.targetConfig.save();
+                AiTools.enableSpotify = checked;
+                AiTools.save();
             }
         }
 
         TextFieldRow {
             label: qsTr("Client ID")
             subtext: qsTr("Spotify Developer App Client ID")
-            value: root.targetConfig.ai.spotifyClientId || ""
+            value: AiTools.spotifyClientId || ""
             placeholderText: "Client ID..."
             onEditingFinished: value => {
-                root.targetConfig.ai.spotifyClientId = value;
-                root.targetConfig.save();
+                AiTools.spotifyClientId = value;
+                AiTools.save();
             }
         }
 
@@ -100,11 +111,11 @@ PageBase {
             last: true
             label: qsTr("Client Secret")
             subtext: qsTr("Spotify Developer App Client Secret")
-            value: root.targetConfig.ai.spotifyClientSecret || ""
+            value: AiTools.spotifyClientSecret || ""
             placeholderText: "Client Secret..."
             onEditingFinished: value => {
-                root.targetConfig.ai.spotifyClientSecret = value;
-                root.targetConfig.save();
+                AiTools.spotifyClientSecret = value;
+                AiTools.save();
             }
         }
 
@@ -116,12 +127,10 @@ PageBase {
             first: true
             text: qsTr("Screen Vision (grim)")
             subtext: qsTr("Capture focused monitor/window for vision models (e.g. MiMo)")
-            configNode: root.targetConfig.ai
-            propertyName: "enableVision"
-            checked: root.targetConfig.ai.enableVision !== false
+            checked: AiTools.enableVision
             onToggled: {
-                root.targetConfig.ai.enableVision = checked;
-                root.targetConfig.save();
+                AiTools.enableVision = checked;
+                AiTools.save();
             }
         }
 
@@ -129,12 +138,10 @@ PageBase {
             last: true
             text: qsTr("Clipboard Access")
             subtext: qsTr("Allow assistant to read (wl-paste) and copy text (wl-copy)")
-            configNode: root.targetConfig.ai
-            propertyName: "enableClipboard"
-            checked: root.targetConfig.ai.enableClipboard !== false
+            checked: AiTools.enableClipboard
             onToggled: {
-                root.targetConfig.ai.enableClipboard = checked;
-                root.targetConfig.save();
+                AiTools.enableClipboard = checked;
+                AiTools.save();
             }
         }
 
@@ -146,12 +153,10 @@ PageBase {
             first: true
             text: qsTr("System & Caelestia Control")
             subtext: qsTr("Allow media control (playerctl) and caelestia shell CLI execution")
-            configNode: root.targetConfig.ai
-            propertyName: "enableSystemControl"
-            checked: root.targetConfig.ai.enableSystemControl !== false
+            checked: AiTools.enableSystemControl
             onToggled: {
-                root.targetConfig.ai.enableSystemControl = checked;
-                root.targetConfig.save();
+                AiTools.enableSystemControl = checked;
+                AiTools.save();
             }
         }
 
@@ -159,12 +164,10 @@ PageBase {
             last: true
             text: qsTr("Persistent Memory")
             subtext: qsTr("Store explicit facts and notes in ai_memory.json")
-            configNode: root.targetConfig.ai
-            propertyName: "enableMemory"
-            checked: root.targetConfig.ai.enableMemory !== false
+            checked: AiTools.enableMemory
             onToggled: {
-                root.targetConfig.ai.enableMemory = checked;
-                root.targetConfig.save();
+                AiTools.enableMemory = checked;
+                AiTools.save();
             }
         }
     }
