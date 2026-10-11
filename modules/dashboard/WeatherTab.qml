@@ -11,9 +11,6 @@ Item {
     id: root
 
     readonly property var today: Weather.forecast && Weather.forecast.length > 0 ? Weather.forecast[0] : null
-
-    // The card shows a window onto Weather.hourlyForecast. The arrows move hourOffset
-    // and scrollPos glides after it, so the whole strip scrolls as one piece.
     readonly property var allHourly: Weather.hourlyForecast ?? []
     readonly property int windowSize: 12
     readonly property int step: 6
@@ -21,10 +18,7 @@ Item {
 
     property int hourOffset: 0
     property real scrollPos: hourOffset
-    // true starts with the hourly forecast collapsed
-    readonly property bool startCollapsed: false
-
-    property bool hourlyExpanded: !startCollapsed
+    property int selectedView: 0 // 0: Hourly, 1: 7-Day
 
     onMaxOffsetChanged: {
         if (hourOffset > maxOffset)
@@ -71,7 +65,6 @@ Item {
 
     implicitWidth: layout.implicitWidth > 800 ? layout.implicitWidth : 840
     implicitHeight: layout.implicitHeight
-    Component.onCompleted: Weather.reload()
 
     ColumnLayout {
         id: layout
@@ -79,6 +72,7 @@ Item {
         anchors.fill: parent
         spacing: Tokens.spacing.medium
 
+        // 1. City & Date & Sun Stats (Original Sizing & Styling)
         RowLayout {
             Layout.leftMargin: Tokens.padding.large
             Layout.rightMargin: Tokens.padding.large
@@ -123,6 +117,7 @@ Item {
             }
         }
 
+        // 2. Big Info Card (Original Sizing & Styling)
         StyledRect {
             Layout.fillWidth: true
             implicitHeight: bigInfoRow.implicitHeight + Tokens.padding.small
@@ -164,6 +159,7 @@ Item {
             }
         }
 
+        // 3. Summary Text (Original Sizing & Styling)
         StyledText {
             Layout.fillWidth: true
             Layout.leftMargin: Tokens.padding.large
@@ -176,6 +172,7 @@ Item {
             color: Colours.palette.m3onSurfaceVariant
         }
 
+        // 4. Detail Cards: Humidity, Feels Like, Wind (Original Sizing & Styling)
         RowLayout {
             Layout.fillWidth: true
             spacing: Tokens.spacing.medium
@@ -200,51 +197,97 @@ Item {
             }
         }
 
+        // 5. Forecast Header with Animated Sliding Pill Toggle
         RowLayout {
             Layout.fillWidth: true
-            Layout.topMargin: Tokens.spacing.medium
+            Layout.topMargin: Tokens.spacing.small
             Layout.leftMargin: Tokens.padding.medium
             Layout.rightMargin: Tokens.padding.medium
-            visible: root.allHourly.length > 0
             spacing: Tokens.spacing.small
 
             StyledText {
-                Layout.fillWidth: true
-                text: Tr.tr("Hourly forecast")
+                text: root.selectedView === 0 ? Tr.tr("Hourly forecast") : Tr.tr("7-day forecast")
                 font: Tokens.font.body.builders.medium.weight(Font.DemiBold).build()
                 color: Colours.palette.m3onSurface
             }
 
             IconButton {
                 icon: "chevron_left"
-                visible: root.hourlyExpanded
+                visible: root.selectedView === 0
                 active: root.hourOffset > 0
                 onClicked: root.hourOffset = Math.max(0, root.hourOffset - root.step)
             }
 
             IconButton {
                 icon: "chevron_right"
-                visible: root.hourlyExpanded
+                visible: root.selectedView === 0
                 active: root.hourOffset < root.maxOffset
                 onClicked: root.hourOffset = Math.min(root.maxOffset, root.hourOffset + root.step)
             }
 
-            IconButton {
-                icon: root.hourlyExpanded ? "expand_less" : "expand_more"
-                onClicked: root.hourlyExpanded = !root.hourlyExpanded
+            Item {
+                Layout.fillWidth: true
+            }
+
+            // Animated Sliding Pill Selector
+            StyledRect {
+                id: togglePillContainer
+                implicitHeight: 34
+                implicitWidth: toggleRow.implicitWidth + 8
+                radius: Tokens.rounding.full
+                color: Colours.tPalette.m3surfaceContainerHigh
+
+                // Sliding Active Indicator
+                StyledRect {
+                    id: slidingIndicator
+                    x: toggleRow.x + (root.selectedView === 0 ? hourlyBtn.x : dailyBtn.x)
+                    y: toggleRow.y + (root.selectedView === 0 ? hourlyBtn.y : dailyBtn.y)
+                    width: root.selectedView === 0 ? hourlyBtn.width : dailyBtn.width
+                    height: root.selectedView === 0 ? hourlyBtn.height : dailyBtn.height
+                    radius: Tokens.rounding.full
+                    color: Colours.palette.m3primary
+
+                    Behavior on x {
+                        Anim {
+                            type: Anim.EmphasizedLarge
+                        }
+                    }
+                    Behavior on width {
+                        Anim {
+                            type: Anim.EmphasizedLarge
+                        }
+                    }
+                }
+
+                Row {
+                    id: toggleRow
+                    anchors.centerIn: parent
+                    spacing: 4
+
+                    ToggleBtn {
+                        id: hourlyBtn
+                        label: Tr.tr("Hourly")
+                        icon: "schedule"
+                        isSelected: root.selectedView === 0
+                        onClicked: root.selectedView = 0
+                    }
+
+                    ToggleBtn {
+                        id: dailyBtn
+                        label: Tr.tr("7-Day")
+                        icon: "calendar_today"
+                        isSelected: root.selectedView === 1
+                        onClicked: root.selectedView = 1
+                    }
+                }
             }
         }
 
-        StyledClippingRect {
-            id: hourlyCard
-
+        // 6. Forecast Content Area with Smooth Cross-Fade
+        Item {
+            id: forecastContainer
             Layout.fillWidth: true
-            visible: root.allHourly.length > 0
-            implicitHeight: root.hourlyExpanded ? hourStrip.implicitHeight + Tokens.padding.medium * 2 : 0
-
-            radius: Math.min(Tokens.rounding.large, height / 2)
-            color: Colours.tPalette.m3surfaceContainer
-            opacity: Math.min(1, height / 12)
+            implicitHeight: root.selectedView === 0 ? hourlyCard.implicitHeight : dailyRow.implicitHeight
 
             Behavior on implicitHeight {
                 Anim {
@@ -252,99 +295,155 @@ Item {
                 }
             }
 
-            // Not anchored to the bottom, so collapsing clips the strip instead of squashing it.
-            HourStrip {
-                id: hourStrip
-
+            // Hourly Forecast Card (Exact Original Sizing, Curve, & Colors)
+            StyledClippingRect {
+                id: hourlyCard
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.top: parent.top
-                anchors.margins: Tokens.padding.medium
-                opacity: root.hourlyExpanded ? 1 : 0
-                entries: root.allHourly
-                scrollPos: root.scrollPos
-                windowSize: root.windowSize
+                implicitHeight: hourStrip.implicitHeight + Tokens.padding.medium * 2
+                radius: Tokens.rounding.large
+                color: Colours.tPalette.m3surfaceContainer
+                opacity: root.selectedView === 0 ? 1 : 0
+                visible: opacity > 0
 
                 Behavior on opacity {
                     Anim {
-                        type: Anim.DefaultEffects
+                        type: Anim.EmphasizedLarge
                     }
                 }
+
+                HourStrip {
+                    id: hourStrip
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    anchors.margins: Tokens.padding.medium
+                    entries: root.allHourly
+                    scrollPos: root.scrollPos
+                    windowSize: root.windowSize
+                }
             }
-        }
 
-        StyledText {
-            Layout.topMargin: Tokens.spacing.medium
-            Layout.leftMargin: Tokens.padding.medium
-            visible: forecastRepeater.count > 0
-            text: Tr.tr("7-day forecast")
-            font: Tokens.font.body.builders.medium.weight(Font.DemiBold).build()
-            color: Colours.palette.m3onSurface
-        }
+            // 7-Day Forecast Row (Exact Original Sizing, Cards, & Colors)
+            RowLayout {
+                id: dailyRow
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                spacing: Tokens.spacing.medium
+                opacity: root.selectedView === 1 ? 1 : 0
+                visible: opacity > 0
 
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: Tokens.spacing.medium
+                Behavior on opacity {
+                    Anim {
+                        type: Anim.EmphasizedLarge
+                    }
+                }
 
-            Repeater {
-                id: forecastRepeater
+                Repeater {
+                    id: forecastRepeater
+                    model: Weather.forecast
 
-                model: Weather.forecast
+                    StyledRect {
+                        id: forecastItem
+                        required property int index
+                        required property var modelData
 
-                StyledRect {
-                    id: forecastItem
+                        Layout.fillWidth: true
+                        implicitHeight: forecastItemColumn.implicitHeight + Tokens.padding.medium * 2
 
-                    required property int index
-                    required property var modelData
+                        radius: Tokens.rounding.large
+                        color: Colours.tPalette.m3surfaceContainer
 
-                    Layout.fillWidth: true
-                    implicitHeight: forecastItemColumn.implicitHeight + Tokens.padding.medium * 2
+                        ColumnLayout {
+                            id: forecastItemColumn
+                            anchors.centerIn: parent
+                            spacing: Tokens.spacing.small
 
-                    radius: Tokens.rounding.large
-                    color: Colours.tPalette.m3surfaceContainer
-
-                    ColumnLayout {
-                        id: forecastItemColumn
-
-                        anchors.centerIn: parent
-                        spacing: Tokens.spacing.small
-
-                        StyledText {
-                            Layout.alignment: Qt.AlignHCenter
-                            text: forecastItem.index === 0 ? Tr.trCtx("Today", "forecast column") : new Date(forecastItem.modelData.date).toLocaleDateString(Qt.locale(), "ddd")
-                            font: Tokens.font.body.builders.medium.weight(Font.DemiBold).build()
-                            color: Colours.palette.m3primary
-                        }
-
-                        StyledText {
-                            Layout.topMargin: -Tokens.spacing.extraSmall
-                            Layout.alignment: Qt.AlignHCenter
-                            text: new Date(forecastItem.modelData.date).toLocaleDateString(Qt.locale(), "MMM d")
-                            font: Tokens.font.body.small
-                            opacity: 0.7
-                            color: Colours.palette.m3onSurfaceVariant
-                        }
-
-                        MaterialIcon {
-                            Layout.alignment: Qt.AlignHCenter
-                            text: forecastItem.modelData.icon
-                            fontStyle: Tokens.font.icon.extraLarge
-                            color: Colours.palette.m3secondary
-                        }
-
-                        StyledText {
-                            Layout.alignment: Qt.AlignHCenter
-                            text: {
-                                const min = Weather.formatTemp(forecastItem.modelData.minTempC, true);
-                                const max = Weather.formatTemp(forecastItem.modelData.maxTempC, true);
-                                return Tr.trCtx("%1 / %2", "min/max temperature").arg(min).arg(max);
+                            StyledText {
+                                Layout.alignment: Qt.AlignHCenter
+                                text: forecastItem.index === 0 ? Tr.trCtx("Today", "forecast column") : new Date(forecastItem.modelData.date).toLocaleDateString(Qt.locale(), "ddd")
+                                font: Tokens.font.body.builders.medium.weight(Font.DemiBold).build()
+                                color: Colours.palette.m3primary
                             }
-                            font: Tokens.font.body.builders.small.weight(Font.DemiBold).build()
-                            color: Colours.palette.m3tertiary
+
+                            StyledText {
+                                Layout.topMargin: -Tokens.spacing.extraSmall
+                                Layout.alignment: Qt.AlignHCenter
+                                text: new Date(forecastItem.modelData.date).toLocaleDateString(Qt.locale(), "MMM d")
+                                font: Tokens.font.body.small
+                                opacity: 0.7
+                                color: Colours.palette.m3onSurfaceVariant
+                            }
+
+                            MaterialIcon {
+                                Layout.alignment: Qt.AlignHCenter
+                                text: forecastItem.modelData.icon
+                                fontStyle: Tokens.font.icon.extraLarge
+                                color: Colours.palette.m3secondary
+                            }
+
+                            StyledText {
+                                Layout.alignment: Qt.AlignHCenter
+                                text: {
+                                    const min = Weather.formatTemp(forecastItem.modelData.minTempC, true);
+                                    const max = Weather.formatTemp(forecastItem.modelData.maxTempC, true);
+                                    return Tr.trCtx("%1 / %2", "min/max temperature").arg(min).arg(max);
+                                }
+                                font: Tokens.font.body.builders.small.weight(Font.DemiBold).build()
+                                color: Colours.palette.m3tertiary
+                            }
                         }
                     }
                 }
             }
+        }
+    }
+
+    // Toggle Button Component
+    component ToggleBtn: Item {
+        id: btn
+        property string label
+        property string icon
+        property bool isSelected: false
+        signal clicked
+
+        implicitWidth: btnRow.implicitWidth + Tokens.padding.medium * 2
+        implicitHeight: 26
+
+        Row {
+            id: btnRow
+            anchors.centerIn: parent
+            spacing: 5
+
+            MaterialIcon {
+                text: btn.icon
+                fontStyle: Tokens.font.icon.small
+                color: btn.isSelected ? Colours.palette.m3onPrimary : Colours.palette.m3onSurfaceVariant
+                anchors.verticalCenter: parent.verticalCenter
+
+                Behavior on color {
+                    ColorAnimation { duration: 180 }
+                }
+            }
+
+            StyledText {
+                text: btn.label
+                font: Tokens.font.body.builders.small.weight(Font.Medium).build()
+                color: btn.isSelected ? Colours.palette.m3onPrimary : Colours.palette.m3onSurfaceVariant
+                anchors.verticalCenter: parent.verticalCenter
+
+                Behavior on color {
+                    ColorAnimation { duration: 180 }
+                }
+            }
+        }
+
+        StateLayer {
+            radius: Tokens.rounding.full
+            color: Colours.palette.m3onSurface
+            onClicked: btn.clicked()
         }
     }
 
@@ -385,8 +484,6 @@ Item {
             };
         }
 
-        // The scale looks at a few pages around the view rather than only the page on screen,
-        // so it shifts gradually instead of re-fitting every time the window moves.
         readonly property int scaleSpan: 3
         readonly property var scaleRange: {
             const n = entries.length;
@@ -413,7 +510,6 @@ Item {
             };
         }
 
-        // The chart eases toward that range so the scale glides.
         property real viewMin: scaleRange.lo
         property real viewMax: scaleRange.hi
 
@@ -436,7 +532,6 @@ Item {
             return `${String(h).padStart(2, "0")}:00`;
         }
 
-        // Midnight shows the weekday instead of 00:00.
         function hourLabel(entry: var): string {
             if (entry.hour === 0) {
                 const d = new Date(entry.timestamp.replace("T", " ").replace(/-/g, "/"));
@@ -466,7 +561,6 @@ Item {
             readonly property real padBottom: 12
             readonly property real plotH: height - padTop - padBottom
 
-            // Smooth curve: cubic segments with horizontal handles.
             readonly property string curvePath: {
                 const n = strip.slotCount;
                 if (n < 2)
@@ -578,7 +672,6 @@ Item {
             }
         }
 
-        // Columns use strip.xAt so they line up with the dots.
         Item {
             id: hourRow
 
@@ -586,7 +679,6 @@ Item {
             Layout.topMargin: Tokens.spacing.small
             implicitHeight: sizer.implicitHeight
 
-            // Never shown. Gives the row the height of a real cell.
             HourCell {
                 id: sizer
 
@@ -651,7 +743,6 @@ Item {
             color: Colours.palette.m3secondary
         }
 
-        // Hidden under 20%, but keeps its space so columns don't shift.
         StyledRect {
             Layout.alignment: Qt.AlignHCenter
             implicitWidth: rainLabel.implicitWidth + Tokens.padding.small * 2
