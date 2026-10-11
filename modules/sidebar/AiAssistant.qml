@@ -1512,7 +1512,8 @@ Item {
                      Item {
                          id: chatTab
                          height: parent.height
-                         width: !isHistoryTab ? (chatContent.implicitWidth + Tokens.padding.medium * 2) : 40
+                         width: !isHistoryTab ? 40 : chatContent.implicitWidth + Tokens.padding.medium * 2
+                         
 
                          Behavior on width { NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
 
@@ -1536,7 +1537,7 @@ Item {
                                  text: "Chat"
                                  color: !isHistoryTab ? Colours.palette.m3onPrimary : Colours.palette.m3onSurfaceVariant
                                  font: Tokens.font.body.small
-                                 visible: !isHistoryTab
+                                 visible: isHistoryTab
                              }
                          }
                      }
@@ -1544,17 +1545,14 @@ Item {
                      Item {
                          id: historyTab
                          height: parent.height
-                         width: isHistoryTab ? (historyContent.implicitWidth + Tokens.padding.medium * 2) : 40
+                         width: isHistoryTab ? 40 : historyContent.implicitWidth + Tokens.padding.medium * 2
+                         
 
                          Behavior on width { NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
 
                          StateLayer {
                              radius: Tokens.rounding.full
-                             onClicked: {
-                                 if (root.storeReady && chatHistory.count > 0)
-                                     root.saveHistory(true);
-                                 root.isHistoryTab = true;
-                             }
+                             onClicked: isHistoryTab = true
                          }
 
                          Row {
@@ -1572,7 +1570,7 @@ Item {
                                  text: "History"
                                  color: isHistoryTab ? Colours.palette.m3onPrimary : Colours.palette.m3onSurfaceVariant
                                  font: Tokens.font.body.small
-                                 visible: isHistoryTab
+                                 visible: !isHistoryTab
                              }
                          }
                      }
