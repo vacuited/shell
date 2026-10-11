@@ -70,7 +70,6 @@ Singleton {
         root.loadRecentFromConfig();
         root.loaded = true;
         root.requestSave();
-        root.fetchAllModels();
     }
 
     function loadConfig(content) {
@@ -118,7 +117,6 @@ Singleton {
 
         root.loadRecentFromConfig();
         root.loaded = true;
-        root.fetchAllModels();
     }
 
     function requestSave() {
@@ -181,18 +179,19 @@ Singleton {
             var pid = raw[i].substring(0, sep);
             var mname = raw[i].substring(sep + 1);
 
-            var pName = "";
+            var pObj = null;
             for (var p = 0; p < root.providers.length; p++) {
                 if (root.providers[p].id === pid) {
-                    pName = root.providers[p].name;
+                    pObj = root.providers[p];
                     break;
                 }
             }
-            if (!pName) continue;
+            if (!pObj) continue;
+            if (pObj.models && pObj.models.indexOf(mname) === -1) continue;
 
             out.push({
                 "providerId": pid,
-                "providerName": pName,
+                "providerName": pObj.name,
                 "model": mname,
                 "name": mname,
                 "lower": mname.toLowerCase()
@@ -224,7 +223,6 @@ Singleton {
         list.push(newP);
         root.providers = list;
         save();
-        fetchProviderModels(id);
         return id;
     }
 
@@ -238,9 +236,6 @@ Singleton {
         }
         root.providers = list;
         save();
-        if (changes.baseUrl !== undefined || changes.apiKey !== undefined) {
-            fetchProviderModels(id);
-        }
     }
 
     function addModelToProvider(providerId, modelName) {
@@ -258,6 +253,15 @@ Singleton {
             }
         }
         root.providers = list;
+        if (root.modelsByProvider && root.modelsByProvider[providerId]) {
+            var mbp = Object.assign({}, root.modelsByProvider);
+            var curr = (mbp[providerId] || []).slice();
+            if (curr.indexOf(clean) === -1) {
+                curr.push(clean);
+                mbp[providerId] = curr;
+                root.modelsByProvider = mbp;
+            }
+        }
         save();
     }
 
@@ -275,7 +279,13 @@ Singleton {
             }
         }
         root.providers = list;
+        if (root.modelsByProvider && root.modelsByProvider[providerId]) {
+            var mbpDel = Object.assign({}, root.modelsByProvider);
+            mbpDel[providerId] = (mbpDel[providerId] || []).filter(name => name !== modelName);
+            root.modelsByProvider = mbpDel;
+        }
         save();
+        loadRecentFromConfig();
     }
 
     function fetchAndSaveModels(providerId) {

@@ -64,9 +64,6 @@ Item {
     }
     
     onVisibleChanged: {
-        if (visible) {
-            fetchModels();
-        }
     }
 
     function startTypingAnimation(text) {
@@ -80,7 +77,6 @@ Item {
     }
 
     Component.onCompleted: {
-        fetchModels();
         storeDirProc.running = true;
     }
 
@@ -133,7 +129,7 @@ Item {
         var providers = AiProviders.providers;
         for (var i = 0; i < providers.length; i++) {
             var prov = providers[i];
-            var models = (AiProviders.modelsByProvider && AiProviders.modelsByProvider[prov.id]) || prov.models || [];
+            var models = prov.models || [];
             var entries = [];
             for (var m = 0; m < models.length; m++) {
                 entries.push({
@@ -214,7 +210,6 @@ Item {
 
     onSelectorOpenChanged: {
         if (selectorOpen) {
-            fetchModels();
             expandedSections = {};
         } else {
             modelSearch.text = "";
