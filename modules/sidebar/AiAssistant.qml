@@ -49,7 +49,7 @@ Item {
                 stop();
                 chatHistory.setProperty(targetIdx, "text", fullText);
                 chatHistory.setProperty(targetIdx, "isFinished", true);
-                saveHistory();
+                saveHistory(true);
                 isTyping = false;
                 isThinking = false;
                 inAgentLoop = false;
@@ -76,11 +76,13 @@ Item {
         listView.positionViewAtEnd();
     }
 
-    Component.onCompleted: {
-        storeDirProc.running = true;
+    Component.onDestruction: {
+        if (root.storeReady && root.chatHistory.count > 0) {
+            root.saveHistory(true);
+        } else {
+            root.flushHistory();
+        }
     }
-
-    Component.onDestruction: flushHistory();
 
     // Provider management backed by AiProviders service
     readonly property string activeProvider: AiProviders.activeProviderId
@@ -265,45 +267,46 @@ Item {
     property string pendingAssistantContent: ""
 
     property bool storeReady: false
+    property bool isInitializing: true
     property string lastChatId: ""
-    readonly property string storePath: `${Paths.data}/ai/chats.json`
+    readonly property string storePath: `${Quickshell.env("HOME")}/.config/caelestia/ai_chats.json`
     
     FileView {
         id: chatStore
         path: root.storePath
-        preload: false
         printErrors: false
 
         onLoaded: {
-            var data = [];
-            try {
-                data = JSON.parse(text());
-            } catch (e) {
-                data = [];
+            var raw = text();
+            var data = null;
+            if (raw && raw.trim().length > 0) {
+                try {
+                    data = JSON.parse(raw);
+                } catch (e) {
+                    console.warn("[AiAssistant] Failed to parse ai_chats.json:", e);
+                    data = null;
+                }
             }
-            var legacyFormat = Array.isArray(data);
-            root.applyStoreData(data);
-            if (legacyFormat)
-                root.flushHistory();
+            if (data !== null) {
+                root.applyStoreData(data);
+            } else {
+                root.migrateLegacyHistory();
+            }
         }
 
         onLoadFailed: err => {
-            if (err === FileViewError.FileNotFound)
+            if (err === FileViewError.FileNotFound) {
                 root.migrateLegacyHistory();
-            else
+            } else {
                 root.applyStoreData([]);
+            }
         }
-    }
-
-    Process {
-        id: storeDirProc
-        command: ["mkdir", "-p", Paths.data + "/ai"]
-        onExited: chatStore.reload()
     }
 
     Timer {
         id: historySaveTimer
         interval: 400
+        repeat: false
         onTriggered: root.flushHistory()
     }
 
@@ -380,6 +383,9 @@ Item {
     }
 
     function createNewChat() {
+        if (storeReady && chatHistory.count > 0) {
+            saveHistory(true);
+        }
         typingTimer.stop();
         isTyping = false;
         isThinking = false;
@@ -392,20 +398,32 @@ Item {
         lastChatId = currentChatId;
         chatHistory.clear();
         isHistoryTab = false;
+        if (!isInitializing)
+            flushHistory();
     }
 
     function loadChat(id) {
+        if (id === currentChatId && chatHistory.count > 0) {
+            isHistoryTab = false;
+            return;
+        }
+        if (storeReady && chatHistory.count > 0) {
+            saveHistory(true);
+        }
         typingTimer.stop();
         isTyping = false;
         isThinking = false;
         inAgentLoop = false;
         isStreaming = false;
         currentChatId = id;
+        lastChatId = id;
         chatHistory.clear();
         var found = false;
+        var targetSess = null;
         for (var i = 0; i < allChatSessions.length; i++) {
             if (allChatSessions[i].id === id) {
-                var msgs = allChatSessions[i].messages;
+                targetSess = allChatSessions[i];
+                var msgs = targetSess.messages || [];
                 for (var j = 0; j < msgs.length; j++) {
                     // Strictly sanitize incoming JSON data before ListModel append
                     chatHistory.append({
@@ -419,11 +437,13 @@ Item {
                 break;
             }
         }
-        if (found)
-            restoreSessionProvider(allChatSessions[i]);
+        if (found && targetSess)
+            restoreSessionProvider(targetSess);
         else
             createNewChat();
         isHistoryTab = false;
+        if (!isInitializing)
+            flushHistory();
     }
 
     function relativeTime(ts) {
@@ -515,13 +535,17 @@ Item {
             loadChat(targetId);
         else
             createNewChat();
+
+        Qt.callLater(() => {
+            root.isInitializing = false;
+        });
     }
 
     function migrateLegacyHistory() {
         var legacy = [];
         try {
             var jsonStr = GlobalConfig.ai.ollamaHistoryJson;
-            if (jsonStr) legacy = JSON.parse(jsonStr);
+            if (jsonStr && jsonStr !== "[]") legacy = JSON.parse(jsonStr);
         } catch (e) {
             legacy = [];
         }
@@ -529,20 +553,23 @@ Item {
             legacy = [];
 
         applyStoreData(legacy);
-        flushHistory();
+        if (legacy.length > 0) {
+            Qt.callLater(() => root.flushHistory());
+        }
     }
 
     function flushHistory() {
         historySaveTimer.stop();
-        if (storeReady)
-            chatStore.setText(JSON.stringify({
-                "version": 2,
-                "lastChatId": currentChatId || lastChatId,
-                "chats": allChatSessions
-            }));
+        if (!storeReady) return;
+        var payload = {
+            "version": 2,
+            "lastChatId": currentChatId || lastChatId,
+            "chats": allChatSessions
+        };
+        chatStore.setText(JSON.stringify(payload, null, 2));
     }
 
-    function saveHistory() {
+    function saveHistory(immediate = false) {
         var msgs = [];
         for (var i = 0; i < chatHistory.count; i++) {
             var msg = chatHistory.get(i);
@@ -557,6 +584,10 @@ Item {
         if (msgs.length === 0) return;
 
         var now = Date.now();
+        if (!currentChatId) {
+            currentChatId = "chat_" + now;
+        }
+
         var found = false;
         for (var j = 0; j < allChatSessions.length; j++) {
             if (allChatSessions[j].id === currentChatId) {
@@ -570,12 +601,13 @@ Item {
                 allChatSessions.splice(j, 1);
                 allChatSessions.unshift(sess);
 
-                if (msgs.length > 1 && (sess.title === "Legacy Chat" || sess.title === "New Chat" || sess.title.indexOf("New Chat") === 0 || !sess.title)) {
+                if (msgs.length > 1 && !sess.titleGenerating && (sess.title === "Legacy Chat" || sess.title === "New Chat" || sess.title.indexOf("New Chat") === 0 || !sess.title)) {
                     var firstUser = null;
                     for (var k = 0; k < msgs.length; k++) {
                         if (msgs[k].isUser) { firstUser = msgs[k]; break; }
                     }
                     if (firstUser) {
+                        sess.titleGenerating = true;
                         generateChatTitleAsync(currentChatId, firstUser.text);
                     }
                 }
@@ -590,19 +622,23 @@ Item {
                 if (msgs[m].isUser) { firstUserMsg = msgs[m]; break; }
             }
 
-            allChatSessions.unshift({
-                "id": currentChatId || ("chat_" + now),
+            var newSess = {
+                "id": currentChatId,
                 "title": "New Chat",
                 "messages": msgs,
                 "createdAt": now,
                 "updatedAt": now,
                 "provider": activeProvider,
-                "model": currentModel
-            });
+                "model": currentModel,
+                "titleGenerating": false
+            };
 
             if (firstUserMsg) {
+                newSess.titleGenerating = true;
                 generateChatTitleAsync(currentChatId, firstUserMsg.text);
             }
+
+            allChatSessions.unshift(newSess);
         }
 
         while (allChatSessions.length > 100) {
@@ -611,7 +647,11 @@ Item {
         }
 
         syncHistoryModel();
-        historySaveTimer.restart();
+        if (immediate) {
+            flushHistory();
+        } else {
+            historySaveTimer.restart();
+        }
     }
 
     function deleteChat(id) {
@@ -666,19 +706,28 @@ Item {
         }
 
         xhr.onreadystatechange = () => {
-            if (xhr.readyState === XMLHttpRequest.DONE && xhr.status === 200) {
-                try {
-                    var parsed = JSON.parse(xhr.responseText);
-                    var content = "";
-                    if (parsed.choices && parsed.choices.length > 0 && parsed.choices[0].message) {
-                        content = parsed.choices[0].message.content || "";
+            if (xhr.readyState === XMLHttpRequest.DONE) {
+                if (xhr.status === 200) {
+                    try {
+                        var parsed = JSON.parse(xhr.responseText);
+                        var content = "";
+                        if (parsed.choices && parsed.choices.length > 0 && parsed.choices[0].message) {
+                            content = parsed.choices[0].message.content || "";
+                        }
+                        var title = content.trim().replace(/^"|"$/g, '').replace(/\n/g, ' ');
+                        if (title.length > 40) title = title.substring(0, 40) + "...";
+                        if (title.length > 0) {
+                            updateChatTitle(chatId, title);
+                            return;
+                        }
+                    } catch (e) {}
+                }
+                for (var i = 0; i < allChatSessions.length; i++) {
+                    if (allChatSessions[i].id === chatId) {
+                        allChatSessions[i].titleGenerating = false;
+                        break;
                     }
-                    var title = content.trim().replace(/^"|"$/g, '').replace(/\n/g, ' ');
-                    if (title.length > 40) title = title.substring(0, 40) + "...";
-                    if (title.length > 0) {
-                        updateChatTitle(chatId, title);
-                    }
-                } catch (e) {}
+                }
             }
         };
 
@@ -706,12 +755,13 @@ Item {
         for (var i = 0; i < allChatSessions.length; i++) {
             if (allChatSessions[i].id === chatId) {
                 allChatSessions[i].title = title;
+                allChatSessions[i].titleGenerating = false;
                 break;
             }
         }
 
         syncHistoryModel();
-        historySaveTimer.restart();
+        flushHistory();
     }
 
     function addAiMessage(message) {
@@ -722,7 +772,7 @@ Item {
             "thoughtText": ""
         });
         listView.positionViewAtEnd();
-        saveHistory();
+        saveHistory(true);
     }
 
     function sendPrompt(promptText, isSystemToolResult = false, toolName = "") {
@@ -739,7 +789,7 @@ Item {
                 "thoughtText": ""
             });
             listView.positionViewAtEnd();
-            saveHistory();
+            saveHistory(true);
         }
 
         isTyping = true;
@@ -948,7 +998,7 @@ Item {
                     if (xhr.status === 200) {
                         finalizeToolCalls();
                         chatHistory.setProperty(chatHistory.count - 1, "isFinished", true);
-                        saveHistory();
+                        saveHistory(true);
                         
                         if (finalToolCalls && finalToolCalls.length > 0) {
                             var enableTools = GlobalConfig.ai.enableCelestialMode;
@@ -987,7 +1037,7 @@ Item {
                                     isThinking = false;
                                     inAgentLoop = false;
                                     isStreaming = false;
-                                    saveHistory();
+                                    saveHistory(true);
                                     return;
                                 }
                                 
@@ -1067,7 +1117,7 @@ Item {
                         inAgentLoop = false;
                         agentRounds = 0;
                         isStreaming = false;
-                        saveHistory();
+                        saveHistory(true);
                     }
                 }
             }
@@ -1499,7 +1549,11 @@ Item {
 
                          StateLayer {
                              radius: Tokens.rounding.full
-                             onClicked: isHistoryTab = true
+                             onClicked: {
+                                 if (root.storeReady && root.chatHistory.count > 0)
+                                     root.saveHistory(true);
+                                 root.isHistoryTab = true;
+                             }
                          }
 
                          Row {
@@ -2110,7 +2164,7 @@ Item {
                                              root.agentRounds = 0;
                                              typingTimer.stop();
                                              chatHistory.setProperty(chatHistory.count - 1, "isFinished", true);
-                                             saveHistory();
+                                             saveHistory(true);
                                          } else if (inputArea.text.length > 0) {
                                              root.sendPrompt(inputArea.text);
                                              inputArea.clear();
