@@ -287,13 +287,7 @@ Item {
         Item {
             id: forecastContainer
             Layout.fillWidth: true
-            implicitHeight: root.selectedView === 0 ? hourlyCard.implicitHeight : dailyRow.implicitHeight
-
-            Behavior on implicitHeight {
-                Anim {
-                    type: Anim.EmphasizedLarge
-                }
-            }
+            implicitHeight: hourlyCard.implicitHeight
 
             // Hourly Forecast Card (Exact Original Sizing, Curve, & Colors)
             StyledClippingRect {
@@ -325,12 +319,13 @@ Item {
                 }
             }
 
-            // 7-Day Forecast Row (Exact Original Sizing, Cards, & Colors)
+            // 7-Day Forecast Row (Matches Hourly Height, Perfectly Proportioned)
             RowLayout {
                 id: dailyRow
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.top: parent.top
+                implicitHeight: hourlyCard.implicitHeight
                 spacing: Tokens.spacing.medium
                 opacity: root.selectedView === 1 ? 1 : 0
                 visible: opacity > 0
@@ -351,7 +346,8 @@ Item {
                         required property var modelData
 
                         Layout.fillWidth: true
-                        implicitHeight: forecastItemColumn.implicitHeight + Tokens.padding.medium * 2
+                        Layout.fillHeight: true
+                        implicitHeight: hourlyCard.implicitHeight
 
                         radius: Tokens.rounding.large
                         color: Colours.tPalette.m3surfaceContainer
@@ -510,8 +506,8 @@ Item {
             };
         }
 
-        property real viewMin: scaleRange.lo
-        property real viewMax: scaleRange.hi
+        readonly property real viewMin: scaleRange.lo
+        readonly property real viewMax: scaleRange.hi
 
         function xAt(i: int): real {
             return colW * (i + 0.5);
@@ -541,18 +537,6 @@ Item {
         }
 
         spacing: 0
-
-        Behavior on viewMin {
-            Anim {
-                type: Anim.SlowEffects
-            }
-        }
-
-        Behavior on viewMax {
-            Anim {
-                type: Anim.SlowEffects
-            }
-        }
 
         Item {
             id: chart
@@ -592,7 +576,7 @@ Item {
 
                 Shape {
                     anchors.fill: parent
-                    preferredRendererType: Shape.CurveRenderer
+                    preferredRendererType: Shape.GeometryRenderer
 
                     ShapePath {
                         strokeWidth: 0
@@ -620,7 +604,7 @@ Item {
 
                 Shape {
                     anchors.fill: parent
-                    preferredRendererType: Shape.CurveRenderer
+                    preferredRendererType: Shape.GeometryRenderer
 
                     ShapePath {
                         strokeWidth: 3
