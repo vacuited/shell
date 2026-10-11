@@ -31,14 +31,6 @@ Item {
                 text: Tr.tr("Media"),
                 enabled: Config.dashboard.showMedia
             },
-            // >>> caelestia-notes: managed block - do not edit; `install.sh --uninstall` removes it >>>
-            {
-                component: notesComponent,
-                iconName: "edit_note",
-                text: Tr.tr("Notes"),
-                enabled: true
-            },
-            // <<< caelestia-notes <<<
             {
                 component: performanceComponent,
                 iconName: "speed",
@@ -56,6 +48,12 @@ Item {
                 iconName: "terminal",
                 text: qsTr("Terminal"),
                 enabled: Config.dashboard.showTerminal
+            },
+            {
+                component: notesComponent,
+                iconName: "edit_note",
+                text: Tr.tr("Notes"),
+                enabled: true
             }
         ];
         return allTabs.filter(tab => tab.enabled);
