@@ -103,7 +103,7 @@ PageBase {
             icon: "hub"
             text: qsTr("AI Providers")
             subtext: qsTr("%1 configured (%2 active)").arg(AiProviders.providers.length).arg(AiProviders.activeProvider ? AiProviders.activeProvider.name : "")
-            onClicked: root.nState.openSubPage(16)
+            onClicked: root.nState.openSubPage(15)
         }
 
         NavRow {
@@ -113,7 +113,7 @@ PageBase {
             icon: "build"
             text: qsTr("AI Tools")
             subtext: root.targetConfig.ai.enableCelestialMode ? qsTr("Enabled (Search, Vision, Media...)") : qsTr("Disabled")
-            onClicked: root.nState.openSubPage(17)
+            onClicked: root.nState.openSubPage(16)
         }
     }
 }
