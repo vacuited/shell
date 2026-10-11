@@ -178,6 +178,7 @@ PageBase {
                 }
 
                 TextFieldRow {
+                    last: true
                     label: qsTr("API Key")
                     subtext: qsTr("Bearer token used for API requests")
                     value: provCol.modelData.apiKey || ""
@@ -187,16 +188,130 @@ PageBase {
                     }
                 }
 
-                TextFieldRow {
-                    last: true
-                    label: qsTr("Models")
-                    subtext: qsTr("Comma-separated list of models")
-                    value: (provCol.modelData.models || []).join(", ")
-                    placeholderText: "openrouter/auto, gpt-4o-mini"
-                    onEditingFinished: value => {
-                        var mList = value.split(",").map(s => s.trim()).filter(s => s.length > 0);
-                        AiProviders.updateProvider(provCol.modelData.id, { models: mList.length > 0 ? mList : ["default"] });
+                ConnectedRect {
+                    first: true
+                    Layout.fillWidth: true
+                    implicitHeight: addModelLayout.implicitHeight + Tokens.padding.medium * 2
+
+                    RowLayout {
+                        id: addModelLayout
+                        anchors.fill: parent
+                        anchors.leftMargin: Tokens.padding.largeIncreased
+                        anchors.rightMargin: Tokens.padding.largeIncreased
+                        spacing: Tokens.spacing.medium
+
+                        StyledTextField {
+                            id: newModelInput
+                            Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignVCenter
+                            placeholderText: qsTr("Add model name (e.g. gpt-4o, llama-3.3)...")
+                            onAccepted: {
+                                var txt = newModelInput.text.trim();
+                                if (txt.length > 0) {
+                                    var parts = txt.split(",").map(s => s.trim()).filter(s => s.length > 0);
+                                    for (var pIdx = 0; pIdx < parts.length; pIdx++) {
+                                        AiProviders.addModelToProvider(provCol.modelData.id, parts[pIdx]);
+                                    }
+                                    newModelInput.text = "";
+                                }
+                            }
+                        }
+
+                        IconButton {
+                            icon: "add"
+                            type: IconButton.Tonal
+                            Layout.alignment: Qt.AlignVCenter
+                            onClicked: {
+                                var txt = newModelInput.text.trim();
+                                if (txt.length > 0) {
+                                    var parts = txt.split(",").map(s => s.trim()).filter(s => s.length > 0);
+                                    for (var pIdx = 0; pIdx < parts.length; pIdx++) {
+                                        AiProviders.addModelToProvider(provCol.modelData.id, parts[pIdx]);
+                                    }
+                                    newModelInput.text = "";
+                                }
+                            }
+                        }
                     }
+                }
+
+                ConnectedRect {
+                    Layout.fillWidth: true
+                    implicitHeight: modelsContainer.implicitHeight + Tokens.padding.medium * 2
+
+                    ColumnLayout {
+                        id: modelsContainer
+                        anchors.fill: parent
+                        anchors.leftMargin: Tokens.padding.largeIncreased
+                        anchors.rightMargin: Tokens.padding.largeIncreased
+                        anchors.topMargin: Tokens.padding.medium
+                        anchors.bottomMargin: Tokens.padding.medium
+                        spacing: Tokens.spacing.small
+
+                        StyledText {
+                            text: qsTr("Configured Models (%1)").arg(provCol.modelData.models ? provCol.modelData.models.length : 0)
+                            color: Colours.palette.m3onSurfaceVariant
+                            font: Tokens.font.label.small
+                        }
+
+                        Flow {
+                            Layout.fillWidth: true
+                            spacing: Tokens.spacing.small
+
+                            Repeater {
+                                model: provCol.modelData.models || []
+
+                                delegate: StyledRect {
+                                    id: chipRect
+                                    required property string modelData
+                                    required property int index
+
+                                    color: Colours.layer(Colours.palette.m3surfaceContainerHigh, 2)
+                                    radius: Tokens.rounding.large
+                                    implicitWidth: chipRow.implicitWidth + Tokens.padding.medium * 2
+                                    implicitHeight: chipRow.implicitHeight + Tokens.padding.extraSmall * 2
+
+                                    RowLayout {
+                                        id: chipRow
+                                        x: Tokens.padding.medium
+                                        y: Tokens.padding.extraSmall
+                                        spacing: Tokens.spacing.extraSmall
+
+                                        MaterialIcon {
+                                            text: "smart_toy"
+                                            color: Colours.palette.m3primary
+                                            font: Tokens.font.icon.small
+                                        }
+
+                                        StyledText {
+                                            text: chipRect.modelData
+                                            color: Colours.palette.m3onSurface
+                                            font: Tokens.font.body.small
+                                        }
+
+                                        MaterialIcon {
+                                            text: "close"
+                                            color: Colours.palette.m3onSurfaceVariant
+                                            font: Tokens.font.icon.small
+
+                                            StateLayer {
+                                                radius: Tokens.rounding.full
+                                                onClicked: AiProviders.removeModelFromProvider(provCol.modelData.id, chipRect.modelData)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                RowButton {
+                    last: true
+                    icon: "sync"
+                    text: qsTr("Fetch models from endpoint")
+                    subtext: qsTr("Auto-discover available models via /models")
+                    onClicked: AiProviders.fetchAndSaveModels(provCol.modelData.id)
                 }
             }
         }

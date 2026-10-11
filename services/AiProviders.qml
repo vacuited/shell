@@ -243,6 +243,45 @@ Singleton {
         }
     }
 
+    function addModelToProvider(providerId, modelName) {
+        if (!modelName || !modelName.trim()) return;
+        var clean = modelName.trim();
+        var list = root.providers.slice();
+        for (var i = 0; i < list.length; i++) {
+            if (list[i].id === providerId) {
+                var m = (list[i].models || []).slice();
+                if (m.indexOf(clean) === -1) {
+                    m.push(clean);
+                    list[i] = Object.assign({}, list[i], { "models": m });
+                }
+                break;
+            }
+        }
+        root.providers = list;
+        save();
+    }
+
+    function removeModelFromProvider(providerId, modelName) {
+        var list = root.providers.slice();
+        for (var i = 0; i < list.length; i++) {
+            if (list[i].id === providerId) {
+                var m = (list[i].models || []).filter(name => name !== modelName);
+                if (m.length === 0) m = ["default"];
+                list[i] = Object.assign({}, list[i], { "models": m });
+                if (root.activeProviderId === providerId && root.activeModel === modelName) {
+                    root.activeModel = m[0];
+                }
+                break;
+            }
+        }
+        root.providers = list;
+        save();
+    }
+
+    function fetchAndSaveModels(providerId) {
+        fetchProviderModels(providerId, true);
+    }
+
     function removeProvider(id) {
         if (root.providers.length <= 1) return;
         var list = root.providers.filter(p => p.id !== id);
@@ -255,7 +294,7 @@ Singleton {
         loadRecentFromConfig();
     }
 
-    function fetchProviderModels(providerId) {
+    function fetchProviderModels(providerId, saveToProviderConfig = false) {
         var p = null;
         for (var i = 0; i < root.providers.length; i++) {
             if (root.providers[i].id === providerId) {
@@ -318,6 +357,18 @@ Singleton {
                 var stateCopyDone = Object.assign({}, root.modelFetchState);
                 stateCopyDone[providerId] = (xhr.status === 200 && fetched.length > 0) ? "done" : "failed";
                 root.modelFetchState = stateCopyDone;
+
+                if (saveToProviderConfig && combined.length > 0) {
+                    var provList = root.providers.slice();
+                    for (var pl = 0; pl < provList.length; pl++) {
+                        if (provList[pl].id === providerId) {
+                            provList[pl] = Object.assign({}, provList[pl], { "models": combined });
+                            break;
+                        }
+                    }
+                    root.providers = provList;
+                    root.save();
+                }
             }
         };
 
