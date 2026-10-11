@@ -12,3 +12,6 @@ my own customized build of [midnight-shell](https://github.com/dim-ghub/midnight
 
 ### caelestia notes
 - integrated [caelestia notes](https://github.com/Denzils-repo/Caelestia_Notes) directly into the shell dashboard and launcher.
+
+### hourly weather forecast
+- integrated [caelestia hourly weather](https://github.com/ItsXyzzy/Caelestia-Hourly-Weather) into the weather tab with a scrollable 7-day temperature curve, rain chance, and day summary.
