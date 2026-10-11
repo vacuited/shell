@@ -169,9 +169,11 @@ Item {
 
                         sourceComponent: modelData.component
 
+                        property bool wasActive: false
+                        onActiveChanged: if (active) wasActive = true
 
                         Component.onCompleted: active = Qt.binding(() => {
-                            if (index === view.currentIndex)
+                            if (wasActive || index === view.currentIndex)
                                 return true;
                             const vx = Math.floor(view.visibleArea.xPosition * view.contentWidth);
                             const vex = Math.floor(vx + view.visibleArea.widthRatio * view.contentWidth);

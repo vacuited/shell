@@ -19,6 +19,9 @@ Item {
     property int hourOffset: 0
     property real scrollPos: hourOffset
     property int selectedView: 0 // 0: Hourly, 1: 7-Day
+    property bool initialized: false
+
+    Component.onCompleted: Qt.callLater(() => root.initialized = true)
 
     onMaxOffsetChanged: {
         if (hourOffset > maxOffset)
@@ -248,11 +251,13 @@ Item {
                     color: Colours.palette.m3primary
 
                     Behavior on x {
+                        enabled: root.initialized
                         Anim {
                             type: Anim.EmphasizedLarge
                         }
                     }
                     Behavior on width {
+                        enabled: root.initialized
                         Anim {
                             type: Anim.EmphasizedLarge
                         }
@@ -290,6 +295,7 @@ Item {
             implicitHeight: root.selectedView === 0 ? hourlyCard.implicitHeight : dailyRow.implicitHeight
 
             Behavior on implicitHeight {
+                enabled: root.initialized
                 Anim {
                     type: Anim.EmphasizedLarge
                 }
@@ -308,6 +314,7 @@ Item {
                 visible: opacity > 0
 
                 Behavior on opacity {
+                    enabled: root.initialized
                     Anim {
                         type: Anim.EmphasizedLarge
                     }
@@ -336,6 +343,7 @@ Item {
                 visible: opacity > 0
 
                 Behavior on opacity {
+                    enabled: root.initialized
                     Anim {
                         type: Anim.EmphasizedLarge
                     }
@@ -510,8 +518,8 @@ Item {
             };
         }
 
-        property real viewMin: scaleRange.lo
-        property real viewMax: scaleRange.hi
+        readonly property real viewMin: scaleRange.lo
+        readonly property real viewMax: scaleRange.hi
 
         function xAt(i: int): real {
             return colW * (i + 0.5);
@@ -541,18 +549,6 @@ Item {
         }
 
         spacing: 0
-
-        Behavior on viewMin {
-            Anim {
-                type: Anim.SlowEffects
-            }
-        }
-
-        Behavior on viewMax {
-            Anim {
-                type: Anim.SlowEffects
-            }
-        }
 
         Item {
             id: chart
@@ -592,7 +588,7 @@ Item {
 
                 Shape {
                     anchors.fill: parent
-                    preferredRendererType: Shape.CurveRenderer
+                    preferredRendererType: Shape.GeometryRenderer
 
                     ShapePath {
                         strokeWidth: 0
@@ -620,7 +616,7 @@ Item {
 
                 Shape {
                     anchors.fill: parent
-                    preferredRendererType: Shape.CurveRenderer
+                    preferredRendererType: Shape.GeometryRenderer
 
                     ShapePath {
                         strokeWidth: 3
