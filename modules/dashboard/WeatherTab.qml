@@ -588,7 +588,7 @@ Item {
 
                 Shape {
                     anchors.fill: parent
-                    preferredRendererType: Shape.GeometryRenderer
+                    preferredRendererType: Shape.CurveRenderer
 
                     ShapePath {
                         strokeWidth: 0
@@ -616,7 +616,7 @@ Item {
 
                 Shape {
                     anchors.fill: parent
-                    preferredRendererType: Shape.GeometryRenderer
+                    preferredRendererType: Shape.CurveRenderer
 
                     ShapePath {
                         strokeWidth: 3
