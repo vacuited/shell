@@ -22,6 +22,9 @@ Item {
     ListModel { id: chatHistory }
     ListModel { id: historySessionsModel }
 
+    readonly property alias chatHistory: chatHistory
+    readonly property alias historySessionsModel: historySessionsModel
+
     property bool isHistoryTab: false
     property string currentChatId: ""
     property var currentRequest: null
@@ -77,7 +80,7 @@ Item {
     }
 
     Component.onDestruction: {
-        if (root.storeReady && root.chatHistory.count > 0) {
+        if (root.storeReady && chatHistory.count > 0) {
             root.saveHistory(true);
         } else {
             root.flushHistory();
@@ -722,9 +725,9 @@ Item {
                         }
                     } catch (e) {}
                 }
-                for (var i = 0; i < allChatSessions.length; i++) {
-                    if (allChatSessions[i].id === chatId) {
-                        allChatSessions[i].titleGenerating = false;
+                for (var i = 0; i < root.allChatSessions.length; i++) {
+                    if (root.allChatSessions[i].id === chatId) {
+                        root.allChatSessions[i].titleGenerating = false;
                         break;
                     }
                 }
@@ -1509,8 +1512,7 @@ Item {
                      Item {
                          id: chatTab
                          height: parent.height
-                         width: !isHistoryTab ? 40 : chatContent.implicitWidth + Tokens.padding.medium * 2
-                         
+                         width: !isHistoryTab ? (chatContent.implicitWidth + Tokens.padding.medium * 2) : 40
 
                          Behavior on width { NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
 
@@ -1534,7 +1536,7 @@ Item {
                                  text: "Chat"
                                  color: !isHistoryTab ? Colours.palette.m3onPrimary : Colours.palette.m3onSurfaceVariant
                                  font: Tokens.font.body.small
-                                 visible: isHistoryTab
+                                 visible: !isHistoryTab
                              }
                          }
                      }
@@ -1542,15 +1544,14 @@ Item {
                      Item {
                          id: historyTab
                          height: parent.height
-                         width: isHistoryTab ? 40 : historyContent.implicitWidth + Tokens.padding.medium * 2
-                         
+                         width: isHistoryTab ? (historyContent.implicitWidth + Tokens.padding.medium * 2) : 40
 
                          Behavior on width { NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
 
                          StateLayer {
                              radius: Tokens.rounding.full
                              onClicked: {
-                                 if (root.storeReady && root.chatHistory.count > 0)
+                                 if (root.storeReady && chatHistory.count > 0)
                                      root.saveHistory(true);
                                  root.isHistoryTab = true;
                              }
@@ -1571,7 +1572,7 @@ Item {
                                  text: "History"
                                  color: isHistoryTab ? Colours.palette.m3onPrimary : Colours.palette.m3onSurfaceVariant
                                  font: Tokens.font.body.small
-                                 visible: !isHistoryTab
+                                 visible: isHistoryTab
                              }
                          }
                      }
