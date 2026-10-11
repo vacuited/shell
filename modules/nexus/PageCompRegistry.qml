@@ -204,6 +204,12 @@ QtObject {
                 Component {
                     BarSpotify {}
                 }
+                Component {
+                    AiProvidersPanel {}
+                }
+                Component {
+                    AiToolsPanel {}
+                }
             }
         },
         Component {

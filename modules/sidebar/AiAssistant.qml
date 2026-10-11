@@ -315,20 +315,36 @@ Item {
             toolResultOrder = toolResultOrder.concat([toolName]);
     }
 
+    property string lastCapturedImageBase64: ""
+
+    function isVisionCapableModel() {
+        var m = (AiProviders.activeModel || "").toLowerCase();
+        return m.indexOf("mimo") !== -1 || m.indexOf("vision") !== -1 || m.indexOf("vl") !== -1 || m.indexOf("4o") !== -1 || m.indexOf("gemini") !== -1 || m.indexOf("claude-3") !== -1;
+    }
+
     function handleAgentProcessResult(type, stdout, stderr, cmd, exitCode = 0) {
         if (type.startsWith("exec_")) {
             var toolName = type.substring(5);
             var outText = stdout.trim();
             var errText = stderr.trim();
-            if (!outText && !errText) {
-                outText = "(Command completed with no output. If it was a background task, it has been launched successfully.)";
-            }
-            var resultText;
-            if (exitCode !== 0) {
-                resultText = "TOOL FAILED with exit code " + exitCode + ". Do not retry this call.\nCommand executed: " + cmd + "\nOutput: " + outText + "\nError: " + errText;
+            var resultText = "";
+
+            var parsed = null;
+            try {
+                parsed = JSON.parse(outText);
+            } catch (e) {}
+
+            if (parsed && parsed.result !== undefined) {
+                resultText = parsed.result;
+                if (parsed.image_base64) {
+                    lastCapturedImageBase64 = parsed.image_base64;
+                }
+            } else if (exitCode !== 0) {
+                resultText = "Tool failed with exit code " + exitCode + ": " + (outText || errText);
             } else {
-                resultText = "Command executed: " + cmd + "\nOutput: " + outText + "\nError: " + errText;
+                resultText = outText || errText || "(Tool executed successfully with no output)";
             }
+
             recordToolResult(toolName, resultText);
             runningToolsCount--;
             checkToolsFinished();
@@ -984,45 +1000,23 @@ Item {
                                 
                                 for (var t = 0; t < calls.length; t++) {
                                     var toolName = calls[t].name;
-                                    var args = calls[t].args;
-                                    
-                                    if (toolName === "web_search" || toolName === "read_webpage" || toolName === "open_app" || toolName === "get_weather" || toolName === "caelestia_command") {
-                                        runningToolsCount++;
-                                    }
-                                    
-                                    if (toolName === "web_search") {
-                                        currentActionText = "Searching the web...";
-                                        var query = args.query;
-                                        var page = args.page || 1;
-                                        runAgentCommand('PYTHONIOENCODING=utf8 python3 "' + Quickshell.shellDir + '/assets/scripts/orion_search.py" --mode search --query "' + query.replace(new RegExp("\"", "g"), '\"') + '" --page ' + page, "exec_" + toolName);
-                                    } else if (toolName === "read_webpage") {
-                                        currentActionText = "Reading webpage...";
-                                        var url = args.url;
-                                        runAgentCommand('PYTHONIOENCODING=utf8 python3 "' + Quickshell.shellDir + '/assets/scripts/orion_search.py" --mode read --url "' + url.replace(new RegExp("\"", "g"), '\"') + '"', "exec_" + toolName);
-                                    } else if (toolName === "open_app") {
-                                        currentActionText = "Opening app...";
-                                        var app = args.app_name;
-                                        runAgentCommand('grep -i -m 1 "^Exec=" $(find /usr/share/applications ~/.local/share/applications -name "*.desktop" -exec grep -il "Name=.*' + app.replace(new RegExp("\"", "g"), '\"') + '" {} \;) | cut -d "=" -f 2- | sed "s/ %[a-zA-Z]//g" | xargs -I {} sh -c "{} & disown"', "exec_" + toolName);
-                                    } else if (toolName === "set_timer") {
-                                        currentActionText = "Setting timer...";
-                                        var secs = args.seconds || 5;
-                                        var msg = args.message || "Timer finished";
-                                        var safeMsg = msg.replace(new RegExp("\"", "g"), '\"');
-                                        var timerQml = "import QtQuick; Timer { interval: " + (secs * 1000) + "; running: true; onTriggered: { root.runAgentCommand('notify-send \"Orion Timer\" \"" + safeMsg + "\"', \"timer_trigger\"); destroy(); } }";
-                                        Qt.createQmlObject(timerQml, root, "timer_" + Date.now());
-                                        recordToolResult("set_timer", "Timer successfully set for " + secs + " seconds in the background.");
-                                    } else if (toolName === "get_weather") {
-                                        currentActionText = "Checking weather...";
-                                        var loc = args.location;
-                                        runAgentCommand('curl -s "wttr.in/' + loc.replace(new RegExp("\"", "g"), '\"') + '?0T"', "exec_" + toolName);
-                                    } else if (toolName === "caelestia_command") {
-                                        currentActionText = "Running caelestia...";
-                                        var subcmd = args.subcommand || "";
-                                        var subargs = args.args || "";
-                                        var cmd = "caelestia " + subcmd;
-                                        if (subargs) cmd += " " + subargs;
-                                        runAgentCommand(cmd, "exec_" + toolName);
-                                    }
+                                    var args = calls[t].args || {};
+
+                                    runningToolsCount++;
+                                    currentActionText = "Using " + toolName.replace(/_/g, " ") + "...";
+
+                                    var scriptPath = Quickshell.shellDir + "/assets/scripts/ai_tools.py";
+                                    var safeArgs = JSON.stringify(args).replace(/'/g, "'\\''");
+                                    var toolCmd = 'python3 "' + scriptPath + '" --tool ' + toolName + " --args '" + safeArgs + "'";
+
+                                    var tavilyKey = GlobalConfig.ai.tavilyApiKey || "";
+                                    if (tavilyKey) toolCmd += " --tavily-key '" + tavilyKey + "'";
+                                    var spId = GlobalConfig.ai.spotifyClientId || "";
+                                    if (spId) toolCmd += " --spotify-id '" + spId + "'";
+                                    var spSec = GlobalConfig.ai.spotifyClientSecret || "";
+                                    if (spSec) toolCmd += " --spotify-secret '" + spSec + "'";
+
+                                    runAgentCommand(toolCmd, "exec_" + toolName);
                                 }
                                 
                                 if (runningToolsCount === 0) {
@@ -1129,6 +1123,17 @@ Item {
                     });
                 }
 
+                if (lastCapturedImageBase64 && isVisionCapableModel()) {
+                    messages.push({
+                        "role": "user",
+                        "content": [
+                            { "type": "text", "text": "Screenshot captured from active display:" },
+                            { "type": "image_url", "image_url": { "url": "data:image/jpeg;base64," + lastCapturedImageBase64 } }
+                        ]
+                    });
+                    lastCapturedImageBase64 = "";
+                }
+
             } else {
                 var toolMsg = {
                     "role": "user",
@@ -1147,23 +1152,24 @@ Item {
         };
         
         if (enableTools) {
-            requestBody["tools"] = [
-                {
+            var toolsList = [];
+
+            if (GlobalConfig.ai.enableWebSearch !== false) {
+                toolsList.push({
                     "type": "function",
                     "function": {
                         "name": "web_search",
-                        "description": "Searches the web using a headless Firefox browser. Returns the top 5 results with snippets and URLs. Requires the Playwright Firefox browser; if the call fails, tell the user to run: playwright install firefox.",
+                        "description": "Searches the web via Tavily Search API. Returns the top 5 results with titles, URLs, and snippets.",
                         "parameters": {
                             "type": "object",
                             "properties": {
-                                "query": { "type": "string", "description": "The search query" },
-                                "page": { "type": "number", "description": "The page number to fetch (1-indexed, default is 1)" }
+                                "query": { "type": "string", "description": "The search query" }
                             },
                             "required": ["query"]
                         }
                     }
-                },
-                {
+                });
+                toolsList.push({
                     "type": "function",
                     "function": {
                         "name": "read_webpage",
@@ -1176,51 +1182,67 @@ Item {
                             "required": ["url"]
                         }
                     }
-                },
-                {
+                });
+            }
+
+            if (GlobalConfig.ai.enableVision !== false) {
+                toolsList.push({
                     "type": "function",
                     "function": {
-                        "name": "open_app",
-                        "description": "Searches for and launches an application installed on the user's system via its .desktop file.",
+                        "name": "take_screenshot",
+                        "description": "Takes a screenshot of the user's active/focused screen and provides it for visual analysis.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {}
+                        }
+                    }
+                });
+            }
+
+            if (GlobalConfig.ai.enableClipboard !== false) {
+                toolsList.push({
+                    "type": "function",
+                    "function": {
+                        "name": "get_clipboard",
+                        "description": "Reads the current text from the user's system clipboard.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {}
+                        }
+                    }
+                });
+                toolsList.push({
+                    "type": "function",
+                    "function": {
+                        "name": "set_clipboard",
+                        "description": "Copies text to the user's system clipboard.",
                         "parameters": {
                             "type": "object",
                             "properties": {
-                                "app_name": { "type": "string", "description": "The name of the app to launch (e.g. firefox, kitty)" }
+                                "text": { "type": "string", "description": "Text to copy to the clipboard" }
                             },
-                            "required": ["app_name"]
+                            "required": ["text"]
                         }
                     }
-                },
-                {
+                });
+            }
+
+            if (GlobalConfig.ai.enableSystemControl !== false) {
+                toolsList.push({
                     "type": "function",
                     "function": {
-                        "name": "set_timer",
-                        "description": "Sets a timer that will trigger a desktop notification when finished.",
+                        "name": "media_control",
+                        "description": "Controls desktop media playback via playerctl. Valid actions: play, pause, play-pause, next, prev, status.",
                         "parameters": {
                             "type": "object",
                             "properties": {
-                                "seconds": { "type": "number", "description": "Duration in seconds" },
-                                "message": { "type": "string", "description": "Notification message" }
+                                "action": { "type": "string", "description": "Action to perform: play, pause, play-pause, next, prev, or status" }
                             },
-                            "required": ["seconds", "message"]
+                            "required": ["action"]
                         }
                     }
-                },
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "get_weather",
-                        "description": "Gets the current weather for a specific location.",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "location": { "type": "string", "description": "City name" }
-                            },
-                            "required": ["location"]
-                        }
-                    }
-                },
-                {
+                });
+                toolsList.push({
                     "type": "function",
                     "function": {
                         "name": "caelestia_command",
@@ -1234,8 +1256,66 @@ Item {
                             "required": ["subcommand"]
                         }
                     }
-                }
-            ];
+                });
+                toolsList.push({
+                    "type": "function",
+                    "function": {
+                        "name": "get_weather",
+                        "description": "Gets current weather for a specific city or location.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "location": { "type": "string", "description": "City or location name" }
+                            },
+                            "required": ["location"]
+                        }
+                    }
+                });
+                toolsList.push({
+                    "type": "function",
+                    "function": {
+                        "name": "get_system_info",
+                        "description": "Returns current CPU utilization, RAM memory usage, and root disk capacity.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {}
+                        }
+                    }
+                });
+            }
+
+            if (GlobalConfig.ai.enableMemory !== false) {
+                toolsList.push({
+                    "type": "function",
+                    "function": {
+                        "name": "save_memory",
+                        "description": "Saves an explicit fact, preference, or note into long-term persistent memory.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "content": { "type": "string", "description": "The fact or note to remember" },
+                                "category": { "type": "string", "description": "Category for the memory (e.g. preference, work, personal)" }
+                            },
+                            "required": ["content"]
+                        }
+                    }
+                });
+                toolsList.push({
+                    "type": "function",
+                    "function": {
+                        "name": "list_memories",
+                        "description": "Retrieves saved facts and notes from long-term memory.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {}
+                        }
+                    }
+                });
+            }
+
+            if (toolsList.length > 0) {
+                requestBody["tools"] = toolsList;
+            }
         }
         
         var p = AiProviders.activeProvider;
