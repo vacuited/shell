@@ -86,59 +86,15 @@ Item {
 
     Component.onDestruction: flushHistory();
 
-    // Provider management (ollama / openrouter / openclaw)
-    readonly property string activeProvider: {
-        var p = GlobalConfig.ai.activeProvider || "ollama";
-        var ollamaOk = GlobalConfig.ai.enableOllama !== false;
-        var openRouterOk = GlobalConfig.ai.enableOpenRouter === true;
-        var openClawOk = GlobalConfig.ai.enableOpenClaw === true;
-
-        if ((p === "openrouter" && !openRouterOk) || (p === "openclaw" && !openClawOk) || (p === "ollama" && !ollamaOk)) {
-            if (ollamaOk) return "ollama";
-            if (openRouterOk) return "openrouter";
-            if (openClawOk) return "openclaw";
-            return "ollama";
-        }
-        return p;
-    }
-
-    readonly property string currentModel: {
-        if (activeProvider === "openrouter") return GlobalConfig.ai.openRouterModel || "openrouter/auto";
-        if (activeProvider === "openclaw") return GlobalConfig.ai.openClawModel || "openclaw/default";
-        return GlobalConfig.ai.defaultOllamaModel || "llama3";
-    }
-
-    readonly property string providerLabel: {
-        if (activeProvider === "openrouter") return "OpenRouter";
-        if (activeProvider === "openclaw") return "OpenClaw";
-        return "Ollama";
-    }
-
-    readonly property var providerList: {
-        var list = [];
-        if (GlobalConfig.ai.enableOllama !== false)
-            list.push({ "id": "ollama", "label": qsTr("Local (Ollama)"), "icon": "memory" });
-        if (GlobalConfig.ai.enableOpenRouter === true)
-            list.push({ "id": "openrouter", "label": qsTr("OpenRouter"), "icon": "public" });
-        if (GlobalConfig.ai.enableOpenClaw === true)
-            list.push({ "id": "openclaw", "label": qsTr("OpenClaw"), "icon": "hub" });
-        if (list.length === 0)
-            list.push({ "id": "ollama", "label": qsTr("Local (Ollama)"), "icon": "memory" });
-        return list;
-    }
-
-    readonly property var fallbackModelsFor: ({
-        "openrouter": ["openrouter/auto", "openai/gpt-4o-mini", "anthropic/claude-3.5-haiku", "google/gemini-2.0-flash-001"],
-        "openclaw": ["openclaw/default"],
-        "ollama": ["llama3", "mistral", "phi3", "gemma"]
-    })
-
-    property var modelsByProvider: ({})
-    property var modelFetchState: ({})
+    // Provider management backed by AiProviders service
+    readonly property string activeProvider: AiProviders.activeProviderId
+    readonly property string currentModel: AiProviders.activeModel || "openrouter/auto"
+    readonly property string providerLabel: AiProviders.activeProvider ? AiProviders.activeProvider.name : "AI"
+    readonly property var providerList: AiProviders.providers
 
     readonly property bool modelsLoading: {
-        for (var key in modelFetchState) {
-            if (modelFetchState[key] === "loading") return true;
+        for (var key in AiProviders.modelFetchState) {
+            if (AiProviders.modelFetchState[key] === "loading") return true;
         }
         return false;
     }
@@ -155,53 +111,46 @@ Item {
         onTriggered: root.modelQuery = modelSearch.text
     }
 
-    readonly property string activeProviderIcon: {
-        for (var i = 0; i < providerList.length; i++) {
-            if (providerList[i].id === activeProvider)
-                return providerList[i].icon;
-        }
-        return "memory";
-    }
+    readonly property string activeProviderIcon: "auto_awesome"
 
-    // Selector sections render as collapsible dropdowns. Fixed order keeps the
-    // local models at the top and OpenRouter's long list at the bottom.
+    // Selector sections render as collapsible dropdowns for each configured provider
     readonly property var orderedSections: {
         var secs = [];
-        var recents = recentEntries;
-        if (recents.length > 0)
-            secs.push({ "id": "recent", "label": qsTr("Recent"), "icon": "history", "models": recents });
+        var recents = AiProviders.recentModels;
+        if (recents && recents.length > 0) {
+            var recentEntriesList = [];
+            for (var r = 0; r < recents.length; r++) {
+                recentEntriesList.push({
+                    "name": recents[r].model,
+                    "lower": (recents[r].model || "").toLowerCase(),
+                    "providerId": recents[r].providerId,
+                    "providerName": recents[r].providerName
+                });
+            }
+            secs.push({ "id": "recent", "label": qsTr("Recent"), "icon": "history", "models": recentEntriesList });
+        }
 
-        var order = ["ollama", "openclaw", "openrouter"];
-        var byId = {};
-        for (var p = 0; p < providerList.length; p++)
-            byId[providerList[p].id] = providerList[p];
-        for (var i = 0; i < order.length; i++) {
-            var pid = order[i];
-            if (!byId[pid]) continue;
-            var models = modelsByProvider[pid] || fallbackModelsFor[pid] || [];
+        var providers = AiProviders.providers;
+        for (var i = 0; i < providers.length; i++) {
+            var prov = providers[i];
+            var models = (AiProviders.modelsByProvider && AiProviders.modelsByProvider[prov.id]) || prov.models || [];
             var entries = [];
-            for (var m = 0; m < models.length; m++)
-                entries.push({ "name": models[m], "lower": models[m].toLowerCase(), "providerId": pid });
-            secs.push({ "id": pid, "label": byId[pid].label, "icon": byId[pid].icon, "models": entries });
+            for (var m = 0; m < models.length; m++) {
+                entries.push({
+                    "name": models[m],
+                    "lower": (models[m] || "").toLowerCase(),
+                    "providerId": prov.id,
+                    "providerName": prov.name
+                });
+            }
+            secs.push({
+                "id": prov.id,
+                "label": prov.name,
+                "icon": "auto_awesome",
+                "models": entries
+            });
         }
         return secs;
-    }
-
-    readonly property var recentEntries: {
-        var raw = GlobalConfig.ai.recentModels || [];
-        var out = [];
-        for (var i = 0; i < raw.length && out.length < 5; i++) {
-            var sep = raw[i].indexOf("|");
-            if (sep === -1) continue;
-            var pid = raw[i].substring(0, sep);
-            var name = raw[i].substring(sep + 1);
-            var enabled = pid === "ollama" ? GlobalConfig.ai.enableOllama !== false
-                : pid === "openrouter" ? GlobalConfig.ai.enableOpenRouter === true
-                : pid === "openclaw" ? GlobalConfig.ai.enableOpenClaw === true : false;
-            if (!enabled || !name) continue;
-            out.push({ "name": name, "lower": name.toLowerCase(), "providerId": pid });
-        }
-        return out;
     }
 
     property var expandedSections: ({})
@@ -228,11 +177,14 @@ Item {
 
     function isSectionExpanded(sec) {
         if (modelQuery.length > 0) return sec.models.length > 0;
-        return expandedSections[sec.id] === true;
+        if (expandedSections[sec.id] !== undefined)
+            return expandedSections[sec.id];
+        return sec.id === AiProviders.activeProviderId || sec.id === "recent";
     }
 
     function toggleSection(secId) {
-        expandedSections = Object.assign({}, expandedSections, { [secId]: expandedSections[secId] !== true });
+        var current = isSectionExpanded({ id: secId, models: [] });
+        expandedSections = Object.assign({}, expandedSections, { [secId]: !current });
     }
 
     readonly property int searchResultCount: {
@@ -252,23 +204,12 @@ Item {
     }
 
     function providerIconForId(providerId) {
-        for (var i = 0; i < providerList.length; i++) {
-            if (providerList[i].id === providerId)
-                return providerList[i].icon;
-        }
-        return "memory";
+        if (providerId === "recent") return "history";
+        return "auto_awesome";
     }
 
     function pushRecentModel(providerId, model) {
-        var entry = providerId + "|" + model;
-        var raw = GlobalConfig.ai.recentModels || [];
-        var list = [];
-        for (var i = 0; i < raw.length; i++) {
-            if (raw[i] !== entry) list.push(raw[i]);
-        }
-        list.unshift(entry);
-        if (list.length > 5) list = list.slice(0, 5);
-        GlobalConfig.ai.recentModels = list;
+        AiProviders.pushRecentModel(providerId, model);
     }
 
     onSelectorOpenChanged: {
@@ -413,101 +354,18 @@ Item {
     property string currentActionText: "Thinking..."
 
     function fetchModels() {
-        var list = providerList;
-        for (var i = 0; i < list.length; i++)
-            fetchProviderModels(list[i].id);
+        AiProviders.fetchAllModels();
     }
 
     function fetchProviderModels(providerId) {
-        if (modelFetchState[providerId] === "loading" || modelFetchState[providerId] === "done") return;
-
-        var requestUrl;
-        if (providerId === "openrouter") {
-            requestUrl = (GlobalConfig.ai.openRouterUrl || "https://openrouter.ai/api/v1") + "/models";
-        } else if (providerId === "openclaw") {
-            requestUrl = (GlobalConfig.ai.openClawUrl || "http://127.0.0.1:18789") + "/v1/models";
-        } else {
-            requestUrl = (GlobalConfig.ai.ollamaUrl || "http://localhost:11434") + "/api/tags";
-        }
-
-        var xhr = new XMLHttpRequest();
-        xhr.open("GET", requestUrl, true);
-        if (providerId === "openrouter") {
-            var key = GlobalConfig.ai.openRouterApiKey || "";
-            if (key) {
-                xhr.setRequestHeader("Authorization", "Bearer " + key);
-                xhr.setRequestHeader("HTTP-Referer", "https://github.com/dim-ghub/midnight-shell");
-                xhr.setRequestHeader("X-Title", "midnight-shell");
-            }
-        } else if (providerId === "openclaw") {
-            var token = GlobalConfig.ai.openClawToken || "";
-            if (token) {
-                xhr.setRequestHeader("Authorization", "Bearer " + token);
-            }
-        }
-
-        xhr.onreadystatechange = () => {
-            if (xhr.readyState === XMLHttpRequest.DONE) {
-                var list = [];
-                if (xhr.status === 200) {
-                    try {
-                        var response = JSON.parse(xhr.responseText);
-                        if (providerId === "ollama") {
-                            if (response.models) {
-                                for (var i = 0; i < response.models.length; i++)
-                                    list.push(response.models[i].name);
-                            }
-                        } else if (response.data) {
-                            for (var j = 0; j < response.data.length; j++) {
-                                if (response.data[j].id) list.push(response.data[j].id);
-                            }
-                            list.sort();
-                        }
-                    } catch (e) {
-                        console.log("Error parsing " + providerId + " models: " + e.message);
-                    }
-                } else {
-                    console.log(providerId + " models request failed (status " + xhr.status + ")");
-                }
-
-                var succeeded = xhr.status === 200 && list.length > 0;
-                if (list.length === 0)
-                    list = fallbackModelsFor[providerId] || [];
-
-                modelFetchState = Object.assign({}, modelFetchState, { [providerId]: succeeded ? "done" : "failed" });
-                modelsByProvider = Object.assign({}, modelsByProvider, { [providerId]: list });
-
-                var savedModel;
-                if (providerId === "openrouter") savedModel = GlobalConfig.ai.openRouterModel;
-                else if (providerId === "openclaw") savedModel = GlobalConfig.ai.openClawModel;
-                else savedModel = GlobalConfig.ai.defaultOllamaModel;
-
-                if (savedModel && list.indexOf(savedModel) === -1 && list.length > 0) {
-                    if (providerId === "openrouter")
-                        GlobalConfig.ai.openRouterModel = list.indexOf("openrouter/auto") !== -1 ? "openrouter/auto" : list[0];
-                    else if (providerId === "openclaw")
-                        GlobalConfig.ai.openClawModel = list.indexOf("openclaw/default") !== -1 ? "openclaw/default" : list[0];
-                    else
-                        GlobalConfig.ai.defaultOllamaModel = list[0];
-                }
-            }
-        };
-        xhr.send();
+        AiProviders.fetchProviderModels(providerId);
     }
 
     property var allChatSessions: []
 
     function setActiveModel(providerId, model) {
         if (!model) return;
-        if (providerId === "openrouter") {
-            GlobalConfig.ai.openRouterModel = model;
-        } else if (providerId === "openclaw") {
-            GlobalConfig.ai.openClawModel = model;
-        } else {
-            GlobalConfig.ai.defaultOllamaModel = model;
-        }
-        GlobalConfig.ai.activeProvider = providerId;
-        pushRecentModel(providerId, model);
+        AiProviders.selectModel(providerId, model);
     }
 
     function createNewChat() {
@@ -595,28 +453,17 @@ Item {
                 "title": s.title || "New Chat",
                 "preview": preview,
                 "updated": relativeTime(s.updatedAt || s.createdAt || 0),
-                "providerIcon": providerIconForId(s.provider || "ollama")
+                "providerIcon": providerIconForId(s.provider || "")
             });
         }
     }
 
     function restoreSessionProvider(sess) {
         if (!sess) return;
-        var p = sess.provider || "ollama";
-        var enabled = p === "openrouter" ? GlobalConfig.ai.enableOpenRouter === true
-            : p === "openclaw" ? GlobalConfig.ai.enableOpenClaw === true
-            : GlobalConfig.ai.enableOllama !== false;
-        if (!enabled) return;
-        if (p !== activeProvider)
-            GlobalConfig.ai.activeProvider = p;
-        if (sess.model) {
-            if (p === "openrouter")
-                GlobalConfig.ai.openRouterModel = sess.model;
-            else if (p === "openclaw")
-                GlobalConfig.ai.openClawModel = sess.model;
-            else
-                GlobalConfig.ai.defaultOllamaModel = sess.model;
-        }
+        if (sess.provider)
+            AiProviders.activeProviderId = sess.provider;
+        if (sess.model)
+            AiProviders.activeModel = sess.model;
     }
 
     function applyStoreData(data) {
@@ -631,7 +478,7 @@ Item {
                 "messages": Array.isArray(s.messages) ? s.messages : [],
                 "createdAt": created,
                 "updatedAt": typeof s.updatedAt === "number" ? s.updatedAt : created,
-                "provider": s.provider || "ollama",
+                "provider": s.provider || AiProviders.activeProviderId,
                 "model": s.model || ""
             };
         });
@@ -789,64 +636,22 @@ Item {
 
     function generateChatTitleAsync(chatId, firstMessage) {
         if (!firstMessage) return;
-
-        if (activeProvider === "openrouter" || activeProvider === "openclaw") {
-            generateTitleOpenAiCompatible(chatId, firstMessage, activeProvider);
-            return;
-        }
-
-        var xhr = new XMLHttpRequest();
-        var url = (GlobalConfig.ai.ollamaUrl || "http://localhost:11434") + "/api/generate";
-        xhr.open("POST", url, true);
-        xhr.setRequestHeader("Content-Type", "application/json");
-        xhr.onreadystatechange = () => {
-            if (xhr.readyState === XMLHttpRequest.DONE && xhr.status === 200) {
-                try {
-                    var parsed = JSON.parse(xhr.responseText);
-                    if (parsed.response) {
-                        var title = parsed.response.trim().replace(/^"|"$/g, '').replace(/\n/g, ' ');
-                        if (title.length > 40) title = title.substring(0, 40) + "...";
-                        if (title.length > 0) {
-                            updateChatTitle(chatId, title);
-                        }
-                        return;
-                    }
-                } catch (e) {}
-            }
-        };
-        
-        var safeMsg = firstMessage.substring(0, 200);
-        xhr.send(JSON.stringify({
-            model: GlobalConfig.ai.defaultOllamaModel || "llama3",
-            system: "You are a title generator. Output ONLY a 2-4 word title representing the user's message. NO quotes, NO explanation.",
-            prompt: "Message: " + safeMsg + "\nTitle:",
-            stream: false
-        }));
+        generateTitleOpenAiCompatible(chatId, firstMessage);
     }
 
-    function generateTitleOpenAiCompatible(chatId, firstMessage, provider) {
+    function generateTitleOpenAiCompatible(chatId, firstMessage) {
+        var p = AiProviders.activeProvider;
+        if (!p || !p.baseUrl) return;
+
         var xhr = new XMLHttpRequest();
-        var url;
-        if (provider === "openrouter") {
-            url = (GlobalConfig.ai.openRouterUrl || "https://openrouter.ai/api/v1") + "/chat/completions";
-        } else {
-            url = (GlobalConfig.ai.openClawUrl || "http://127.0.0.1:18789") + "/v1/chat/completions";
-        }
+        var url = p.baseUrl.replace(/\/+$/, "") + "/chat/completions";
         xhr.open("POST", url, true);
         xhr.setRequestHeader("Content-Type", "application/json");
 
-        if (provider === "openrouter") {
-            var orKey = GlobalConfig.ai.openRouterApiKey || "";
-            if (orKey) {
-                xhr.setRequestHeader("Authorization", "Bearer " + orKey);
-                xhr.setRequestHeader("HTTP-Referer", "https://github.com/dim-ghub/midnight-shell");
-                xhr.setRequestHeader("X-Title", "midnight-shell");
-            }
-        } else {
-            var ocToken = GlobalConfig.ai.openClawToken || "";
-            if (ocToken) {
-                xhr.setRequestHeader("Authorization", "Bearer " + ocToken);
-            }
+        if (p.apiKey) {
+            xhr.setRequestHeader("Authorization", "Bearer " + p.apiKey);
+            xhr.setRequestHeader("HTTP-Referer", "https://github.com/dim-ghub/midnight-shell");
+            xhr.setRequestHeader("X-Title", "midnight-shell");
         }
 
         xhr.onreadystatechange = () => {
@@ -868,7 +673,7 @@ Item {
 
         var safeMsg = firstMessage.substring(0, 200);
         var body = {
-            model: provider === "openrouter" ? (GlobalConfig.ai.openRouterModel || "openrouter/auto") : (GlobalConfig.ai.openClawModel || "openclaw/default"),
+            model: AiProviders.activeModel || "openrouter/auto",
             messages: [
                 {
                     role: "system",
@@ -881,9 +686,6 @@ Item {
             ],
             stream: false
         };
-        if (provider === "openclaw") {
-            body["user"] = "title_" + chatId;
-        }
         xhr.send(JSON.stringify(body));
     }
 
@@ -1305,7 +1107,7 @@ Item {
         }
 
         if (isSystemToolResult) {
-            if (provider !== "ollama" && pendingToolCalls && pendingToolCalls.length > 0) {
+            if (pendingToolCalls && pendingToolCalls.length > 0) {
                 var tcArr = [];
                 for (var p = 0; p < pendingToolCalls.length; p++) {
                     tcArr.push({
@@ -1348,11 +1150,6 @@ Item {
             "messages": messages,
             "stream": true
         };
-
-        if (provider === "openclaw") {
-            // Ties the OpenClaw agent session to this conversation
-            requestBody["user"] = currentChatId || "midnight-shell-session";
-        }
         
         if (enableTools) {
             requestBody["tools"] = [
@@ -1446,29 +1243,15 @@ Item {
             ];
         }
         
-        var requestUrl;
-        if (provider === "openrouter") {
-            requestUrl = (GlobalConfig.ai.openRouterUrl || "https://openrouter.ai/api/v1") + "/chat/completions";
-        } else if (provider === "openclaw") {
-            requestUrl = (GlobalConfig.ai.openClawUrl || "http://127.0.0.1:18789") + "/v1/chat/completions";
-        } else {
-            requestUrl = (GlobalConfig.ai.ollamaUrl || "http://localhost:11434") + "/api/chat";
-        }
+        var p = AiProviders.activeProvider;
+        var requestUrl = (p && p.baseUrl ? p.baseUrl.replace(/\/+$/, "") : "https://openrouter.ai/api/v1") + "/chat/completions";
         xhr.open("POST", requestUrl, true);
         xhr.setRequestHeader("Content-Type", "application/json");
         
-        if (provider === "openrouter") {
-            var orKey = GlobalConfig.ai.openRouterApiKey || "";
-            if (orKey) {
-                xhr.setRequestHeader("Authorization", "Bearer " + orKey);
-                xhr.setRequestHeader("HTTP-Referer", "https://github.com/dim-ghub/midnight-shell");
-                xhr.setRequestHeader("X-Title", "midnight-shell");
-            }
-        } else if (provider === "openclaw") {
-            var ocToken = GlobalConfig.ai.openClawToken || "";
-            if (ocToken) {
-                xhr.setRequestHeader("Authorization", "Bearer " + ocToken);
-            }
+        if (p && p.apiKey) {
+            xhr.setRequestHeader("Authorization", "Bearer " + p.apiKey);
+            xhr.setRequestHeader("HTTP-Referer", "https://github.com/dim-ghub/midnight-shell");
+            xhr.setRequestHeader("X-Title", "midnight-shell");
         }
         
         isStreaming = true;

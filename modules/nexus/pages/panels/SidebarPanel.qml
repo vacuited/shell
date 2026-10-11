@@ -8,6 +8,7 @@ import Caelestia.I18n
 import qs.components
 import qs.components.controls
 import qs.modules.nexus.common
+import qs.services
 
 PageBase {
     id: root
@@ -91,6 +92,7 @@ PageBase {
             checked: root.targetConfig.ai.enableOllama
             onToggled: {
                 root.targetConfig.ai.enableOllama = checked;
+                root.targetConfig.ai.enableOpenRouter = checked;
                 root.targetConfig.save();
             }
         }
@@ -98,6 +100,7 @@ PageBase {
         ToggleRow {
             Layout.topMargin: Tokens.spacing.extraSmall / 2 - parent.spacing
             Layout.fillWidth: true
+            last: true
             text: qsTr("Enable Tool Usage")
             subtext: qsTr("Allow the assistant to search the web, take screenshots, etc.")
             configNode: root.targetConfig.ai
@@ -109,86 +112,102 @@ PageBase {
             }
         }
 
-        ToggleRow {
-            Layout.fillWidth: true
-            text: qsTr("Enable OpenRouter")
-            subtext: qsTr("Use cloud models through the OpenRouter API")
-            configNode: root.targetConfig.ai
-            propertyName: "enableOpenRouter"
-            checked: root.targetConfig.ai.enableOpenRouter
-            onToggled: {
-                root.targetConfig.ai.enableOpenRouter = checked;
-                root.targetConfig.save();
+        SectionHeader {
+            text: qsTr("Providers")
+        }
+
+        Repeater {
+            model: AiProviders.providers
+
+            delegate: ColumnLayout {
+                id: provCol
+
+                required property var modelData
+                required property int index
+
+                Layout.fillWidth: true
+                spacing: Tokens.spacing.extraSmall / 2
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.leftMargin: Tokens.padding.small
+                    Layout.rightMargin: Tokens.padding.small
+                    Layout.topMargin: Tokens.spacing.small
+
+                    MaterialIcon {
+                        text: "auto_awesome"
+                        color: Colours.palette.m3primary
+                        font: Tokens.font.icon.small
+                    }
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: provCol.modelData.name || qsTr("Provider")
+                        color: Colours.palette.m3onSurface
+                        font: Tokens.font.label.large
+                        elide: Text.ElideRight
+                    }
+
+                    IconButton {
+                        visible: AiProviders.providers.length > 1
+                        icon: "delete"
+                        type: IconButton.Text
+                        onClicked: AiProviders.removeProvider(provCol.modelData.id)
+                    }
+                }
+
+                TextFieldRow {
+                    first: true
+                    label: qsTr("Provider Name")
+                    subtext: qsTr("Display name shown in model selector")
+                    value: provCol.modelData.name
+                    placeholderText: "OpenRouter"
+                    onEditingFinished: value => {
+                        if (value) AiProviders.updateProvider(provCol.modelData.id, { name: value });
+                    }
+                }
+
+                TextFieldRow {
+                    label: qsTr("API Endpoint")
+                    subtext: qsTr("Base URL for OpenAI-compatible completions")
+                    value: provCol.modelData.baseUrl
+                    placeholderText: "https://openrouter.ai/api/v1"
+                    onEditingFinished: value => {
+                        if (value) AiProviders.updateProvider(provCol.modelData.id, { baseUrl: value });
+                    }
+                }
+
+                TextFieldRow {
+                    label: qsTr("API Key")
+                    subtext: qsTr("Bearer token used for API requests")
+                    value: provCol.modelData.apiKey || ""
+                    placeholderText: "sk-..."
+                    onEditingFinished: value => {
+                        AiProviders.updateProvider(provCol.modelData.id, { apiKey: value });
+                    }
+                }
+
+                TextFieldRow {
+                    last: true
+                    label: qsTr("Models")
+                    subtext: qsTr("Comma-separated list of models")
+                    value: (provCol.modelData.models || []).join(", ")
+                    placeholderText: "openrouter/auto, gpt-4o-mini"
+                    onEditingFinished: value => {
+                        var mList = value.split(",").map(s => s.trim()).filter(s => s.length > 0);
+                        AiProviders.updateProvider(provCol.modelData.id, { models: mList.length > 0 ? mList : ["default"] });
+                    }
+                }
             }
         }
 
-        TextFieldRow {
-            label: qsTr("OpenRouter API key")
-            subtext: qsTr("Bearer key used for OpenRouter requests")
-            value: root.targetConfig.ai.openRouterApiKey
-            placeholderText: "sk-or-..."
-            onEditingFinished: value => {
-                root.targetConfig.ai.openRouterApiKey = value;
-                root.targetConfig.save();
-            }
-        }
-
-        TextFieldRow {
-            label: qsTr("OpenRouter model")
-            subtext: qsTr("Model id used when the OpenRouter provider is active")
-            value: root.targetConfig.ai.openRouterModel
-            placeholderText: "openrouter/auto"
-            onEditingFinished: value => {
-                root.targetConfig.ai.openRouterModel = value || "openrouter/auto";
-                root.targetConfig.save();
-            }
-        }
-
-        ToggleRow {
-            Layout.fillWidth: true
-            text: qsTr("Enable OpenClaw")
-            subtext: qsTr("Use a local OpenClaw gateway as the assistant backend")
-            configNode: root.targetConfig.ai
-            propertyName: "enableOpenClaw"
-            checked: root.targetConfig.ai.enableOpenClaw
-            onToggled: {
-                root.targetConfig.ai.enableOpenClaw = checked;
-                root.targetConfig.save();
-            }
-        }
-
-        TextFieldRow {
-            label: qsTr("OpenClaw gateway URL")
-            subtext: qsTr("Base URL of the OpenClaw gateway")
-            value: root.targetConfig.ai.openClawUrl
-            placeholderText: "http://127.0.0.1:18789"
-            onEditingFinished: value => {
-                root.targetConfig.ai.openClawUrl = value || "http://127.0.0.1:18789";
-                root.targetConfig.save();
-            }
-        }
-
-        TextFieldRow {
-            label: qsTr("OpenClaw token")
-            subtext: qsTr("Gateway bearer token used for authentication")
-            value: root.targetConfig.ai.openClawToken
-            placeholderText: qsTr("Gateway token")
-            onEditingFinished: value => {
-                root.targetConfig.ai.openClawToken = value;
-                root.targetConfig.save();
-            }
-        }
-
-        TextFieldRow {
+        RowButton {
+            first: true
             last: true
-            label: qsTr("OpenClaw model")
-            subtext: qsTr("Model id used when the OpenClaw provider is active")
-            value: root.targetConfig.ai.openClawModel
-            placeholderText: "openclaw/default"
-            onEditingFinished: value => {
-                root.targetConfig.ai.openClawModel = value || "openclaw/default";
-                root.targetConfig.save();
-            }
+            icon: "add"
+            text: qsTr("Add Provider")
+            subtext: qsTr("Configure another OpenAI-compatible API endpoint")
+            onClicked: AiProviders.addProvider(qsTr("New Provider"), "https://api.openai.com/v1", "", ["gpt-4o-mini"])
         }
     }
 }

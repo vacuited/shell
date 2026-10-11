@@ -20,13 +20,11 @@ Item {
 
     property string activeTab: "notifications"
 
-    readonly property bool aiAvailable: GlobalConfig.ai.enableOllama || GlobalConfig.ai.enableOpenRouter === true || GlobalConfig.ai.enableOpenClaw === true
+    readonly property bool aiAvailable: GlobalConfig.ai.enableOllama !== false
 
     Connections {
         target: GlobalConfig.ai
         function onEnableOllamaChanged() { checkTabs(); }
-        function onEnableOpenRouterChanged() { checkTabs(); }
-        function onEnableOpenClawChanged() { checkTabs(); }
     }
 
     Connections {
