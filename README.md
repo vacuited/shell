@@ -1,9 +1,9 @@
-my own customized build of [midnight-shell](https://github.com/dim-ghub/midnight-shell)
+my own customized build of [caelestia-shell](https://github.com/caelestia-dots/shell)
 
 ## changes
 
 ### wallpaper engine integration
-- **pause behind windows & on battery**: automatically suspends `linux-wallpaperengine` (`SIGSTOP`) when covered by windows or on battery power to reduce CPU/GPU usage to 0%, resuming instantly (`SIGCONT`) when visible.
+- **pause behind windows & on battery**: automatically suspends `linux-wallpaperengine` (`SIGSTOP`) when covered by windows or on battery power to reduce cpu/gpu usage to 0%, resuming instantly (`SIGCONT`) when visible.
 - **zero-flash transitions**: preserves the previous wallpaper frame during engine startup to eliminate black frames and stretched low-res thumbnail flashes.
 - **smooth we-to-we switching**: refined blurred placeholder transitions without high-contrast or dark snapping between live wallpapers.
 - **active carousel gif playback**: animated gif thumbnails play only on the active/centered carousel item to conserve resources.
@@ -24,7 +24,12 @@ my own customized build of [midnight-shell](https://github.com/dim-ghub/midnight
 - **nexus subpage configuration**: integrated full provider and tool configuration panels into nexus (`nexus > panels > sidebar > ai providers` / `ai tools`).
 - **multi-provider support**: added custom openai-compatible endpoint and openrouter configuration, dynamic model selection, and per-provider settings persisted to `~/.config/caelestia/ai_providers.json`.
 - **system-integrated tool suite**: native multi-turn tool calling supporting vision screenshots (`grim` + `hyprctl`), clipboard read/write (`wl-paste` / `wl-copy`), media playback controls (`playerctl`), system metrics, and tavily web search with custom api credentials in `~/.config/caelestia/ai_tools.json`.
+- **spotify integration**: added `spotify_search`, `spotify_play`, and `spotify_status` tools.
 - **reminders & notifications**: scheduled reminders and immediate desktop notifications backed by `~/.config/caelestia/ai_reminders.json`.
 - **long-term memory**: persistent user preferences and factual memory store in `~/.config/caelestia/ai_memory.json`.
 - **chat history persistence & navigation**: reliable session storage in `~/.config/caelestia/ai_chats.json` with instant lifecycle flushes, resolved upstream file loading blocks.
+
+### hardware controls
+- **hardware dashboard tab**: integrated platform profile toggling (balanced, performance, quiet) and fan mode control directly in the dashboard backed by a privileged polkit helper.
+
 
