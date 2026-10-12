@@ -4,6 +4,5 @@
 build/
 .cache/
 logs
-*.bakdocs/superpowers/
 docs/
 *.bak
