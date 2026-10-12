@@ -325,7 +325,21 @@ Item {
 
     function isVisionCapableModel() {
         var m = (AiProviders.activeModel || "").toLowerCase();
-        return m.indexOf("mimo") !== -1 || m.indexOf("vision") !== -1 || m.indexOf("vl") !== -1 || m.indexOf("4o") !== -1 || m.indexOf("gemini") !== -1 || m.indexOf("claude-3") !== -1;
+        return m.indexOf("mimo") !== -1 ||
+               m.indexOf("vision") !== -1 ||
+               m.indexOf("vl") !== -1 ||
+               m.indexOf("4o") !== -1 ||
+               m.indexOf("gemini") !== -1 ||
+               m.indexOf("claude-3") !== -1 ||
+               m.indexOf("claude-") !== -1 ||
+               m.indexOf("pixtral") !== -1 ||
+               m.indexOf("minicpm") !== -1 ||
+               m.indexOf("llava") !== -1 ||
+               m.indexOf("cogvlm") !== -1 ||
+               m.indexOf("gemma-3") !== -1 ||
+               m.indexOf("gpt-4-turbo") !== -1 ||
+               m.indexOf("glm-5.3-flash") !== -1 ||
+               (m.indexOf("glm") !== -1 && (m.indexOf("-flash") !== -1 || m.indexOf("4v") !== -1 || m.indexOf("4.6v") !== -1 || m.indexOf("edge-v") !== -1));
     }
 
     function handleAgentProcessResult(type, stdout, stderr, cmd, exitCode = 0) {
@@ -1176,14 +1190,16 @@ Item {
                     });
                 }
 
-                if (lastCapturedImageBase64 && isVisionCapableModel()) {
-                    messages.push({
-                        "role": "user",
-                        "content": [
-                            { "type": "text", "text": "Screenshot captured from active display:" },
-                            { "type": "image_url", "image_url": { "url": "data:image/jpeg;base64," + lastCapturedImageBase64 } }
-                        ]
-                    });
+                if (lastCapturedImageBase64) {
+                    if (isVisionCapableModel()) {
+                        messages.push({
+                            "role": "user",
+                            "content": [
+                                { "type": "text", "text": "Screenshot captured from active display:" },
+                                { "type": "image_url", "image_url": { "url": "data:image/jpeg;base64," + lastCapturedImageBase64 } }
+                            ]
+                        });
+                    }
                     lastCapturedImageBase64 = "";
                 }
 
@@ -1192,6 +1208,15 @@ Item {
                     "role": "user",
                     "content": promptText
                 };
+                if (lastCapturedImageBase64) {
+                    if (isVisionCapableModel()) {
+                        toolMsg.content = [
+                            { "type": "text", "text": promptText },
+                            { "type": "image_url", "image_url": { "url": "data:image/jpeg;base64," + lastCapturedImageBase64 } }
+                        ];
+                    }
+                    lastCapturedImageBase64 = "";
+                }
                 messages.push(toolMsg);
             }
             pendingToolCalls = null;

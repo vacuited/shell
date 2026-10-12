@@ -1,0 +1,133 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Find hp-wmi hwmon directory
+find_hp_hwmon() {
+    for d in /sys/devices/platform/hp-wmi/hwmon/hwmon*; do
+        if [[ -d "$d" && -f "$d/pwm1_enable" ]]; then
+            echo "$d"
+            return 0
+        fi
+    done
+    return 1
+}
+
+case "${1:-}" in
+    set-profile)
+        profile="${2:-}"
+        choices_file="/sys/firmware/acpi/platform_profile_choices"
+        target_file="/sys/firmware/acpi/platform_profile"
+
+        if [[ ! -f "$target_file" ]]; then
+            echo "Error: platform_profile not supported on this kernel." >&2
+            exit 1
+        fi
+
+        if [[ -f "$choices_file" ]]; then
+            choices=$(cat "$choices_file")
+            if ! [[ " $choices " =~ " $profile " ]]; then
+                echo "Error: Invalid profile '$profile'. Choices: $choices" >&2
+                exit 1
+            fi
+        fi
+
+        echo "$profile" > "$target_file"
+        echo "Profile set to: $profile"
+        ;;
+
+    set-fan)
+        mode="${2:-}"
+        hwmon_dir=$(find_hp_hwmon) || {
+            echo "Error: hp-wmi hwmon device not found." >&2
+            exit 1
+        }
+        pwm_file="$hwmon_dir/pwm1_enable"
+
+        case "$mode" in
+            max)
+                echo 0 > "$pwm_file"
+                echo "Fan mode set to: max (pwm1_enable=0)"
+                ;;
+            auto)
+                echo 2 > "$pwm_file"
+                echo "Fan mode set to: auto (pwm1_enable=2)"
+                ;;
+            *)
+                echo "Error: Invalid fan mode '$mode'. Valid: auto, max" >&2
+                exit 1
+                ;;
+        esac
+        ;;
+
+    set-refresh)
+        hz="${2:-60}"
+        output="eDP-1"
+        if command -v wlr-randr >/dev/null 2>&1; then
+            wlr_out=$(wlr-randr 2>/dev/null | awk '/^([a-zA-Z0-9_-]+) "/ {print $1; exit}')
+            [[ -n "$wlr_out" ]] && output="$wlr_out"
+        fi
+
+        if [[ "$hz" == "144" ]]; then
+            mode=$(wlr-randr --output "$output" 2>/dev/null | awk '$0 ~ "144\\." {gsub(" px,", "", $1); print $1 "@" $3 "Hz"; exit}')
+            if [[ -n "$mode" ]]; then
+                wlr-randr --output "$output" --mode "$mode" 2>/dev/null || true
+            else
+                wlr-randr --output "$output" --preferred 2>/dev/null || true
+            fi
+        else
+            mode=$(wlr-randr --output "$output" 2>/dev/null | awk '$0 ~ "60\\." {gsub(" px,", "", $1); print $1 "@" $3 "Hz"; exit}')
+            if [[ -n "$mode" ]]; then
+                wlr-randr --output "$output" --mode "$mode" 2>/dev/null || true
+            fi
+        fi
+
+        cava_conf="$HOME/.config/cava/config"
+        if [[ -f "$cava_conf" ]]; then
+            sed -i "s/^framerate = .*/framerate = $hz/" "$cava_conf" 2>/dev/null || true
+            pkill -USR2 cava 2>/dev/null || true
+        fi
+        echo "Refresh rate set to: ${hz}Hz"
+        ;;
+
+    status)
+        hwmon_dir=$(find_hp_hwmon 2>/dev/null || true)
+        fan1=0
+        fan2=0
+        fan_mode="auto"
+        profile="unknown"
+        refresh_rate=60
+
+        if [[ -n "$hwmon_dir" ]]; then
+            [[ -f "$hwmon_dir/fan1_input" ]] && fan1=$(cat "$hwmon_dir/fan1_input" 2>/dev/null || echo 0)
+            [[ -f "$hwmon_dir/fan2_input" ]] && fan2=$(cat "$hwmon_dir/fan2_input" 2>/dev/null || echo 0)
+            if [[ -f "$hwmon_dir/pwm1_enable" ]]; then
+                pwm_val=$(cat "$hwmon_dir/pwm1_enable" 2>/dev/null || echo 2)
+                [[ "$pwm_val" == "0" ]] && fan_mode="max"
+            fi
+        fi
+
+        if [[ -f "/sys/firmware/acpi/platform_profile" ]]; then
+            profile=$(cat "/sys/firmware/acpi/platform_profile" 2>/dev/null || echo "unknown")
+        fi
+
+        if command -v hyprctl >/dev/null 2>&1; then
+            hz_raw=$(hyprctl monitors -j 2>/dev/null | jq -r '.[0].refreshRate // 60' 2>/dev/null || echo 60)
+            refresh_rate=$(printf "%.0f" "$hz_raw" 2>/dev/null || echo 60)
+        fi
+
+        cat <<EOF
+{
+  "profile": "$profile",
+  "fanMode": "$fan_mode",
+  "fan1Rpm": $fan1,
+  "fan2Rpm": $fan2,
+  "refreshRate": $refresh_rate
+}
+EOF
+        ;;
+
+    *)
+        echo "Usage: $0 {set-profile <quiet|cool|balanced|performance> | set-fan <auto|max> | set-refresh <60|144> | status}" >&2
+        exit 1
+        ;;
+esac

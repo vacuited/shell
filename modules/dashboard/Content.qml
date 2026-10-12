@@ -32,16 +32,22 @@ Item {
                 enabled: Config.dashboard.showMedia
             },
             {
+                component: weatherComponent,
+                iconName: "cloud",
+                text: Tr.tr("Weather"),
+                enabled: Config.dashboard.showWeather
+            },
+            {
                 component: performanceComponent,
                 iconName: "speed",
                 text: Tr.tr("Performance"),
                 enabled: Config.dashboard.showPerformance
             },
             {
-                component: weatherComponent,
-                iconName: "cloud",
-                text: Tr.tr("Weather"),
-                enabled: Config.dashboard.showWeather
+                component: hardwareComponent,
+                iconName: "tune",
+                text: Tr.tr("Hardware"),
+                enabled: true
             },
             {
                 component: terminalComponent,
@@ -236,6 +242,12 @@ Item {
                 id: weatherComponent
 
                 WeatherTab {}
+            }
+
+            Component {
+                id: hardwareComponent
+
+                HardwareTab {}
             }
 
             Component {

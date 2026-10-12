@@ -1,0 +1,8 @@
+/* Allow wheel users to manage HP hardware profiles & fan control without password prompt */
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.freedesktop.policykit.exec" &&
+        action.lookup("program") == "/usr/local/bin/caelestia-hardware-helper" &&
+        subject.isInGroup("wheel")) {
+        return polkit.Result.YES;
+    }
+});
