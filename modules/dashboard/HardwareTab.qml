@@ -13,8 +13,8 @@ import "../../services"
 Item {
     id: root
 
-    implicitWidth: 940
-    implicitHeight: 385
+    implicitWidth: 974
+    implicitHeight: 372
 
     property bool initialized: false
     Component.onCompleted: Qt.callLater(() => root.initialized = true)
@@ -28,15 +28,15 @@ Item {
         // ==========================================
         RowLayout {
             Layout.fillWidth: true
-            Layout.preferredHeight: 115
+            Layout.preferredHeight: 140
             spacing: Tokens.spacing.medium
 
             // 1A. CPU Fan Telemetry Card
             StyledRect {
                 id: cpuFanCard
                 Layout.fillWidth: true
-                Layout.preferredHeight: 115
-                radius: Tokens.rounding.large
+                Layout.preferredHeight: 140
+                radius: Tokens.rounding.extraLarge
                 color: Colours.tPalette.m3surfaceContainer
 
                 readonly property color accent: Colours.palette.m3primary
@@ -48,8 +48,8 @@ Item {
 
                     // Spinning Fan Disc
                     StyledRect {
-                        Layout.preferredWidth: 56
-                        Layout.preferredHeight: 56
+                        Layout.preferredWidth: 60
+                        Layout.preferredHeight: 60
                         radius: Tokens.rounding.full
                         color: Colours.tPalette.m3surfaceContainerHigh
 
@@ -58,7 +58,7 @@ Item {
                             anchors.centerIn: parent
                             text: "mode_fan"
                             color: cpuFanCard.accent
-                            fontStyle: Tokens.font.icon.builders.large.scale(1.3).build()
+                            fontStyle: Tokens.font.icon.builders.large.scale(1.4).build()
 
                             NumberAnimation on rotation {
                                 loops: Animation.Infinite
@@ -77,24 +77,48 @@ Item {
                     // Texts & Level Track
                     ColumnLayout {
                         Layout.fillWidth: true
-                        spacing: 2
+                        spacing: Tokens.spacing.extraSmall
 
-                        StyledText {
-                            text: Tr.tr("CPU Fan Speed")
-                            font: Tokens.font.body.small
-                            color: Colours.palette.m3onSurfaceVariant
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: Tokens.spacing.small
+
+                            StyledText {
+                                text: Tr.tr("CPU Fan Speed")
+                                font: Tokens.font.body.small
+                                color: Colours.palette.m3onSurfaceVariant
+                            }
+
+                            Item {
+                                Layout.fillWidth: true
+                            }
+
+                            StyledRect {
+                                radius: Tokens.rounding.full
+                                color: Colours.tPalette.m3surfaceContainerHigh
+                                implicitHeight: 22
+                                implicitWidth: cpuTempBadge.implicitWidth + 14
+
+                                StyledText {
+                                    id: cpuTempBadge
+                                    anchors.centerIn: parent
+                                    text: Hardware.cpuTemp > 0 ? `${Hardware.cpuTemp}°C` : "--°C"
+                                    font: Tokens.font.body.builders.small.size(11).weight(Font.DemiBold).build()
+                                    color: Hardware.cpuTemp >= 80 ? Colours.palette.m3error : (Hardware.cpuTemp >= 70 ? Colours.palette.m3tertiary : Colours.palette.m3onSurfaceVariant)
+                                }
+                            }
                         }
 
                         StyledText {
                             text: Hardware.fan1Rpm > 0 ? `${Hardware.fan1Rpm} RPM` : Tr.tr("0 RPM")
-                            font: Tokens.font.title.builders.large.size(24).weight(Font.Bold).build()
+                            font: Tokens.font.title.builders.large.size(28).weight(Font.Bold).build()
                             color: Colours.palette.m3onSurface
                         }
 
                         Item {
                             Layout.fillWidth: true
                             Layout.topMargin: 4
-                            implicitHeight: 4
+                            implicitHeight: 6
 
                             StyledRect {
                                 anchors.fill: parent
@@ -122,8 +146,8 @@ Item {
             StyledRect {
                 id: gpuFanCard
                 Layout.fillWidth: true
-                Layout.preferredHeight: 115
-                radius: Tokens.rounding.large
+                Layout.preferredHeight: 140
+                radius: Tokens.rounding.extraLarge
                 color: Colours.tPalette.m3surfaceContainer
 
                 readonly property color accent: Colours.palette.m3secondary
@@ -135,8 +159,8 @@ Item {
 
                     // Spinning Fan Disc
                     StyledRect {
-                        Layout.preferredWidth: 56
-                        Layout.preferredHeight: 56
+                        Layout.preferredWidth: 60
+                        Layout.preferredHeight: 60
                         radius: Tokens.rounding.full
                         color: Colours.tPalette.m3surfaceContainerHigh
 
@@ -145,7 +169,7 @@ Item {
                             anchors.centerIn: parent
                             text: "mode_fan"
                             color: gpuFanCard.accent
-                            fontStyle: Tokens.font.icon.builders.large.scale(1.3).build()
+                            fontStyle: Tokens.font.icon.builders.large.scale(1.4).build()
 
                             NumberAnimation on rotation {
                                 loops: Animation.Infinite
@@ -164,24 +188,63 @@ Item {
                     // Texts & Level Track
                     ColumnLayout {
                         Layout.fillWidth: true
-                        spacing: 2
+                        spacing: Tokens.spacing.extraSmall
 
-                        StyledText {
-                            text: Tr.tr("GPU Fan Speed")
-                            font: Tokens.font.body.small
-                            color: Colours.palette.m3onSurfaceVariant
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: Tokens.spacing.small
+
+                            StyledText {
+                                text: Tr.tr("GPU Fan Speed")
+                                font: Tokens.font.body.small
+                                color: Colours.palette.m3onSurfaceVariant
+                            }
+
+                            Item {
+                                Layout.fillWidth: true
+                            }
+
+                            StyledRect {
+                                radius: Tokens.rounding.full
+                                color: Colours.tPalette.m3surfaceContainerHigh
+                                implicitHeight: 22
+                                implicitWidth: gpuPowerBadge.implicitWidth + 14
+
+                                StyledText {
+                                    id: gpuPowerBadge
+                                    anchors.centerIn: parent
+                                    text: Hardware.gpuPower > 0 ? `${Hardware.gpuPower.toFixed(1)}W` : "-- W"
+                                    font: Tokens.font.body.builders.small.size(11).weight(Font.DemiBold).build()
+                                    color: Hardware.gpuPower > 10 ? Colours.palette.m3primary : Colours.palette.m3onSurfaceVariant
+                                }
+                            }
+
+                            StyledRect {
+                                radius: Tokens.rounding.full
+                                color: Colours.tPalette.m3surfaceContainerHigh
+                                implicitHeight: 22
+                                implicitWidth: gpuTempBadge.implicitWidth + 14
+
+                                StyledText {
+                                    id: gpuTempBadge
+                                    anchors.centerIn: parent
+                                    text: Hardware.gpuTemp > 0 ? `${Hardware.gpuTemp}°C` : "--°C"
+                                    font: Tokens.font.body.builders.small.size(11).weight(Font.DemiBold).build()
+                                    color: Hardware.gpuTemp >= 80 ? Colours.palette.m3error : (Hardware.gpuTemp >= 70 ? Colours.palette.m3tertiary : Colours.palette.m3onSurfaceVariant)
+                                }
+                            }
                         }
 
                         StyledText {
                             text: Hardware.fan2Rpm > 0 ? `${Hardware.fan2Rpm} RPM` : Tr.tr("0 RPM")
-                            font: Tokens.font.title.builders.large.size(24).weight(Font.Bold).build()
+                            font: Tokens.font.title.builders.large.size(28).weight(Font.Bold).build()
                             color: Colours.palette.m3onSurface
                         }
 
                         Item {
                             Layout.fillWidth: true
                             Layout.topMargin: 4
-                            implicitHeight: 4
+                            implicitHeight: 6
 
                             StyledRect {
                                 anchors.fill: parent
@@ -207,19 +270,19 @@ Item {
         }
 
         // ==========================================
-        // 2. ROW 2: FAN MODE (LEFT 50%) | REFRESH RATE (RIGHT 50%)
+        // 2. ROW 2: 3 HARDWARE CONTROLS (FAN MODE | TURBO BOOST | REFRESH RATE)
         // ==========================================
         RowLayout {
             Layout.fillWidth: true
-            Layout.preferredHeight: 115
+            Layout.preferredHeight: 104
             spacing: Tokens.spacing.medium
 
             // 2A. FAN SPEED MODE CHANGER
             StyledRect {
                 id: fanControlCard
                 Layout.fillWidth: true
-                Layout.preferredHeight: 115
-                radius: Tokens.rounding.large
+                Layout.preferredHeight: 104
+                radius: Tokens.rounding.extraLarge
                 color: Colours.tPalette.m3surfaceContainer
 
                 readonly property int activeIndex: Hardware.fanMode === "max" ? 1 : 0
@@ -393,25 +456,197 @@ Item {
                             }
                         }
                     }
+                }
+            }
 
-                    // Subtitle / Description Row
-                    StyledText {
+            // 2B. INTEL TURBO BOOST CONTROLLER
+            StyledRect {
+                id: turboControlCard
+                Layout.fillWidth: true
+                Layout.preferredHeight: 104
+                radius: Tokens.rounding.extraLarge
+                color: Colours.tPalette.m3surfaceContainer
+
+                readonly property int activeIndex: Hardware.turbo ? 1 : 0
+                readonly property color activeColor: Hardware.turbo ? Colours.palette.m3primary : Colours.palette.m3tertiary
+
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: Tokens.padding.large
+                    spacing: Tokens.spacing.extraSmall
+
+                    // Header Row
+                    RowLayout {
                         Layout.fillWidth: true
-                        Layout.leftMargin: 2
-                        text: fanControlCard.activeIndex === 1 ? Tr.tr("Full 4600+ RPM cooling") : Tr.tr("EC dynamic acoustic curve")
-                        font: Tokens.font.body.small
-                        color: Colours.palette.m3onSurfaceVariant
-                        elide: Text.ElideRight
+                        spacing: Tokens.spacing.small
+
+                        MaterialIcon {
+                            text: "bolt"
+                            color: turboControlCard.activeColor
+                            fontStyle: Tokens.font.icon.small
+
+                            Behavior on color {
+                                enabled: root.initialized
+                                ColorAnimation { duration: 200 }
+                            }
+                        }
+
+                        StyledText {
+                            text: Tr.tr("Turbo Boost")
+                            font: Tokens.font.title.builders.small.weight(Font.DemiBold).build()
+                            color: Colours.palette.m3onSurface
+                        }
+
+                        Item {
+                            Layout.fillWidth: true
+                        }
+
+                        StyledRect {
+                            radius: Tokens.rounding.full
+                            color: Colours.tPalette.m3surfaceContainerHigh
+                            implicitHeight: 22
+                            implicitWidth: turboBadgeLabel.implicitWidth + 14
+
+                            StyledText {
+                                id: turboBadgeLabel
+                                anchors.centerIn: parent
+                                text: Hardware.turbo ? Tr.tr("4.4 GHz") : Tr.tr("2.0 GHz")
+                                font: Tokens.font.body.builders.small.size(11).weight(Font.DemiBold).build()
+                                color: turboControlCard.activeColor
+
+                                Behavior on color {
+                                    enabled: root.initialized
+                                    ColorAnimation { duration: 200 }
+                                }
+                            }
+                        }
+                    }
+
+                    // 2-Pill Track
+                    StyledRect {
+                        id: turboPillTrack
+                        Layout.fillWidth: true
+                        implicitHeight: 38
+                        radius: Tokens.rounding.full
+                        color: Colours.tPalette.m3surfaceContainerHigh
+
+                        // Sliding Indicator Pill
+                        StyledRect {
+                            id: turboIndicator
+                            x: 3 + turboControlCard.activeIndex * ((turboPillTrack.width - 6) / 2)
+                            y: 3
+                            width: (turboPillTrack.width - 6) / 2
+                            height: turboPillTrack.height - 6
+                            radius: Tokens.rounding.full
+                            color: turboControlCard.activeColor
+
+                            Behavior on x {
+                                enabled: root.initialized
+                                Anim { type: Anim.EmphasizedLarge }
+                            }
+                            Behavior on color {
+                                enabled: root.initialized
+                                ColorAnimation { duration: 200 }
+                            }
+                        }
+
+                        // 2 Segment Buttons
+                        RowLayout {
+                            anchors.fill: parent
+                            spacing: 0
+
+                            // Base Segment (Index 0 - Left)
+                            Item {
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+
+                                readonly property bool isSelected: turboControlCard.activeIndex === 0
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: Hardware.setTurbo(false)
+                                }
+
+                                RowLayout {
+                                    anchors.centerIn: parent
+                                    spacing: Tokens.spacing.small
+
+                                    MaterialIcon {
+                                        text: "energy_savings_leaf"
+                                        fontStyle: Tokens.font.icon.small
+                                        color: parent.parent.isSelected ? Colours.palette.m3onTertiary : Colours.palette.m3onSurfaceVariant
+
+                                        Behavior on color {
+                                            enabled: root.initialized
+                                            ColorAnimation { duration: 150 }
+                                        }
+                                    }
+
+                                    StyledText {
+                                        text: Tr.tr("Base")
+                                        font: Tokens.font.body.builders.small.weight(Font.DemiBold).build()
+                                        color: parent.parent.isSelected ? Colours.palette.m3onTertiary : Colours.palette.m3onSurfaceVariant
+
+                                        Behavior on color {
+                                            enabled: root.initialized
+                                            ColorAnimation { duration: 150 }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Boost Segment (Index 1 - Right)
+                            Item {
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+
+                                readonly property bool isSelected: turboControlCard.activeIndex === 1
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: Hardware.setTurbo(true)
+                                }
+
+                                RowLayout {
+                                    anchors.centerIn: parent
+                                    spacing: Tokens.spacing.small
+
+                                    MaterialIcon {
+                                        text: "rocket_launch"
+                                        fontStyle: Tokens.font.icon.small
+                                        color: parent.parent.isSelected ? Colours.palette.m3onPrimary : Colours.palette.m3onSurfaceVariant
+
+                                        Behavior on color {
+                                            enabled: root.initialized
+                                            ColorAnimation { duration: 150 }
+                                        }
+                                    }
+
+                                    StyledText {
+                                        text: Tr.tr("Boost")
+                                        font: Tokens.font.body.builders.small.weight(Font.DemiBold).build()
+                                        color: parent.parent.isSelected ? Colours.palette.m3onPrimary : Colours.palette.m3onSurfaceVariant
+
+                                        Behavior on color {
+                                            enabled: root.initialized
+                                            ColorAnimation { duration: 150 }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
 
-            // 2B. DISPLAY REFRESH RATE CHANGER
+            // 2C. DISPLAY REFRESH RATE CHANGER
             StyledRect {
                 id: refreshCard
                 Layout.fillWidth: true
-                Layout.preferredHeight: 115
-                radius: Tokens.rounding.large
+                Layout.preferredHeight: 104
+                radius: Tokens.rounding.extraLarge
                 color: Colours.tPalette.m3surfaceContainer
 
                 readonly property int activeIndex: Hardware.refreshRate >= 120 ? 1 : 0
@@ -457,7 +692,7 @@ Item {
                             StyledText {
                                 id: displayBadge
                                 anchors.centerIn: parent
-                                text: Tr.tr("eDP-1 • 1080p")
+                                text: Tr.tr("eDP-1")
                                 font: Tokens.font.body.builders.small.size(11).weight(Font.DemiBold).build()
                                 color: Colours.palette.m3onSurfaceVariant
                             }
@@ -580,16 +815,6 @@ Item {
                             }
                         }
                     }
-
-                    // Subtitle / Description Row
-                    StyledText {
-                        Layout.fillWidth: true
-                        Layout.leftMargin: 2
-                        text: refreshCard.activeIndex === 1 ? Tr.tr("144 Hz • Ultra fluid motion") : Tr.tr("60 Hz • Battery saving")
-                        font: Tokens.font.body.small
-                        color: Colours.palette.m3onSurfaceVariant
-                        elide: Text.ElideRight
-                    }
                 }
             }
         }
@@ -600,8 +825,8 @@ Item {
         StyledRect {
             id: profileCard
             Layout.fillWidth: true
-            Layout.preferredHeight: 125
-            radius: Tokens.rounding.large
+            Layout.preferredHeight: 104
+            radius: Tokens.rounding.extraLarge
             color: Colours.tPalette.m3surfaceContainer
 
             readonly property int activeIndex: {
@@ -648,38 +873,6 @@ Item {
                         text: Tr.tr("Power & Thermal Profile")
                         font: Tokens.font.title.builders.small.weight(Font.DemiBold).build()
                         color: Colours.palette.m3onSurface
-                    }
-
-                    Item {
-                        Layout.fillWidth: true
-                    }
-
-                    StyledRect {
-                        radius: Tokens.rounding.full
-                        color: Colours.tPalette.m3surfaceContainerHigh
-                        implicitHeight: 22
-                        implicitWidth: activeProfileLabel.implicitWidth + 16
-
-                        StyledText {
-                            id: activeProfileLabel
-                            anchors.centerIn: parent
-                            text: {
-                                switch (profileCard.activeIndex) {
-                                    case 0: return Tr.tr("Quiet");
-                                    case 1: return Tr.tr("Cool");
-                                    case 2: return Tr.tr("Balanced");
-                                    case 3: return Tr.tr("Performance");
-                                    default: return Tr.tr("Balanced");
-                                }
-                            }
-                            font: Tokens.font.body.builders.small.weight(Font.DemiBold).build()
-                            color: profileCard.activeAccent
-
-                            Behavior on color {
-                                enabled: root.initialized
-                                ColorAnimation { duration: 200 }
-                            }
-                        }
                     }
                 }
 
@@ -752,24 +945,6 @@ Item {
                             onClicked: Hardware.setProfile("performance")
                         }
                     }
-                }
-
-                // Subtitle / Description Row
-                StyledText {
-                    Layout.fillWidth: true
-                    Layout.leftMargin: 2
-                    text: {
-                        switch (profileCard.activeIndex) {
-                            case 0: return Tr.tr("Whisper quiet fans • Low TDP power limits • Battery life conservation");
-                            case 1: return Tr.tr("Lower surface temperatures • Aggressive heat dissipation");
-                            case 2: return Tr.tr("Adaptive daily curve • Optimal acoustic & thermal balance");
-                            case 3: return Tr.tr("Maximum TDP • Unthrottled CPU & GPU gaming boost");
-                            default: return "";
-                        }
-                    }
-                    font: Tokens.font.body.small
-                    color: Colours.palette.m3onSurfaceVariant
-                    elide: Text.ElideRight
                 }
             }
         }

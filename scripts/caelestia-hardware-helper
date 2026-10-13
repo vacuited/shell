@@ -59,6 +59,29 @@ case "${1:-}" in
         esac
         ;;
 
+    set-turbo)
+        state="${2:-on}"
+        target_file="/sys/devices/system/cpu/intel_pstate/no_turbo"
+        if [[ ! -f "$target_file" ]]; then
+            echo "Error: intel_pstate no_turbo not supported on this kernel." >&2
+            exit 1
+        fi
+        case "$state" in
+            on|enable|true)
+                echo 0 > "$target_file"
+                echo "Turbo Boost enabled (no_turbo=0)"
+                ;;
+            off|disable|false)
+                echo 1 > "$target_file"
+                echo "Turbo Boost disabled (no_turbo=1)"
+                ;;
+            *)
+                echo "Error: Invalid turbo state '$state'. Valid: on, off" >&2
+                exit 1
+                ;;
+        esac
+        ;;
+
     set-refresh)
         hz="${2:-60}"
         output="eDP-1"
@@ -127,7 +150,7 @@ EOF
         ;;
 
     *)
-        echo "Usage: $0 {set-profile <quiet|cool|balanced|performance> | set-fan <auto|max> | set-refresh <60|144> | status}" >&2
+        echo "Usage: $0 {set-profile <quiet|cool|balanced|performance> | set-fan <auto|max> | set-refresh <60|144> | set-turbo <on|off> | status}" >&2
         exit 1
         ;;
 esac

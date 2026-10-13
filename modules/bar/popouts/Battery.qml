@@ -6,6 +6,7 @@ import Caelestia.Config
 import Caelestia.I18n
 import qs.components
 import qs.services
+import "../../../services"
 
 Column {
     id: root
@@ -120,18 +121,19 @@ Column {
         id: profiles
 
         property string current: {
-            const p = PowerProfiles.profile;
-            if (p === PowerProfile.PowerSaver)
+            if (Hardware.profile === "cool")
+                return cool.icon;
+            if (Hardware.profile === "quiet" || PowerProfiles.profile === PowerProfile.PowerSaver)
                 return saver.icon;
-            if (p === PowerProfile.Performance)
+            if (Hardware.profile === "performance" || PowerProfiles.profile === PowerProfile.Performance)
                 return perf.icon;
             return balance.icon;
         }
 
         anchors.horizontalCenter: parent.horizontalCenter
 
-        implicitWidth: saver.implicitHeight + balance.implicitHeight + perf.implicitHeight + Tokens.padding.medium * 2 + Tokens.spacing.largeIncreased * 2
-        implicitHeight: Math.max(saver.implicitHeight, balance.implicitHeight, perf.implicitHeight) + Tokens.padding.small
+        implicitWidth: saver.implicitHeight + cool.implicitHeight + balance.implicitHeight + perf.implicitHeight + Tokens.padding.medium * 2 + Tokens.spacing.largeIncreased * 3
+        implicitHeight: Math.max(saver.implicitHeight, cool.implicitHeight, balance.implicitHeight, perf.implicitHeight) + Tokens.padding.small
 
         color: Colours.tPalette.m3surfaceContainer
         radius: Tokens.rounding.full
@@ -149,6 +151,13 @@ Column {
 
                     Fill {
                         item: saver
+                    }
+                },
+                State {
+                    name: cool.icon
+
+                    Fill {
+                        item: cool
                     }
                 },
                 State {
@@ -179,28 +188,47 @@ Column {
             anchors.left: parent.left
             anchors.leftMargin: Tokens.padding.extraSmall
 
-            profile: PowerProfile.PowerSaver
             icon: "energy_savings_leaf"
+            targetProfile: "quiet"
+            fallbackProfile: PowerProfile.PowerSaver
+        }
+
+        Profile {
+            id: cool
+
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.left: saver.right
+            anchors.leftMargin: Tokens.spacing.largeIncreased
+
+            icon: "ac_unit"
+            targetProfile: "cool"
+            fallbackProfile: -1
         }
 
         Profile {
             id: balance
 
-            anchors.centerIn: parent
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.left: cool.right
+            anchors.leftMargin: Tokens.spacing.largeIncreased
 
-            profile: PowerProfile.Balanced
             icon: "balance"
+            targetProfile: "balanced"
+            fallbackProfile: PowerProfile.Balanced
         }
 
         Profile {
             id: perf
 
             anchors.verticalCenter: parent.verticalCenter
+            anchors.left: balance.right
+            anchors.leftMargin: Tokens.spacing.largeIncreased
             anchors.right: parent.right
             anchors.rightMargin: Tokens.padding.extraSmall
 
-            profile: PowerProfile.Performance
             icon: "rocket_launch"
+            targetProfile: "performance"
+            fallbackProfile: PowerProfile.Performance
         }
     }
 
@@ -215,8 +243,10 @@ Column {
     }
 
     component Profile: Item {
+        id: profItem
         required property string icon
-        required property int profile
+        required property string targetProfile
+        required property int fallbackProfile
 
         implicitWidth: icon.implicitHeight + Tokens.padding.small
         implicitHeight: icon.implicitHeight + Tokens.padding.small
@@ -224,7 +254,12 @@ Column {
         StateLayer {
             radius: Tokens.rounding.full
             color: profiles.current === parent.icon ? Colours.palette.m3onPrimary : Colours.palette.m3onSurface
-            onClicked: PowerProfiles.profile = parent.profile
+            onClicked: {
+                Hardware.setProfile(profItem.targetProfile);
+                if (profItem.fallbackProfile !== -1) {
+                    PowerProfiles.profile = profItem.fallbackProfile;
+                }
+            }
         }
 
         MaterialIcon {

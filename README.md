@@ -30,6 +30,8 @@ my own customized build of [caelestia-shell](https://github.com/caelestia-dots/s
 - **chat history persistence & navigation**: reliable session storage in `~/.config/caelestia/ai_chats.json` with instant lifecycle flushes, resolved upstream file loading blocks.
 
 ### hardware controls
-- **hardware dashboard tab**: integrated platform profile toggling (balanced, performance, quiet) and fan mode control directly in the dashboard backed by a privileged polkit helper.
-
-
+- **hero fan telemetry**: dedicated cpu and gpu fan telemetry cards matching the performance tab sizing, featuring live spinning fan discs, rpm counters, temperature pills, and live gpu wattage.
+- **3-column hardware toggles**: instant switching for fan mode (`[ auto | max boost ]`), intel turbo boost (`[ base | boost ]`), and display refresh rate (`[ 60 hz | 144 hz ]`).
+- **4-profile power & thermal selector**: full-width selector for `[ quiet | cool | balanced | performance ]` with instant sync across acpi platform profiles, battery popout, and power-profiles-daemon.
+- **battery popout cool mode**: extended the status bar battery popout with a native 4th `cool` profile button.
+- **seamless backend integration**: backed by `vacuited-cli` (`caelestia hardware`) and a polkit-whitelisted helper for zero-password transitions.
