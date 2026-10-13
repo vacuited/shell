@@ -19,6 +19,7 @@ Singleton {
     property real gpuPower: 0.0
     property string gpuState: "D3 Sleep"
     property bool turbo: true
+    property bool isSupported: true
     property bool isBusy: false
 
     function refreshStatus(): void {
@@ -61,6 +62,7 @@ Singleton {
             onStreamFinished: {
                 try {
                     const data = JSON.parse(text);
+                    if (data.supported !== undefined) root.isSupported = Boolean(data.supported);
                     if (!writeProc.running) {
                         if (data.profile) root.profile = data.profile;
                         if (data.fanMode) root.fanMode = data.fanMode;

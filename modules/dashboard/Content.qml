@@ -47,7 +47,7 @@ Item {
                 component: hardwareComponent,
                 iconName: "tune",
                 text: Tr.tr("Hardware"),
-                enabled: true
+                enabled: Hardware.isSupported
             },
             {
                 component: terminalComponent,

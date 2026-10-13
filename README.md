@@ -35,3 +35,4 @@ my own customized build of [caelestia-shell](https://github.com/caelestia-dots/s
 - **4-profile power & thermal selector**: full-width selector for `[ quiet | cool | balanced | performance ]` with instant sync across acpi platform profiles, battery popout, and power-profiles-daemon.
 - **battery popout cool mode**: extended the status bar battery popout with a native 4th `cool` profile button.
 - **seamless backend integration**: backed by `vacuited-cli` (`caelestia hardware`) and a polkit-whitelisted helper for zero-password transitions.
+- **automatic hardware detection**: tailored specifically for the **hp victus 15** (`hp-wmi`, dual fans, `intel_pstate`, and rtx 40 series). on unsupported laptops or desktops without hp-wmi or acpi platform profile support, the tab automatically hides itself, and backend controls safely no-op without altering system state.
