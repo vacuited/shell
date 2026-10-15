@@ -23,7 +23,10 @@ Singleton {
     readonly property alias enabledSince: props.enabledSince
 
     onModeChanged: {
-        if (active)
+        // Reads props.mode, not the derived `active`: bindings that depend on mode are not
+        // re-evaluated before this handler runs, so `active` here is still the previous mode's
+        // value and turning a mode on for the first time never stamped a start time
+        if (props.mode > root.off)
             props.enabledSince = new Date();
     }
 
