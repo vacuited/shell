@@ -27,13 +27,21 @@ Scope {
         if (!action)
             return;
 
-        if (action === "lock")
-            lock.lock.locked = true;
+        if (action === "lock") {
+            if (!IdleInhibitor.preventLock)
+                lock.lock.locked = true;
+        }
         else if (action === "unlock")
             lock.lock.locked = false;
+        else if (action === "dpms off") {
+            if (!IdleInhibitor.preventSleep)
+                Hypr.dispatch(Hypr.usingLua ? `hl.dsp.dpms({ action = "disable" })` : action);
+        }
+        else if (action === "dpms on")
+            Hypr.dispatch(Hypr.usingLua ? `hl.dsp.dpms({ action = "enable" })` : action);
         else if (typeof action === "string")
-            Hypr.dispatch(Hypr.usingLua && ["dpms off", "dpms on"].includes(action) ? `hl.dsp.dpms({ action = "${action === "dpms off" ? "disable" : "enable"}" })` : action);
-        else if (!SessionManager.exec(action))
+            Hypr.dispatch(action);
+        else if (!IdleInhibitor.preventSleep && !SessionManager.exec(action))
             Quickshell.execDetached(action);
     }
 

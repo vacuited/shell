@@ -36,3 +36,6 @@ my own customized build of [midnight-shell](https://github.com/dim-ghub/midnight
 - **battery popout cool mode**: extended the status bar battery popout with a native 4th `cool` profile button.
 - **seamless backend integration**: backed by `vacuited-cli` (`caelestia hardware`) and a polkit-whitelisted helper for zero-password transitions.
 - **automatic hardware detection**: tailored specifically for the **hp victus 15** (`hp-wmi`, dual fans, `intel_pstate`, and rtx 40 series). on unsupported laptops or desktops without hp-wmi or acpi platform profile support, the tab automatically hides itself, and backend controls safely no-op without altering system state.
+
+### keep awake & idle inhibitor
+- **tri-state power & lock control**: integrated a 3-button control into the utilities card (`[ off | prevent sleep | prevent lock & sleep ]`). prevents idle timeouts from turning displays off or suspending while optionally still permitting lock, or blocking both lock and sleep.
