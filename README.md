@@ -44,3 +44,4 @@ my own customized build of [midnight-shell](https://github.com/dim-ghub/midnight
 - **vertical system volume slider**: repositioned the primary volume slider vertically alongside the output and input device cards using a compact m3 filled pill.
 - **minimal app volume sliders**: streamlined per-application volume controls directly above settings with dynamic m3-recolourable app icons, full-width sliders, and automatic background wallpaper stream filtering.
 
+![audio preview](assets/audio.png)
