@@ -43,14 +43,6 @@ Loader {
                 anchors.fill: parent
                 radius: Tokens.rounding.extraLarge
                 color: Colours.palette.m3scrim
-
-                Rectangle {
-                    anchors.top: parent.top
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    height: parent.radius
-                    color: parent.color
-                }
             }
         }
 
