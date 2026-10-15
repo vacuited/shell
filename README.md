@@ -4,7 +4,7 @@
 
 ![GitHub last commit](https://img.shields.io/github/last-commit/vacuited/shell?style=for-the-badge&labelColor=101418&color=9ccbfb)&nbsp;![GitHub repo size](https://img.shields.io/github/repo-size/vacuited/shell?style=for-the-badge&labelColor=101418&color=d3bfe6)&nbsp;![GitHub license](https://img.shields.io/github/license/vacuited/shell?style=for-the-badge&labelColor=101418&color=96f1f1)
 
-A personal fork of [caelestia-dots/shell](https://github.com/caelestia-dots/shell) with custom features and optimizations.
+A personal fork of [caelestia-dots/shell](https://github.com/caelestia-dots/shell) based on [midnight-shell](https://github.com/dim-ghub/midnight-shell) with custom features, performance tuning, and HP Victus hardware integration.
 
 </div>
 
@@ -18,78 +18,223 @@ A personal fork of [caelestia-dots/shell](https://github.com/caelestia-dots/shel
 
 ### Vacuited Additions
 
-| Feature | Description | Details |
+| Feature | Description | Status & Implementation |
 | :--- | :--- | :--- |
-| **Wallpaper Engine pause** | Suspends `linux-wallpaperengine` (`SIGSTOP`) behind windows or on battery | 0% CPU/GPU usage while hidden, instant `SIGCONT` resume |
-| **Zero-flash transitions** | Holds previous frame during wallpaper engine startup | Prevents black frames, low-res flashes, and stutter |
-| **Caelestia notes** | Integrated quick notes workspace into dashboard and launcher | Persistent notes store, quick editing, pinned tab |
-| **Hourly weather forecast** | Animated 7-day temperature curve with rain probability | Collapsed behind a sliding `[ hourly \| 7-day ]` toggle pill |
-| **AI tools & sidebar** | Multi-provider assistant with system tools and long-term memory | Screenshot, clipboard, Spotify, reminders, Tavily search |
-| **Hardware controls** | Fan curves, platform profiles, refresh rate, and turbo boost | Dedicated HP Victus dashboard tab and battery popout toggle |
-| **Keep awake toggle** | Tri-state idle inhibitor (`[ off \| prevent sleep \| prevent lock & sleep ]`) | Utilities card integration for presentations and downloads |
-| **Vertical audio popout** | Vertical master volume alongside output/input device cards | Filtered PipeWire streams, recoloured app icons |
+| **Wallpaper Engine Auto-Pause** | Automatically suspends `linux-wallpaperengine` (`SIGSTOP`) behind windows or on battery power | Drops CPU/GPU usage to 0%, resumes instantly (`SIGCONT`) upon desktop exposure |
+| **Zero-Flash WE Transitions** | Preserves previous frame during engine startup (`holdSource`) | Eliminates black screens, low-res flashes, and stutter between live wallpapers |
+| **Caelestia Notes Integration** | Built-in notes workspace pinned to the dashboard and accessible via launcher | Persistent store (`NotesStore.qml`), markdown editing, dynamic M3 surface colors |
+| **Hourly Weather Forecast** | Animated 7-day temperature curve with rain probability and conditions | Collapsed behind a fluid sliding toggle pill (`[ Hourly \| 7-Day ]`) with cached tabs |
+| **AI Assistant & Smart Tools** | Multi-turn sidebar assistant with system tool execution and long-term memory | Vision screenshots, clipboard read/write, Spotify controls, reminders, Tavily search |
+| **HP Victus Hardware Controls** | Live fan RPM gauges, platform profiles, refresh rate, and Intel Turbo Boost | Dedicated hero dashboard tab and battery popout toggle backed by `vacuited-cli` |
+| **Keep Awake Inhibitor** | Tri-state idle inhibitor toggle (`[ Off \| Prevent Sleep \| Prevent Lock & Sleep ]`) | Utilities card integration for presentations, long downloads, or active monitoring |
+| **Vertical Audio Popout** | Redesigned volume interface with vertical master slider and device cards | Filters background wallpaper audio streams; includes dynamic M3 tinted app icons |
 
-### Midnight & Upstream Base
+### Inherited Midnight & Upstream Features
 
-| Feature | Description |
+| Category | Features |
 | :--- | :--- |
-| **Dynamic palette extraction** | Material You M3 color schemes generated on wallpaper change |
-| **Adaptive status bar** | Workspaces, clock, media indicators, and system tray |
-| **System dashboard** | Quick toggles, performance graphs, weather summary, and audio controls |
-| **App launcher** | Fast fuzzy application search with wallpaper picker and tools |
-| **Lockscreen & OSD** | Volume, brightness, and session overlays |
+| **Launchers** | Emoji and glyph picker, clipboard history manager, window switcher, and keybinds list |
+| **Wallpapers** | Native GIF and video wallpaper playback with auto-pause, plus Wallhaven integration |
+| **Visual Effects & Easter Eggs** | Bad Apple shader effect masking the background, Bezel mode, and dynamic palette extraction |
+| **Mini-Games & Utilities** | Playable Chrome Dino runner inside the notification dock |
+| **Dashboard** | Developer console terminal tab with history and autocomplete, system telemetry, and weather |
+| **Status Bar & Dock** | macOS-style dock, Material workspace shapes, DND toggle, and live drag-and-drop editor |
+| **Desktop Gadgets** | Floating desktop lyrics with background blur, Shimeji screen pets, and desktop clock |
+| **Lock Screen** | Configurable auto-lock on startup (`lockOnStartup`), redesigned profile and clock layout |
+| **Hyprland Integration** | Window focus and dispatching commands via Lua (`hl.dsp`) |
+| **QuickShare & Polkit** | Android file transfers via Avahi daemon; built-in animated Polkit authentication daemon |
 
-## Changes
+## Highlights & Changes
 
-### Wallpaper engine integration
-- **Pause behind windows & on battery**: Automatically suspends `linux-wallpaperengine` (`SIGSTOP`) when covered by windows or on battery power to reduce CPU/GPU usage to 0%, resuming instantly (`SIGCONT`) when visible.
-- **Zero-flash transitions**: Preserves the previous wallpaper frame during engine startup to eliminate black frames and stretched low-res thumbnail flashes.
-- **Smooth WE-to-WE switching**: Refined blurred placeholder transitions without high-contrast or dark snapping between live wallpapers.
-- **Active carousel GIF playback**: Animated GIF thumbnails play only on the active/centered carousel item to conserve resources.
-- **Crash recovery**: Automatically falls back to the previous working wallpaper if an engine crash occurs.
-- **Launcher auto-focus**: Launcher opens directly to the wallpaper engine tab and focuses the currently active item on WE.
+### Wallpaper Engine Zero-Flicker & Battery Suspend
+- Automatically suspends `linux-wallpaperengine` (`SIGSTOP`) when covered by windows or on battery power to reduce CPU/GPU usage to 0%, resuming instantly (`SIGCONT`) when visible.
+- Preserves the previous wallpaper frame during the 1.2s engine startup delay to eliminate black frames and stretched low-res thumbnail flashes.
+- Refined blurred placeholder transitions without high-contrast or dark snapping between live wallpapers.
+- Animated GIF thumbnails play only on the active/centered carousel item to conserve resources.
+- Automatically falls back to the previous working wallpaper if an engine crash occurs.
 
-### Caelestia notes
+### Caelestia Notes
 - Integrated [Caelestia Notes](https://github.com/Denzils-repo/Caelestia_Notes) directly into the shell dashboard and launcher.
+- Tab order preserved at the far right of the dashboard tabs for quick access.
 
-### Hourly weather forecast
+### Hourly Weather Forecast
 - Integrated [Caelestia Hourly Weather](https://github.com/ItsXyzzy/Caelestia-Hourly-Weather) into the weather tab with a scrollable 7-day temperature curve, rain chance, and day summary.
-- **Minimal view toggle**: Collapsed hourly and 7-day forecasts behind an animated toggle pill (`[ hourly | 7-day ]`) to keep the dashboard compact and clean.
-- **Fixed laggy animation**: Eliminated per-frame curve re-tessellation, gated initial height animations, and cached active tabs for fluid 144 FPS swiping.
+- Collapsed hourly and 7-day forecasts behind an animated toggle pill (`[ Hourly | 7-Day ]`) to keep the dashboard compact.
+- Gated initial height animations and cached active tabs for fluid 144 FPS swiping without curve re-tessellation lag.
 
 ![weather preview](assets/weather.png)
 
-### AI assistant & smart tools
-- **Nexus subpage configuration**: Integrated full provider and tool configuration panels into Nexus (`Nexus > panels > sidebar > AI providers` / `AI tools`).
-- **Multi-provider support**: Added custom OpenAI-compatible endpoint and OpenRouter configuration, dynamic model selection, and per-provider settings persisted to `~/.config/caelestia/ai_providers.json`.
-- **System-integrated tool suite**: Native multi-turn tool calling supporting vision screenshots (`grim` + `hyprctl`), clipboard read/write (`wl-paste` / `wl-copy`), media playback controls (`playerctl`), system metrics, and Tavily web search with custom API credentials in `~/.config/caelestia/ai_tools.json`.
-- **Spotify integration**: Added `spotify_search`, `spotify_play`, and `spotify_status` tools.
+### AI Assistant & Smart Tools
+- **Nexus subpage configuration**: Provider and tool configuration panels directly in Nexus (`Nexus > panels > sidebar > AI providers` / `AI tools`).
+- **Multi-provider support**: Custom OpenAI-compatible endpoints, OpenRouter integration, dynamic model selection, and credentials stored in `~/.config/caelestia/ai_providers.json`.
+- **System-integrated tool suite**: Vision screenshots (`grim` + `hyprctl`), clipboard read/write (`wl-paste` / `wl-copy`), media playback (`playerctl`), system metrics, and Tavily web search backed by `~/.config/caelestia/ai_tools.json`.
+- **Spotify integration**: Dedicated `spotify_search`, `spotify_play`, and `spotify_status` tools.
 - **Reminders & notifications**: Scheduled reminders and immediate desktop notifications backed by `~/.config/caelestia/ai_reminders.json`.
 - **Long-term memory**: Persistent user preferences and factual memory store in `~/.config/caelestia/ai_memory.json`.
-- **Chat history persistence & navigation**: Reliable session storage in `~/.config/caelestia/ai_chats.json` with instant lifecycle flushes, resolved upstream file loading blocks.
+- **Chat history persistence**: Reliable session storage in `~/.config/caelestia/ai_chats.json` with eager flushes on drawer close.
 
-### Hardware controls
-- **Hero fan telemetry**: Dedicated CPU and GPU fan telemetry cards matching the performance tab sizing, featuring live spinning fan discs, RPM counters, temperature pills, and live GPU wattage.
-- **3-column hardware toggles**: Instant switching for fan mode (`[ auto | max boost ]`), Intel Turbo Boost (`[ base | boost ]`), and display refresh rate (`[ 60 Hz | 144 Hz ]`).
-- **4-profile power & thermal selector**: Full-width selector for `[ quiet | cool | balanced | performance ]` with instant sync across ACPI platform profiles, battery popout, and power-profiles-daemon.
-- **Battery popout cool mode**: Extended the status bar battery popout with a native 4th `cool` profile button.
-- **Seamless backend integration**: Backed by `vacuited-cli` (`caelestia hardware`) and a polkit-whitelisted helper for zero-password transitions.
-- **Automatic hardware detection**: Tailored specifically for the **HP Victus 15** (`hp-wmi`, dual fans, `intel_pstate`, and RTX 40 series). On unsupported laptops or desktops without hp-wmi or ACPI platform profile support, the tab automatically hides itself, and backend controls safely no-op without altering system state.
+### Hardware Controls
+- **Hero fan telemetry**: Dedicated CPU and GPU fan cards featuring live spinning fan discs, RPM counters, temperature pills, and live GPU wattage.
+- **3-column hardware toggles**: Instant switching for fan mode (`[ Auto | Max Boost ]`), Intel Turbo Boost (`[ Base | Boost ]`), and display refresh rate (`[ 60 Hz | 144 Hz ]`).
+- **4-profile power & thermal selector**: Full-width selector for `[ Quiet | Cool | Balanced | Performance ]` with instant sync across ACPI platform profiles, battery popout, and power-profiles-daemon.
+- **Battery popout cool mode**: Extended the status bar battery popout with a native 4th `Cool` profile button and liquid tank indicators.
+- **Seamless backend integration**: Backed by `vacuited-cli` (`caelestia hardware`) and a Polkit helper for zero-password transitions.
+- **Automatic hardware detection**: Tailored specifically for the **HP Victus 15** (`hp-wmi`, dual fans, `intel_pstate`, and RTX 40 series). Unsupported systems automatically hide the tab without logging errors.
 
-### Keep awake & idle inhibitor
-- **Tri-state power & lock control**: Integrated a 3-button control into the utilities card (`[ off | prevent sleep | prevent lock & sleep ]`). Prevents idle timeouts from turning displays off or suspending while optionally still permitting lock, or blocking both lock and sleep.
+### Keep Awake & Idle Inhibitor
+- Integrated a 3-button power control into the utilities card (`[ Off | Prevent Sleep | Prevent Lock & Sleep ]`).
+- Prevents idle timeouts from turning displays off or suspending during long downloads or presentations.
 
-### Audio popout redesign
-- **Vertical system volume slider**: Repositioned the primary volume slider vertically alongside the output and input device cards using a compact M3 filled pill.
-- **Minimal app volume sliders**: Streamlined per-application volume controls directly above settings with dynamic M3-recolourable app icons, full-width sliders, and automatic background wallpaper stream filtering.
+### Audio Popout Redesign
+- Repositioned the primary volume slider vertically alongside output and input device cards using a compact M3 filled pill.
+- Streamlined per-application volume controls directly above settings with dynamic M3-recolourable app icons, full-width sliders, and automatic background wallpaper stream filtering.
 
 ![audio preview](assets/audio.png)
+
+## Global Shortcuts
+
+All shell toggles and menus can be bound via Hyprland [global shortcuts](https://wiki.hypr.land/Configuring/Basics/Binds/#dbus-global-shortcuts).
+
+| Shortcut Name | Description |
+| :--- | :--- |
+| `caelestia:launcher` | Toggle application launcher |
+| `caelestia:dashboard` | Toggle system dashboard |
+| `caelestia:controlCenter` | Open control center / quick toggles |
+| `caelestia:sidebar` | Toggle AI assistant sidebar |
+| `caelestia:utilities` | Toggle utilities drawer |
+| `caelestia:session` | Toggle power / session menu |
+| `caelestia:emoji` | Open emoji and glyph picker |
+| `caelestia:clipboard` | Open clipboard history manager |
+| `caelestia:windowSwitcher` | Open active window switcher |
+| `caelestia:keybinds` | Open keybinds list |
+| `caelestia:wallpaper` | Open wallpaper selector |
+| `caelestia:terminal` | Toggle developer terminal drawer |
+
+### Hyprland Bind Examples
+
+Add these lines to your Hyprland configuration (`~/.config/hypr/hyprland.conf` or user config):
+
+```conf
+# Launchers & menus
+bind = SUPER, SPACE, global, caelestia:launcher
+bind = SUPER, RETURN, global, caelestia:launcher
+bind = SUPER, S, global, caelestia:controlCenter
+bind = SUPER, D, global, caelestia:dashboard
+bind = SUPER, N, global, caelestia:sidebar
+bind = SUPER, M, global, caelestia:utilities
+
+# Sub-tools & pickers
+bind = SUPER, E, global, caelestia:emoji
+bind = SUPER, V, global, caelestia:clipboard
+bind = SUPER, W, global, caelestia:windowSwitcher
+bind = SUPER, K, global, caelestia:keybinds
+bind = SUPER, B, global, caelestia:wallpaper
+bind = SUPER, T, global, caelestia:terminal
+```
+
+## Installation & Build
+
+### Prerequisites
+
+Ensure you have Quickshell and core dependencies installed:
+- `quickshell-git`
+- `brightnessctl`, `ddcutil`, `libpipewire`, `wireplumber`, `networkmanager`
+- `qt6-base`, `qt6-declarative`, `cmake`, `ninja`
+
+### Manual Build
+
+To build the shell plugin and install directly to your local configuration:
+
+```bash
+# Clone the repository
+git clone https://github.com/vacuited/shell.git ~/.config/quickshell/caelestia
+cd ~/.config/quickshell/caelestia
+
+# Build and install the QML plugin locally
+cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/ -DINSTALL_QSCONFDIR="$HOME/.config/quickshell/caelestia"
+cmake --build build
+sudo cmake --install build
+sudo chown -R $USER ~/.config/quickshell/caelestia
+```
+
+To run or restart the shell daemon:
+
+```bash
+caelestia shell -d -r
+```
+
+## Configuration
+
+All shell options are configured via `~/.config/caelestia/shell.json`.
+
+Per-monitor overrides can be placed in `~/.config/caelestia/monitors/<monitor_name>/shell.json`. Get connected monitor names via `hyprctl monitors -j | jq -r '.[].name'`.
+
+<details><summary>Example shell.json configuration</summary>
+
+```json
+{
+    "appearance": {
+        "anim": { "durations": { "scale": 1 } },
+        "transparency": { "enabled": true, "base": 0.85, "layers": 0.4 }
+    },
+    "general": {
+        "apps": {
+            "terminal": ["kitty"],
+            "explorer": ["atlas"],
+            "audio": ["pwvucontrol"],
+            "playback": ["mpv"]
+        },
+        "developerMode": true,
+        "battery": {
+            "criticalLevel": 3,
+            "warnLevels": [
+                { "level": 90, "title": "Battery High", "message": "Charger can be unplugged", "icon": "battery_android_frame_2" },
+                { "level": 20, "title": "Low battery", "message": "Consider plugging in charger", "icon": "battery_android_frame_2" },
+                { "level": 15, "title": "Battery Low", "message": "Plug in charger soon", "icon": "battery_android_frame_1" },
+                { "level": 5, "title": "Critical Battery", "message": "Plug in charger immediately!", "icon": "battery_android_alert", "critical": true }
+            ]
+        }
+    },
+    "services": {
+        "clockFormat": "TwentyFourHour",
+        "weatherUnits": "Celsius",
+        "sensorUnits": "Celsius",
+        "smartScheme": true,
+        "defaultPlayer": "Spotify",
+        "maxVolume": 1.5,
+        "audioIncrement": 0.02
+    },
+    "background": {
+        "videoWallpaperPaused": false,
+        "videoWallpaperSoundEnabled": false
+    },
+    "utilities": {
+        "enabled": true,
+        "quickToggles": [
+            { "id": "wifi", "enabled": true },
+            { "id": "bluetooth", "enabled": true },
+            { "id": "mic", "enabled": true },
+            { "id": "settings", "enabled": true },
+            { "id": "gameMode", "enabled": true },
+            { "id": "dnd", "enabled": true },
+            { "id": "vpn", "enabled": true },
+            { "id": "badapple", "enabled": true },
+            { "id": "pauseWallpaper", "enabled": true },
+            { "id": "wallpaper", "enabled": true },
+            { "id": "quickshare", "enabled": true }
+        ]
+    }
+}
+```
+
+</details>
 
 ## Credits
 
 | Project | Upstream / Source | Contribution |
 | :--- | :--- | :--- |
 | **Caelestia Shell** | [caelestia-dots/shell](https://github.com/caelestia-dots/shell) | Original Quickshell desktop environment |
-| **Midnight Shell** | [dim-ghub/midnight-shell](https://github.com/dim-ghub/midnight-shell) | Base fork with initial styling & extensions |
+| **Midnight Shell** | [dim-ghub/midnight-shell](https://github.com/dim-ghub/midnight-shell) | Base fork with initial styling, launchers, and extensions |
 | **Caelestia Notes** | [Denzils-repo/Caelestia_Notes](https://github.com/Denzils-repo/Caelestia_Notes) | Notes tab component and store logic |
 | **Caelestia Hourly Weather** | [ItsXyzzy/Caelestia-Hourly-Weather](https://github.com/ItsXyzzy/Caelestia-Hourly-Weather) | Hourly forecast and spline temperature curve |
+| **Quickshell** | [outfoxxed/quickshell](https://quickshell.outfoxxed.me) | Flexible Qt6 desktop shell toolkit |
