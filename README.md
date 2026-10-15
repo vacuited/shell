@@ -1,18 +1,43 @@
-<h1 align=center>Vacuited shell</h1>
+<h1 align=center>vacuited shell</h1>
 
 <div align=center>
 
 ![GitHub last commit](https://img.shields.io/github/last-commit/vacuited/shell?style=for-the-badge&labelColor=101418&color=9ccbfb)&nbsp;![GitHub repo size](https://img.shields.io/github/repo-size/vacuited/shell?style=for-the-badge&labelColor=101418&color=d3bfe6)&nbsp;![GitHub license](https://img.shields.io/github/license/vacuited/shell?style=for-the-badge&labelColor=101418&color=96f1f1)
 
-A personal fork of [caelestia-dots/shell](https://github.com/caelestia-dots/shell) with the features we wanted on top of it.
+a personal fork of [caelestia-dots/shell](https://github.com/caelestia-dots/shell) with custom features and optimizations.
 
 </div>
 
 > [!NOTE]
-> **Active tracking & personalized build.** This is just [midnight-shell](https://github.com/dim-ghub/midnight-shell) but improved and customized to *my* personal preferences. It is actively maintained and continuously updated with upstream [caelestia-shell](https://github.com/caelestia-dots/shell).
+> **active tracking & personalized build.** based on [midnight-shell](https://github.com/dim-ghub/midnight-shell) and customized for personal use. actively maintained and synced with upstream [caelestia-shell](https://github.com/caelestia-dots/shell).
 
 > [!WARNING]
-> **Built for my machine first.** These features and hardware controls are tailored for my own setup (HP Victus 15) and are not guaranteed to work reliably everywhere. Behavior may differ on your system. Use at your own *risk*.
+> **tailored for hp victus 15.** hardware controls and fan curves target hp victus 15 sysfs interfaces. unsupported systems safely no-op or hide relevant modules.
+
+## features
+
+### vacuited additions
+
+| feature | description | details |
+| :--- | :--- | :--- |
+| **wallpaper engine pause** | suspends `linux-wallpaperengine` (`SIGSTOP`) behind windows or on battery | 0% cpu/gpu usage while hidden, instant `SIGCONT` resume |
+| **zero-flash transitions** | holds previous frame during wallpaper engine startup | prevents black frames, low-res flashes, and stutter |
+| **caelestia notes** | integrated quick notes workspace into dashboard and launcher | persistent notes store, quick editing, pinned tab |
+| **hourly weather forecast** | animated 7-day temperature curve with rain probability | collapsed behind a sliding `[ hourly \| 7-day ]` toggle pill |
+| **ai tools & sidebar** | multi-provider assistant with system tools and long-term memory | screenshot, clipboard, spotify, reminders, tavily search |
+| **hardware controls** | fan curves, platform profiles, refresh rate, and turbo boost | dedicated hp victus dashboard tab and battery popout toggle |
+| **keep awake toggle** | tri-state idle inhibitor (`[ off \| prevent sleep \| prevent lock & sleep ]`) | utilities card integration for presentations and downloads |
+| **vertical audio popout** | vertical master volume alongside output/input device cards | filtered pipewire streams, recoloured app icons |
+
+### midnight & upstream base
+
+| feature | description |
+| :--- | :--- |
+| **dynamic palette extraction** | material you m3 color schemes generated on wallpaper change |
+| **adaptive status bar** | workspaces, clock, media indicators, and system tray |
+| **system dashboard** | quick toggles, performance graphs, weather summary, and audio controls |
+| **app launcher** | fast fuzzy application search with wallpaper picker and tools |
+| **lockscreen & osd** | volume, brightness, and session overlays |
 
 ## changes
 
@@ -59,3 +84,12 @@ A personal fork of [caelestia-dots/shell](https://github.com/caelestia-dots/shel
 - **minimal app volume sliders**: streamlined per-application volume controls directly above settings with dynamic m3-recolourable app icons, full-width sliders, and automatic background wallpaper stream filtering.
 
 ![audio preview](assets/audio.png)
+
+## credits
+
+| project | upstream / source | contribution |
+| :--- | :--- | :--- |
+| **caelestia-shell** | [caelestia-dots/shell](https://github.com/caelestia-dots/shell) | original quickshell desktop environment |
+| **midnight-shell** | [dim-ghub/midnight-shell](https://github.com/dim-ghub/midnight-shell) | base fork with initial styling & extensions |
+| **caelestia notes** | [Denzils-repo/Caelestia_Notes](https://github.com/Denzils-repo/Caelestia_Notes) | notes tab component and store logic |
+| **caelestia hourly weather** | [ItsXyzzy/Caelestia-Hourly-Weather](https://github.com/ItsXyzzy/Caelestia-Hourly-Weather) | hourly forecast and spline temperature curve |
