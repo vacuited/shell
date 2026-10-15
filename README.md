@@ -4,7 +4,7 @@
 
 ![GitHub last commit](https://img.shields.io/github/last-commit/vacuited/shell?style=for-the-badge&labelColor=101418&color=9ccbfb)&nbsp;![GitHub repo size](https://img.shields.io/github/repo-size/vacuited/shell?style=for-the-badge&labelColor=101418&color=d3bfe6)&nbsp;![GitHub license](https://img.shields.io/github/license/vacuited/shell?style=for-the-badge&labelColor=101418&color=96f1f1)
 
-A personal fork of [caelestia-dots/shell](https://github.com/caelestia-dots/shell) based on [midnight-shell](https://github.com/dim-ghub/midnight-shell) with custom features, performance tuning, and HP Victus hardware integration.
+A personal fork of [caelestia-dots/shell](https://github.com/caelestia-dots/shell) based on [midnight-shell](https://github.com/dim-ghub/midnight-shell).
 
 </div>
 
@@ -16,7 +16,7 @@ A personal fork of [caelestia-dots/shell](https://github.com/caelestia-dots/shel
 
 ## Features
 
-### Vacuited Additions
+### Vacuited shell
 
 | Feature | Description | Status & Implementation |
 | :--- | :--- | :--- |
@@ -29,7 +29,7 @@ A personal fork of [caelestia-dots/shell](https://github.com/caelestia-dots/shel
 | **Keep Awake Inhibitor** | Tri-state idle inhibitor toggle (`[ Off \| Prevent Sleep \| Prevent Lock & Sleep ]`) | Utilities card integration for presentations, long downloads, or active monitoring |
 | **Vertical Audio Popout** | Redesigned volume interface with vertical master slider and device cards | Filters background wallpaper audio streams; includes dynamic M3 tinted app icons |
 
-### Inherited Midnight & Upstream Features
+### Inherited Midnight
 
 | Category | Features |
 | :--- | :--- |
@@ -49,13 +49,13 @@ A personal fork of [caelestia-dots/shell](https://github.com/caelestia-dots/shel
 ### Wallpaper Engine Zero-Flicker & Battery Suspend
 - Automatically suspends `linux-wallpaperengine` (`SIGSTOP`) when covered by windows or on battery power to reduce CPU/GPU usage to 0%, resuming instantly (`SIGCONT`) when visible.
 - Preserves the previous wallpaper frame during the 1.2s engine startup delay to eliminate black frames and stretched low-res thumbnail flashes.
-- Refined blurred placeholder transitions without high-contrast or dark snapping between live wallpapers.
+- Refined blurred placeholder transitions.
 - Animated GIF thumbnails play only on the active/centered carousel item to conserve resources.
 - Automatically falls back to the previous working wallpaper if an engine crash occurs.
 
 ### Caelestia Notes
 - Integrated [Caelestia Notes](https://github.com/Denzils-repo/Caelestia_Notes) directly into the shell dashboard and launcher.
-- Tab order preserved at the far right of the dashboard tabs for quick access.
+- Tab order preserved at the far right of the dashboard tabs (cuz i like that way).
 
 ### Hourly Weather Forecast
 - Integrated [Caelestia Hourly Weather](https://github.com/ItsXyzzy/Caelestia-Hourly-Weather) into the weather tab with a scrollable 7-day temperature curve, rain chance, and day summary.
