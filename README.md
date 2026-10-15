@@ -28,6 +28,8 @@ A personal fork of [caelestia-dots/shell](https://github.com/caelestia-dots/shel
 | **HP Victus Hardware Controls** | Live fan RPM gauges, platform profiles, refresh rate, and Intel Turbo Boost | Dedicated hero dashboard tab and battery popout toggle backed by `vacuited-cli` |
 | **Keep Awake Inhibitor** | Tri-state idle inhibitor toggle (`[ Off \| Prevent Sleep \| Prevent Lock & Sleep ]`) | Utilities card integration for presentations, long downloads, or active monitoring |
 | **Vertical Audio Popout** | Redesigned volume interface with vertical master slider and device cards | Filters background wallpaper audio streams; includes dynamic M3 tinted app icons |
+| **Google Lens Screen Search** | Regional Google Lens search button in Utilities (`center_focus_strong`) | Triggers area selection, uploads region, and opens results in default browser |
+| **Draggable Quick Toggles** | Nexus settings editor (`Panels > Utilities`) with drag-and-drop reordering | Custom positioning, visibility toggles, removal, and entry restoration dialog |
 
 ### Inherited Midnight
 
@@ -90,6 +92,11 @@ A personal fork of [caelestia-dots/shell](https://github.com/caelestia-dots/shel
 - Streamlined per-application volume controls directly above settings with dynamic M3-recolourable app icons, full-width sliders, and automatic background wallpaper stream filtering.
 
 ![audio preview](assets/audio.png)
+
+### Utilities Quick Toggles & Google Lens
+- **Google Lens screen search**: Added a dedicated `center_focus_strong` quick toggle to the Utilities drawer to instantly capture screen regions and query Google Lens.
+- **Interactive drag-and-drop editor**: Nexus settings (`Nexus > Panels > Utilities`) now features a draggable `ListEditor` allowing complete reordering, toggling, removing, and re-adding of quick toggle buttons.
+- **Screenshot mode isolation**: Resolved an issue where `searchMode` persisted in `AreaPicker`, preventing standard screenshot tools from opening until shell reload.
 
 ## Global Shortcuts
 
@@ -221,7 +228,8 @@ Per-monitor overrides can be placed in `~/.config/caelestia/monitors/<monitor_na
             { "id": "badapple", "enabled": true },
             { "id": "pauseWallpaper", "enabled": true },
             { "id": "wallpaper", "enabled": true },
-            { "id": "quickshare", "enabled": true }
+            { "id": "quickshare", "enabled": true },
+            { "id": "search", "enabled": true }
         ]
     }
 }

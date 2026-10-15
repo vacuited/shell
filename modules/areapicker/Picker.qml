@@ -82,6 +82,7 @@ MouseArea {
 
     function save(): void {
         const isSearch = root.loader.searchMode;
+        root.loader.searchMode = false;
         const tmpfile = isSearch
             ? Qt.resolvedUrl("/tmp/caelestia-search.png")
             : Qt.resolvedUrl(`/tmp/caelestia-picker-${Quickshell.processId}-${Date.now()}.png`);
@@ -197,6 +198,11 @@ MouseArea {
                 property: "sh"
                 to: root.screen.height
             }
+        }
+        PropertyAction {
+            target: root.loader
+            property: "searchMode"
+            value: false
         }
         PropertyAction {
             target: root.loader

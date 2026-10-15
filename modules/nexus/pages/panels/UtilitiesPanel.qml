@@ -1,32 +1,31 @@
 pragma ComponentBehavior: Bound
 
+import QtQuick
 import QtQuick.Layouts
 import Caelestia.Config
 import Caelestia.I18n
+import qs.components
+import qs.services
 import qs.modules.nexus.common
 
 PageBase {
     id: root
 
-    function isToggleOn(id: string): bool {
-        const item = Config.utilities.quickToggles.values.find(t => t.id === id);
-        return item?.enabled ?? false;
-    }
-
-    function setToggleOn(id: string, on: bool): void {
-        const list = GlobalConfig.utilities.quickToggles;
-        for (let i = 0; i < list.count; i++) {
-            const item = list.at(i);
-            if (item.id === id) {
-                item.enabled = on;
-                return;
-            }
-        }
-        list.insert({
-            id,
-            enabled: on
-        });
-    }
+    readonly property var builtinToggles: ({
+        wifi: qsTr("Wi-Fi"),
+        bluetooth: qsTr("Bluetooth"),
+        mic: qsTr("Microphone"),
+        settings: qsTr("Settings"),
+        gameMode: qsTr("Game mode"),
+        dnd: qsTr("Do not disturb"),
+        vpn: qsTr("VPN"),
+        quickshare: qsTr("Quick Share"),
+        wallpaper: qsTr("Wallpaper selector"),
+        badapple: qsTr("Bad Apple"),
+        pauseWallpaper: qsTr("Pause video wallpaper"),
+        pipPause: qsTr("Pause PiP"),
+        search: qsTr("Google Lens search")
+    })
 
     title: Tr.tr("Utilities")
     isSubPage: true
@@ -105,103 +104,63 @@ PageBase {
             text: Tr.tr("Quick toggles")
         }
 
-        ToggleRow {
+        ListEditor {
+            function labelFor(item: var): string {
+                const prettyName = root.builtinToggles[item.id];
+                if (prettyName)
+                    return prettyName;
+                const label = item.id.replace(/([A-Z])/g, " $1");
+                return label.charAt(0).toUpperCase() + label.slice(1).toLowerCase();
+            }
+
+            function toggledFor(item: var): bool {
+                return item.enabled;
+            }
+
+            z: 1
             first: true
-            text: Tr.tr("Wi-Fi")
-            subtext: Tr.tr("Toggle wireless networking")
-            disabled: !Config.utilities.cards.quickToggles
-            checked: root.isToggleOn("wifi")
-            onToggled: root.setToggleOn("wifi", checked)
+            values: root.targetConfig.utilities.quickToggles.values
+            onItemMoved: (from, to) => {
+                root.targetConfig.utilities.quickToggles.move(from, to);
+                root.targetConfig.save();
+            }
+            onItemRemoved: index => {
+                root.targetConfig.utilities.quickToggles.remove(index);
+                root.targetConfig.save();
+            }
+            onItemToggled: (index, checked) => {
+                root.targetConfig.utilities.quickToggles.at(index).enabled = checked;
+                root.targetConfig.save();
+            }
         }
 
-        ToggleRow {
-            text: Tr.tr("Bluetooth")
-            subtext: Tr.tr("Toggle the Bluetooth adapter")
-            disabled: !Config.utilities.cards.quickToggles
-            checked: root.isToggleOn("bluetooth")
-            onToggled: root.setToggleOn("bluetooth", checked)
-        }
+        DialogSelectButton {
+            id: addItemContainer
 
-        ToggleRow {
-            text: Tr.tr("Microphone")
-            subtext: Tr.tr("Mute or unmute the default source")
-            disabled: !Config.utilities.cards.quickToggles
-            checked: root.isToggleOn("mic")
-            onToggled: root.setToggleOn("mic", checked)
-        }
+            rootParent: root.flickable
+            icon: "add"
+            label: Tr.tr("Add entry")
+            header: Tr.tr("Add new entry")
+            acceptLabel: Tr.trCtx("Add", "button")
 
-        ToggleRow {
-            text: Tr.tr("Settings")
-            subtext: Tr.tr("Open the settings window")
-            disabled: !Config.utilities.cards.quickToggles
-            checked: root.isToggleOn("settings")
-            onToggled: root.setToggleOn("settings", checked)
-        }
+            model: {
+                const builtins = Object.keys(root.builtinToggles).map(k => ({
+                    id: k,
+                    label: root.builtinToggles[k]
+                }));
+                return builtins.filter(b => !root.targetConfig.utilities.quickToggles.values.some(v => v.id === b.id));
+            }
 
-        ToggleRow {
-            text: Tr.tr("Game mode")
-            subtext: Tr.tr("Toggle game mode")
-            disabled: !Config.utilities.cards.quickToggles
-            checked: root.isToggleOn("gameMode")
-            onToggled: root.setToggleOn("gameMode", checked)
-        }
+            onAccepted: {
+                if (!selectedItem)
+                    return;
 
-        ToggleRow {
-            text: Tr.tr("Do not disturb")
-            subtext: Tr.tr("Silence notifications")
-            disabled: !Config.utilities.cards.quickToggles
-            checked: root.isToggleOn("dnd")
-            onToggled: root.setToggleOn("dnd", checked)
-        }
-
-        ToggleRow {
-            last: true
-            text: Tr.tr("VPN")
-            subtext: Tr.tr("Connect or disconnect the VPN")
-            disabled: !Config.utilities.cards.quickToggles
-            checked: root.isToggleOn("vpn")
-            onToggled: root.setToggleOn("vpn", checked)
-        }
-
-        ToggleRow {
-            text: qsTr("Quick Share")
-            subtext: qsTr("Send and receive files nearby")
-            disabled: !Config.utilities.cards.quickToggles
-            checked: root.isToggleOn("quickshare")
-            onToggled: root.setToggleOn("quickshare", checked)
-        }
-
-        ToggleRow {
-            text: qsTr("Wallpaper selector")
-            subtext: qsTr("Show the wallpaper picker menu")
-            disabled: !Config.utilities.cards.quickToggles
-            checked: root.isToggleOn("wallpaper")
-            onToggled: root.setToggleOn("wallpaper", checked)
-        }
-
-        ToggleRow {
-            text: qsTr("Bad Apple")
-            subtext: qsTr("Play the Bad Apple animation")
-            disabled: !Config.utilities.cards.quickToggles
-            checked: root.isToggleOn("badapple")
-            onToggled: root.setToggleOn("badapple", checked)
-        }
-
-        ToggleRow {
-            text: qsTr("Pause video wallpaper")
-            subtext: qsTr("Pause or resume the video wallpaper")
-            disabled: !Config.utilities.cards.quickToggles
-            checked: root.isToggleOn("pauseWallpaper")
-            onToggled: root.setToggleOn("pauseWallpaper", checked)
-        }
-
-        ToggleRow {
-            last: true
-            text: qsTr("Pause PiP")
-            subtext: qsTr("Pause or resume picture-in-picture")
-            disabled: !Config.utilities.cards.quickToggles
-            checked: root.isToggleOn("pipPause")
-            onToggled: root.setToggleOn("pipPause", checked)
+                root.targetConfig.utilities.quickToggles.insert({
+                    id: selectedItem,
+                    enabled: true
+                });
+                root.targetConfig.save();
+            }
         }
     }
 }

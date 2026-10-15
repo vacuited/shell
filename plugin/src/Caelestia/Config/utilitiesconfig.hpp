@@ -98,6 +98,7 @@ class UtilitiesConfig : public settings::ObjectNode {
             LIST_ENTRY(badapple, true),
             LIST_ENTRY(pauseWallpaper, true),
             LIST_ENTRY(pipPause, true),
+            LIST_ENTRY(search, true),
         }))
 };
 

@@ -101,6 +101,7 @@ Scope {
             root.freeze = false;
             root.closing = false;
             root.clipboardOnly = false;
+            root.searchMode = false;
             root.activeAsync = true;
         }
     }
@@ -114,6 +115,7 @@ Scope {
             root.freeze = true;
             root.closing = false;
             root.clipboardOnly = false;
+            root.searchMode = false;
             root.activeAsync = true;
         }
     }
@@ -127,6 +129,7 @@ Scope {
             root.freeze = false;
             root.closing = false;
             root.clipboardOnly = true;
+            root.searchMode = false;
             root.activeAsync = true;
         }
     }
@@ -140,6 +143,7 @@ Scope {
             root.freeze = true;
             root.closing = false;
             root.clipboardOnly = true;
+            root.searchMode = false;
             root.activeAsync = true;
         }
     }

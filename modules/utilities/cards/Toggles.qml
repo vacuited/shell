@@ -218,6 +218,18 @@ StyledRect {
                         }
                     }
                 }
+                DelegateChoice {
+                    roleValue: "search"
+                    delegate: Toggle {
+                        icon: "center_focus_strong"
+                        isToggle: false
+                        inactiveOnColour: Colours.palette.m3onSurfaceVariant
+                        onClicked: {
+                            root.screenState.utilities = false;
+                            Quickshell.execDetached(["caelestia", "search"]);
+                        }
+                    }
+                }
             }
         }
     }
