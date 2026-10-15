@@ -1,4 +1,18 @@
-my own customized build of [midnight-shell](https://github.com/dim-ghub/midnight-shell).
+<h1 align=center>Vacuited shell</h1>
+
+<div align=center>
+
+![GitHub last commit](https://img.shields.io/github/last-commit/vacuited/shell?style=for-the-badge&labelColor=101418&color=9ccbfb)&nbsp;![GitHub repo size](https://img.shields.io/github/repo-size/vacuited/shell?style=for-the-badge&labelColor=101418&color=d3bfe6)&nbsp;![GitHub license](https://img.shields.io/github/license/vacuited/shell?style=for-the-badge&labelColor=101418&color=96f1f1)
+
+A personal fork of [caelestia-dots/shell](https://github.com/caelestia-dots/shell) with the features we wanted on top of it.
+
+</div>
+
+> [!NOTE]
+> **Active tracking & personalized build.** This is just [midnight-shell](https://github.com/dim-ghub/midnight-shell) but improved and customized to *my* personal preferences. It is actively maintained and continuously updated with upstream [caelestia-shell](https://github.com/caelestia-dots/shell).
+
+> [!WARNING]
+> **Built for my machine first.** These features and hardware controls are tailored for my own setup (HP Victus 15) and are not guaranteed to work reliably everywhere. Behavior may differ on your system. Use at your own *risk*.
 
 ## changes
 
