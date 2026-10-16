@@ -30,6 +30,7 @@ A personal fork of [caelestia-dots/shell](https://github.com/caelestia-dots/shel
 | **Vertical Audio Popout** | Redesigned volume interface with vertical master slider and device cards | Filters background wallpaper audio streams; includes dynamic M3 tinted app icons |
 | **Google Lens Screen Search** | Regional Google Lens search button in Utilities (`center_focus_strong`) | Triggers area selection, uploads region, and opens results in default browser |
 | **Draggable Quick Toggles** | Nexus settings editor (`Panels > Utilities`) with drag-and-drop reordering | Custom positioning, visibility toggles, removal, and entry restoration dialog |
+| **Hyprshutdown Graceful Exits** | Graceful session termination dialog with Caelestia M3 cards and blur | Seamless application teardown before session `logout`, `shutdown`, and `reboot` |
 
 ### Inherited Midnight
 
@@ -97,6 +98,10 @@ A personal fork of [caelestia-dots/shell](https://github.com/caelestia-dots/shel
 - **Google Lens screen search**: Added a dedicated `center_focus_strong` quick toggle to the Utilities drawer to instantly capture screen regions and query Google Lens.
 - **Interactive drag-and-drop editor**: Nexus settings (`Nexus > Panels > Utilities`) now features a draggable `ListEditor` allowing complete reordering, toggling, removing, and re-adding of quick toggle buttons.
 - **Screenshot mode isolation**: Resolved an issue where `searchMode` persisted in `AreaPicker`, preventing standard screenshot tools from opening until shell reload.
+
+### Hyprshutdown Graceful Session Controls & Blur Layer Rules
+- **graceful session teardown**: integrated `hyprshutdown` across session controls (`logout`, `shutdown`, `reboot`), displaying active running applications in an M3 modal card before exiting.
+- **dynamic blur layer-rules**: configured real-time hyprland blur and ignore-alpha layer-rules for the `hyprshutdown` namespace in `Colours.qml`.
 
 ## Global Shortcuts
 
