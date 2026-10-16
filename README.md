@@ -8,9 +8,6 @@ A personal fork of [caelestia-dots/shell](https://github.com/caelestia-dots/shel
 
 </div>
 
-> [!NOTE]
-> **Active tracking & personalized build.** This is just [midnight-shell](https://github.com/dim-ghub/midnight-shell) but improved and customized to *my* personal preferences. It is actively maintained and continuously updated with upstream [caelestia-shell](https://github.com/caelestia-dots/shell).
-
 > [!WARNING]
 > **Built for my machine first.** These features and hardware controls are tailored for my own setup (HP Victus 15) and are not guaranteed to work reliably everywhere. Behavior may differ on your system. Use at your own *risk*.
 
@@ -180,65 +177,6 @@ caelestia shell -d -r
 All shell options are configured via `~/.config/caelestia/shell.json`.
 
 Per-monitor overrides can be placed in `~/.config/caelestia/monitors/<monitor_name>/shell.json`. Get connected monitor names via `hyprctl monitors -j | jq -r '.[].name'`.
-
-<details><summary>Example shell.json configuration</summary>
-
-```json
-{
-    "appearance": {
-        "anim": { "durations": { "scale": 1 } },
-        "transparency": { "enabled": true, "base": 0.85, "layers": 0.4 }
-    },
-    "general": {
-        "apps": {
-            "terminal": ["kitty"],
-            "explorer": ["atlas"],
-            "audio": ["pwvucontrol"],
-            "playback": ["mpv"]
-        },
-        "developerMode": true,
-        "battery": {
-            "criticalLevel": 3,
-            "warnLevels": [
-                { "level": 90, "title": "Battery High", "message": "Charger can be unplugged", "icon": "battery_android_frame_2" },
-                { "level": 20, "title": "Low battery", "message": "Consider plugging in charger", "icon": "battery_android_frame_2" },
-                { "level": 15, "title": "Battery Low", "message": "Plug in charger soon", "icon": "battery_android_frame_1" },
-                { "level": 5, "title": "Critical Battery", "message": "Plug in charger immediately!", "icon": "battery_android_alert", "critical": true }
-            ]
-        }
-    },
-    "services": {
-        "clockFormat": "TwentyFourHour",
-        "weatherUnits": "Celsius",
-        "sensorUnits": "Celsius",
-        "smartScheme": true,
-        "defaultPlayer": "Spotify",
-        "maxVolume": 1.5,
-        "audioIncrement": 0.02
-    },
-    "background": {
-        "videoWallpaperPaused": false,
-        "videoWallpaperSoundEnabled": false
-    },
-    "utilities": {
-        "enabled": true,
-        "quickToggles": [
-            { "id": "wifi", "enabled": true },
-            { "id": "bluetooth", "enabled": true },
-            { "id": "mic", "enabled": true },
-            { "id": "settings", "enabled": true },
-            { "id": "gameMode", "enabled": true },
-            { "id": "dnd", "enabled": true },
-            { "id": "vpn", "enabled": true },
-            { "id": "badapple", "enabled": true },
-            { "id": "pauseWallpaper", "enabled": true },
-            { "id": "wallpaper", "enabled": true },
-            { "id": "quickshare", "enabled": true },
-            { "id": "search", "enabled": true }
-        ]
-    }
-}
-```
 
 </details>
 
