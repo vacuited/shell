@@ -142,10 +142,8 @@ Item {
         stdout: StdioCollector {
             onStreamFinished: model._buildXmlMap(text)
         }
-        onExited: exitCode => {
-            if (exitCode !== 0)
-                xkbXmlEvdev.running = true;
-        }
+        onRunningChanged: if (!running && (typeof xkbXmlBase.exitCode !== "undefined") && xkbXmlBase.exitCode !== 0) // qmllint disable missing-property
+            xkbXmlEvdev.running = true
     }
 
     Process {
@@ -221,6 +219,7 @@ Item {
     Process {
         id: switchProc
 
-        onExited: fetchActiveLayouts.running = true
+        onRunningChanged: if (!running)
+            fetchActiveLayouts.running = true
     }
 }

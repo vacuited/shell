@@ -46,10 +46,10 @@ private:
 class SessionCommands : public settings::ObjectNode {
     CONFIG_NODE(SessionCommands, settings::ObjectNode)
 
-    CONFIG_PROPERTY(QStringList, logout, (QStringList{ u"hyprshutdown"_s, u"-t"_s, u"Logging out..."_s }))
-    CONFIG_PROPERTY(QStringList, shutdown, (QStringList{ u"hyprshutdown"_s, u"-t"_s, u"Shutting down..."_s, u"--post-cmd"_s, u"systemctl poweroff"_s }))
+    CONFIG_PROPERTY(QStringList, logout, ({ u"hyprshutdown"_s, u"-t"_s, u"Logging out..."_s }))
+    CONFIG_PROPERTY(QStringList, shutdown, ({ u"hyprshutdown"_s, u"-t"_s, u"Shutting down..."_s, u"--post-cmd"_s, u"systemctl poweroff"_s }))
     CONFIG_PROPERTY(QStringList, hibernate, { u"hibernate"_s })
-    CONFIG_PROPERTY(QStringList, reboot, (QStringList{ u"hyprshutdown"_s, u"-t"_s, u"Rebooting..."_s, u"--post-cmd"_s, u"systemctl reboot"_s }))
+    CONFIG_PROPERTY(QStringList, reboot, ({ u"hyprshutdown"_s, u"-t"_s, u"Rebooting..."_s, u"--post-cmd"_s, u"systemctl reboot"_s }))
 
 public:
     [[nodiscard]] const QMap<QString, QStringList>& customCommands() const { return m_customCommands; }

@@ -664,7 +664,7 @@ Singleton {
             }
         }
 
-        onExited: exitCode => {
+        onExited: exitCode => { // qmllint disable signal-handler-parameters
             root.connectExited = true;
 
             // Deferred so an auth URL parsed from the output wins the race.
@@ -733,7 +733,7 @@ Singleton {
             }
         }
 
-        onExited: {
+        onExited: { // qmllint disable signal-handler-parameters
             root.disconnectExited = true;
             statusCheckTimer.start();
         }
@@ -750,7 +750,7 @@ Singleton {
     Process {
         id: registerProc
 
-        onExited: exitCode => {
+        onExited: exitCode => { // qmllint disable signal-handler-parameters
             if (exitCode === 0) {
                 statusCheckTimer.start();
             }

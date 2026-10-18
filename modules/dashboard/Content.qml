@@ -102,7 +102,7 @@ Item {
 
             readonly property int currentIndex: root.screenState.dashboardTab
             readonly property Item currentItem: {
-                CUtils.dependency(repeater.count); // Trigger update on count change
+                repeater.count; // Trigger update on count change
                 return repeater.itemAt(currentIndex);
             }
 

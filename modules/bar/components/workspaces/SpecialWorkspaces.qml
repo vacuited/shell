@@ -21,7 +21,6 @@ Item {
 
     // (Removed root-level 'size' property that was causing the 'label is not defined' error)
 
-
     layer.enabled: true
     layer.effect: Mask {
         maskSource: mask

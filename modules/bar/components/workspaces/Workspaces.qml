@@ -23,7 +23,6 @@ StyledClippingRect {
             occ[ws.id] = ws.lastIpcObject.windows > 0;
         return occ;
     }
-
     readonly property int groupOffset: Math.floor((activeWsId - 1) / Config.bar.workspaces.shown) * Config.bar.workspaces.shown
 
     property real blur: onSpecial ? 1 : 0

@@ -283,7 +283,7 @@ Scope {
         Process {
             id: availProc
 
-            onExited: code => {
+            onExited: code => { // qmllint disable signal-handler-parameters
                 ctx.available = code === 0;
                 ctx.availProcExited(code);
             }

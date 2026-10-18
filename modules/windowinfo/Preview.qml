@@ -71,7 +71,7 @@ Item {
 
             captureSource: {
                 const client = root.client;
-                if (!client || !client.wayland) return null;
+                if (!client || !client.wayland) return null; // qmllint disable unresolved-type
                 const ipc = client.lastIpcObject;
                 if (ipc) {
                     if (ipc.mapped === false || ipc.hidden) return null;
