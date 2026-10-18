@@ -179,7 +179,7 @@ Item {
             anchors.fill: parent
 
             playing: Players.active?.isPlaying ?? false
-            speed: Audio.beatTracker.bpm / Config.general.mediaGifSpeedAdjustment // qmllint disable unresolved-type
+            speed: Audio.beatTracker.bpm / Config.general.mediaGifSpeedAdjustment
             source: Paths.absolutePath(Config.paths.mediaGif)
             asynchronous: true
             fillMode: AnimatedImage.PreserveAspectFit

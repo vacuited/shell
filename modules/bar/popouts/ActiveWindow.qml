@@ -91,7 +91,7 @@ Item {
                 id: preview
 
                 captureSource: {
-                    const top = Hypr.activeToplevel; // qmllint disable unresolved-type
+                    const top = Hypr.activeToplevel;
                     if (!top || !top.wayland) return null;
                     const ipc = top.lastIpcObject;
                     if (ipc) {
