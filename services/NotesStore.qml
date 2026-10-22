@@ -13,12 +13,18 @@ Singleton {
     property var trashTodos: []
     property string viewMode: "grid" // "grid" | "list"
     property string todoSortMode: "latest" // "latest" | "date"
+    property bool breakStreaks: true
     property bool loaded: false
+    property bool stateMissing: false
+    property bool fallbackSettled: false
     property int version: 0
 
     // Takeover / editing state for Notes detail view
     property var activeNote: null
     property bool isEditingNote: false
+    property bool shouldAnimateNoteOpen: false
+    signal noteOpened(string noteId)
+    signal requestFocusBody()
 
     // Takeover / editing state for Todo detail view
     property var activeTodo: null
@@ -33,18 +39,21 @@ Singleton {
         watchChanges: true
         printErrors: false
         onLoaded: root.loadData(text())
+        onLoadFailed: err => {
+            // No notes file yet = first run. Any other failure (e.g. permissions) is NOT
+            // treated as first run, so the store stays unloaded and never overwrites data.
+            if (err === FileViewError.FileNotFound) {
+                root.stateMissing = true;
+                root.tryFirstRun();
+            }
+        }
     }
 
     readonly property FileView fallbackFile: FileView {
         path: `${Quickshell.env("HOME")}/.config/caelestia/notes.default.json`
         printErrors: false
-        onLoaded: {
-            // First run (no notes file yet): load the starter notes from this template.
-            // A notes file that exists but is empty means the user cleared their board: leave it alone.
-            if (root.notes.length === 0 && root.todos.length === 0 && stateFile.text().trim().length === 0) {
-                root.loadData();
-            }
-        }
+        onLoaded: { root.fallbackSettled = true; root.tryFirstRun(); }
+        onLoadFailed: { root.fallbackSettled = true; root.tryFirstRun(); }
     }
 
     readonly property FileView backupFile: FileView {
@@ -72,6 +81,13 @@ Singleton {
         }
     }
 
+    // First run: notes.json does not exist yet. Wait until the starter template has also
+    // finished loading (or failed), then seed once. Never runs if the file exists.
+    function tryFirstRun() {
+        if (root.loaded || !root.stateMissing || !root.fallbackSettled) return;
+        root.loadData("");
+    }
+
     function loadData(content) {
         let raw = content !== undefined ? content : (stateFile ? stateFile.text() : "");
         let loadedNotes = null;
@@ -80,6 +96,7 @@ Singleton {
         let loadedMode = "grid";
         let loadedSortMode = "latest";
 
+        let parsedSuccessfully = false;
         let hadMissingShape = false;
         const todayStr = root.getTodayString();
         function ensureTaskShape(item) {
@@ -108,6 +125,7 @@ Singleton {
             try {
                 const data = JSON.parse(raw);
                 if (data && typeof data === "object") {
+                    parsedSuccessfully = true;
                     if (Array.isArray(data.notes)) loadedNotes = data.notes;
                     if (Array.isArray(data.todos)) loadedTodos = data.todos.map(ensureTaskShape);
                     if (Array.isArray(data.trashTodos)) loadedTrash = data.trashTodos.map(ensureTaskShape);
@@ -121,8 +139,8 @@ Singleton {
             }
         }
 
-        // Auto-heal / fallback from notes.default.json
-        if ((!loadedNotes || !loadedTodos) && fallbackFile) {
+        // Auto-heal / fallback from notes.default.json ONLY if state file was missing or unparseable
+        if (!parsedSuccessfully && (!loadedNotes || !loadedTodos) && fallbackFile) {
             try {
                 const fbText = fallbackFile.text();
                 if (fbText && fbText.trim().length > 0) {
@@ -143,7 +161,12 @@ Singleton {
             }
         }
 
-        root.notes = loadedNotes || [];
+        root.notes = (loadedNotes || []).filter(n => {
+            if (!n) return false;
+            const t = (n.title || "").trim();
+            const b = (n.body || "").trim();
+            return t.length > 0 || b.length > 0;
+        });
         root.todos = loadedTodos || [];
         root.trashTodos = loadedTrash || [];
         root.viewMode = loadedMode || "grid";
@@ -155,6 +178,7 @@ Singleton {
     }
 
     function requestSave() {
+        if (!root.loaded) return;
         if (saveDebounceTimer.running) {
             saveDebounceTimer.restart();
         } else {
@@ -163,11 +187,11 @@ Singleton {
     }
 
     function flushSave() {
-        if (!stateFile) return;
+        if (!stateFile || !root.loaded) return;
         saveDebounceTimer.stop();
 
         const currentText = stateFile.text();
-        if (backupFile && currentText && currentText.trim().length > 0) {
+        if (backupFile && currentText && currentText.trim().length > 20 && root.notes && root.notes.length > 0) {
             backupFile.setText(currentText);
         }
 
@@ -291,6 +315,7 @@ Singleton {
         if (root.activeNote && root.activeNote.id === id) {
             root.activeNote = null;
             root.isEditingNote = false;
+            root.shouldAnimateNoteOpen = false;
         }
         root.flushSave();
         return true;
@@ -299,17 +324,23 @@ Singleton {
     function openNote(note) {
         root.activeNote = note;
         root.isEditingNote = true;
+        root.shouldAnimateNoteOpen = true;
+        root.noteOpened(note ? (note.id || "") : "");
     }
 
     function createAndOpenNewNote() {
         const newNote = addNote("", "", false, "none");
         openNote(newNote);
+        Qt.callLater(() => {
+            root.requestFocusBody();
+        });
         return newNote;
     }
 
     function closeNote(autosave, directTitle, directBody, directShapes) {
         if (!root.activeNote) {
             root.isEditingNote = false;
+            root.shouldAnimateNoteOpen = false;
             return;
         }
 
@@ -336,6 +367,7 @@ Singleton {
 
         root.activeNote = null;
         root.isEditingNote = false;
+        root.shouldAnimateNoteOpen = false;
     }
 
     function setViewMode(mode) {
@@ -418,16 +450,31 @@ Singleton {
         return root.todos.filter(t => t && !t.done).length;
     }
 
+    function getStreak(id) {
+        root.version;
+        const t = (root.todos || []).find(t => t && t.id === id);
+        return t ? (t.streak || 0) : 0;
+    }
+
     function getRepeatingTrashTodos() {
         root.version;
-        return (root.todos || []).filter(t => t && t.done && t.repeating);
+        const fromTodos = (root.todos || []).filter(t => t && t.done && t.repeating);
+        const fromTrash = (root.trashTodos || []).filter(t => t && t.repeating);
+        return fromTodos.concat(fromTrash);
     }
 
     function getGeneralTrashTodos() {
         root.version;
         const generalCompleted = (root.todos || []).filter(t => t && t.done && !t.repeating);
-        const trashed = root.trashTodos || [];
-        return generalCompleted.concat(trashed);
+        const generalTrashed = (root.trashTodos || []).filter(t => t && !t.repeating);
+        return generalCompleted.concat(generalTrashed);
+    }
+
+    function isTodoTrashed(id) {
+        if (!id) return false;
+        if ((root.trashTodos || []).some(t => t && t.id === id)) return true;
+        const inTodos = (root.todos || []).find(t => t && t.id === id);
+        return !!(inTodos && inTodos.done);
     }
 
     function getCompletedAndTrashTodos() {
@@ -453,9 +500,9 @@ Singleton {
         const diffHours = Math.floor(diffMs / 3600000);
         const diffMins = Math.floor((diffMs % 3600000) / 60000);
         if (diffHours > 0) {
-            return qsTr(`Resetting in ${diffHours}h`);
+            return qsTr(`Resets in ${diffHours}h`);
         }
-        return qsTr(`Resetting in ${Math.max(1, diffMins)}m`);
+        return qsTr(`Resets in ${Math.max(1, diffMins)}m`);
     }
 
     function getRestingTimeText() {
@@ -476,6 +523,18 @@ Singleton {
             }
             return t;
         });
+        if (root.breakStreaks) {
+            const yesterdayStr = root.getOffsetDateString(-1);
+            for (let i = 0; i < updated.length; i++) {
+                const t = updated[i];
+                if (t && t.repeating && (t.streak || 0) > 0 && t.lastCompletedDate && t.lastCompletedDate < yesterdayStr) {
+                    const copy = Object.assign({}, t);
+                    copy.streak = 0;
+                    updated[i] = copy;
+                    changed = true;
+                }
+            }
+        }
         if (changed) {
             root.todos = updated;
             root.flushSave();
@@ -510,6 +569,10 @@ Singleton {
 
     function toggleTodo(id) {
         if (!id) return false;
+        // If in trashTodos, toggling restores it
+        if ((root.trashTodos || []).some(t => t && t.id === id)) {
+            return root.restoreTodo(id);
+        }
         let found = false;
         const todayStr = root.getTodayString();
         const updated = (root.todos || []).map(t => {
@@ -518,13 +581,13 @@ Singleton {
                 const copy = Object.assign({}, t);
                 const nextDone = !copy.done;
                 copy.done = nextDone;
-                if (copy.repeating) {
-                    if (nextDone) {
-                        if (copy.lastCompletedDate !== todayStr) {
-                            copy.streak = (copy.streak || 0) + 1;
-                            copy.lastCompletedDate = todayStr;
-                        }
+                if (copy.repeating && nextDone && copy.lastCompletedDate !== todayStr) {
+                    if (root.breakStreaks && copy.lastCompletedDate !== root.getOffsetDateString(-1)) {
+                        copy.streak = 1;
+                    } else {
+                        copy.streak = (copy.streak || 0) + 1;
                     }
+                    copy.lastCompletedDate = todayStr;
                 }
                 return copy;
             }
@@ -541,10 +604,10 @@ Singleton {
 
     function updateTodo(id, title, due, repeating) {
         if (!id) return false;
-        let found = false;
+        let foundInTodos = false;
         const updated = (root.todos || []).map(t => {
             if (t && t.id === id) {
-                found = true;
+                foundInTodos = true;
                 const copy = Object.assign({}, t);
                 if (title !== undefined) copy.title = title.slice(0, 300);
                 if (due !== undefined) copy.due = due;
@@ -554,7 +617,7 @@ Singleton {
             return t;
         });
 
-        if (found) {
+        if (foundInTodos) {
             root.todos = updated;
             if (root.activeTodo && root.activeTodo.id === id) {
                 root.activeTodo = Object.assign({}, root.activeTodo, {
@@ -566,31 +629,66 @@ Singleton {
             root.flushSave();
             return true;
         }
+
+        // Also check root.trashTodos
+        let foundInTrash = false;
+        const updatedTrash = (root.trashTodos || []).map(t => {
+            if (t && t.id === id) {
+                foundInTrash = true;
+                const copy = Object.assign({}, t);
+                if (title !== undefined) copy.title = title.slice(0, 300);
+                if (due !== undefined) copy.due = due;
+                if (repeating !== undefined) copy.repeating = !!repeating;
+                return copy;
+            }
+            return t;
+        });
+
+        if (foundInTrash) {
+            root.trashTodos = updatedTrash;
+            if (root.activeTodo && root.activeTodo.id === id) {
+                root.activeTodo = Object.assign({}, root.activeTodo, {
+                    title: title !== undefined ? title.slice(0, 300) : root.activeTodo.title,
+                    due: due !== undefined ? due : root.activeTodo.due,
+                    repeating: repeating !== undefined ? !!repeating : root.activeTodo.repeating
+                });
+            }
+            root.flushSave();
+            return true;
+        }
+
         return false;
     }
 
     function deleteTodo(id) {
         if (!id) return false;
         const target = (root.todos || []).find(t => t && t.id === id);
-        if (!target) return false;
+        if (target) {
+            const trashedItem = Object.assign({}, target, {
+                done: true,
+                deletedAt: Date.now()
+            });
 
-        const trashedItem = Object.assign({}, target, {
-            done: true,
-            deletedAt: Date.now()
-        });
+            const updatedTrash = Array.from(root.trashTodos || []);
+            updatedTrash.unshift(trashedItem);
+            root.trashTodos = updatedTrash;
 
-        const updatedTrash = Array.from(root.trashTodos || []);
-        updatedTrash.unshift(trashedItem);
-        root.trashTodos = updatedTrash;
-
-        root.lastDeletedTodo = target;
-        root.todos = (root.todos || []).filter(t => t && t.id !== id);
-        if (root.activeTodo && root.activeTodo.id === id) {
-            root.activeTodo = null;
-            root.isEditingTodo = false;
+            root.lastDeletedTodo = target;
+            root.todos = (root.todos || []).filter(t => t && t.id !== id);
+            if (root.activeTodo && root.activeTodo.id === id) {
+                root.activeTodo = null;
+                root.isEditingTodo = false;
+            }
+            root.flushSave();
+            return true;
         }
-        root.flushSave();
-        return true;
+
+        // If already in trashTodos and deleteTodo is invoked, permanently remove
+        if ((root.trashTodos || []).some(t => t && t.id === id)) {
+            return root.permanentlyDeleteTodo(id);
+        }
+
+        return false;
     }
 
     function openTodo(todo) {
@@ -679,6 +777,9 @@ Singleton {
             const updated = Array.from(root.todos || []);
             updated.unshift(restored);
             root.todos = updated;
+            if (root.activeTodo && root.activeTodo.id === id) {
+                root.activeTodo = restored;
+            }
             root.flushSave();
             return true;
         }
@@ -690,6 +791,9 @@ Singleton {
                 if (t && t.id === id) {
                     const copy = Object.assign({}, t);
                     copy.done = false;
+                    if (root.activeTodo && root.activeTodo.id === id) {
+                        root.activeTodo = copy;
+                    }
                     return copy;
                 }
                 return t;
@@ -704,12 +808,17 @@ Singleton {
         if (!id) return false;
         root.trashTodos = (root.trashTodos || []).filter(t => t && t.id !== id);
         root.todos = (root.todos || []).filter(t => t && t.id !== id);
+        if (root.activeTodo && root.activeTodo.id === id) {
+            root.activeTodo = null;
+            root.isEditingTodo = false;
+        }
         root.flushSave();
         return true;
     }
 
     function emptyAllTrash() {
-        root.trashTodos = [];
+        // Keep repeating habits in trashTodos, purge only non-repeating items
+        root.trashTodos = (root.trashTodos || []).filter(t => t && t.repeating);
         // Keep active todos AND completed repeating todos. Only purge completed non-repeating todos.
         root.todos = (root.todos || []).filter(t => !t.done || t.repeating);
         root.flushSave();
