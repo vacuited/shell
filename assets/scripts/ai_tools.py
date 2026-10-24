@@ -170,6 +170,12 @@ def tool_read_webpage(args):
   url = (args.get("url") or "").strip()
   if not url:
     return False, "ERROR: No URL provided."
+  if url.startswith("file://") or url.startswith("/"):
+    return (
+        False,
+        "ERROR: Local file URLs are not supported by read_webpage. This tool only"
+        " reads remote web pages (http/https).",
+    )
   if not url.startswith("http://") and not url.startswith("https://"):
     url = "https://" + url
 
@@ -227,7 +233,9 @@ def tool_take_screenshot():
 
   return (
       True,
-      f"Screenshot successfully captured to {final_path}",
+      "Screenshot successfully captured from active display and attached to"
+      " this conversation as an image for visual analysis. You can inspect the"
+      " attached image directly.",
       final_path,
       b64_data,
   )

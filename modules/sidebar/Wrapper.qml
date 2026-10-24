@@ -4,6 +4,7 @@ import QtQuick
 import Caelestia
 import Caelestia.Config
 import qs.components
+import qs.services
 
 Item {
     id: root
@@ -16,18 +17,28 @@ Item {
     readonly property bool shouldBeActive: screenState.sidebar && Config.sidebar.enabled
     property real offsetScale: shouldBeActive ? 0 : 1
 
+    readonly property bool isAiTab: root.visible
+        ? (content.item ? content.item.activeTab === "ai" : Visibilities.initialSidebarTab === "ai")
+        : Visibilities.initialSidebarTab === "ai"
+
     visible: offsetScale < 0.999
     property real slideAmount: (-implicitWidth - Config.border.thickness - Tokens.spacing.medium) * offsetScale
     anchors.leftMargin: slideAmount
     anchors.rightMargin: slideAmount
-    implicitWidth: Tokens.sizes.sidebar.width
+    implicitWidth: isAiTab
+        ? Math.round(Tokens.sizes.sidebar.width * 1.18)
+        : Tokens.sizes.sidebar.width
     opacity: 1 - offsetScale
+
+    Behavior on implicitWidth {
+        Anim { type: Anim.DefaultSpatial }
+    }
 
     Behavior on offsetScale {
         Anim {}
     }
 
-    property bool isStreaming: false
+    property bool isStreaming: AiEngine.isStreaming
 
     Loader {
         id: content
@@ -42,7 +53,7 @@ Item {
         active: root.shouldBeActive || root.visible || root.isStreaming
 
         sourceComponent: Content {
-            implicitWidth: Tokens.sizes.sidebar.width - content.anchors.leftMargin - content.anchors.margins
+            implicitWidth: root.implicitWidth - content.anchors.leftMargin - content.anchors.margins
             props: root.props
             screenState: root.screenState
             popouts: root.popouts

@@ -105,9 +105,34 @@ Scope {
         onPressed: {
             if (root.hasFullscreen)
                 return;
-            const visibilities = Visibilities.getForActive();
+            const screenState = ShellState.forActive();
+            if (screenState.sidebar && Visibilities.currentSidebarTab === "ai") {
+                screenState.sidebar = false;
+            } else {
+                Visibilities.initialSidebarTab = "ai";
+                screenState.sidebar = true;
+                Visibilities.requestAiFocus();
+            }
+        }
+    }
+
+    // qmllint disable unresolved-type
+    CustomShortcut {
+        // qmllint enable unresolved-type
+        name: "aiAssistantNew"
+        description: "Open AI Assistant with new chat"
+        onPressed: {
+            if (root.hasFullscreen)
+                return;
+            const screenState = ShellState.forActive();
             Visibilities.initialSidebarTab = "ai";
-            visibilities.sidebar = true;
+            Visibilities.pendingNewChat = true;
+            if (!screenState.sidebar) {
+                screenState.sidebar = true;
+            } else {
+                Visibilities.requestNewChat();
+            }
+            Visibilities.requestAiFocus();
         }
     }
 

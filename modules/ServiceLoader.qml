@@ -15,6 +15,7 @@ Scope {
         Weather.reload();
         AiProviders;
         AiTools;
+        AiEngine;
 
         if (GlobalConfig.utilities.vpn.enabled)
             VPN;
