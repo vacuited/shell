@@ -4,7 +4,7 @@ import Quickshell.Io
 import Caelestia
 import Caelestia.Config
 import Caelestia.Models
-import Caelestia.State
+import Caelestia.Multimedia
 import qs.components
 import qs.components.effects
 import qs.components.images
@@ -16,6 +16,11 @@ Item {
 
     required property FileSystemEntry modelData
     required property ScreenState screenState
+
+    readonly property string thumbPath: Wallpapers.getThumbnailPath(root.modelData.path)
+    readonly property string cleanThumbPath: String(root.thumbPath).split(/[?#]/)[0]
+    readonly property bool isGif: root.cleanThumbPath.toLowerCase().endsWith(".gif")
+    property int retryNonce: 0
 
     scale: 0.5
     opacity: 0
@@ -31,11 +36,9 @@ Item {
 
     Process {
         id: thumbGenerator
-        command: ["bash", "-c", `mkdir -p "$(dirname "${thumbImg.path.toString().replace("file://", "")}")" && ffmpeg -i "${root.modelData.path}" -vframes 1 -q:v 2 "${thumbImg.path.toString().replace("file://", "")}" -y`]
+        command: ["bash", "-c", `mkdir -p "$(dirname "${root.cleanThumbPath.replace("file://", "")}")" && ffmpeg -i "${root.modelData.path}" -vframes 1 -q:v 2 "${root.cleanThumbPath.replace("file://", "")}" -y`]
         onExited: {
-            let oldSource = thumbImg.path;
-            thumbImg.path = "";
-            thumbImg.path = oldSource;
+            root.retryNonce++;
         }
     }
 
@@ -78,24 +81,43 @@ Item {
             text: "image"
             color: Colours.tPalette.m3outline
             fontStyle: Tokens.font.icon.builders.extraLarge.scale(2).weight(Font.DemiBold).build()
-            visible: thumbImg.status !== Image.Ready
+            visible: root.isGif ? (gifLoader.item?.status !== Image.Ready) : !visImg.ready
         }
 
-        CachingAnimatedImage {
-            id: thumbImg
+        Visual {
+            id: visImg
+
             anchors.fill: parent
-            path: Wallpapers.getThumbnailPath(root.modelData.path)
-            smooth: !root.PathView.view.moving
-            playing: root.PathView.isCurrentItem
-            sourceSize: {
-                const dpr = (QsWindow.window as QsWindow)?.devicePixelRatio ?? 1;
-                return Qt.size(image.implicitWidth * dpr, image.implicitHeight * dpr);
+            visible: !root.isGif
+            playing: !root.isGif && root.PathView.isCurrentItem
+            source: {
+                void root.retryNonce;
+                return root.isGif ? "" : root.cleanThumbPath;
             }
-            onStatusChanged: {
-                if (status === Image.Error && Images.isVideo(root.modelData.name)) {
+            onReadyChanged: {
+                if (!ready && Images.isVideo(root.modelData.name) && !CUtils.fileExists(root.cleanThumbPath)) {
                     if (!thumbGenerator.running) {
                         thumbGenerator.running = true;
                     }
+                }
+            }
+        }
+
+        Loader {
+            id: gifLoader
+
+            anchors.fill: parent
+            active: root.isGif
+            visible: active
+
+            sourceComponent: CachingAnimatedImage {
+                anchors.fill: parent
+                path: root.thumbPath
+                smooth: !root.PathView.view.moving
+                playing: root.PathView.isCurrentItem
+                sourceSize: {
+                    const dpr = (QsWindow.window as QsWindow)?.devicePixelRatio ?? 1;
+                    return Qt.size(image.implicitWidth * dpr, image.implicitHeight * dpr);
                 }
             }
         }

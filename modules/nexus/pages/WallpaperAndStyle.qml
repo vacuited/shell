@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 import Caelestia
 import Caelestia.Components
 import Caelestia.Config
@@ -147,6 +148,10 @@ PageBase {
 
                     anchors.fill: parent
                     source: Wallpapers.getThumbnailPath(Wallpapers.current)
+                    sourceSize: {
+                        const dpr = (QsWindow.window as QsWindow)?.devicePixelRatio ?? 1;
+                        return Qt.size(Math.max(1, Math.round(wallWrapper.implicitWidth * dpr)), Math.max(1, Math.round(wallWrapper.implicitHeight * dpr)));
+                    }
                     preventInit: wallIndicatorLoader.opacity > 0
                     fadeOutAnim: Anim.DefaultEffects
                     fadeInAnim: Anim.SlowEffects

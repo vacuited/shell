@@ -529,23 +529,19 @@ PageBase {
                     }
 
                     // Analyze color when image loads and sorting is active
-                    onSourceChanged: {
-                        if (root.sortColor !== "transparent" && modelData && modelData.parentDir === Paths.wallsdir) {
-                            colorAnalyzer.source = Wallpapers.getThumbnailPath(modelData.path);
-                        }
-                    }
+                    Loader {
+                        active: root.sortColor !== "transparent" && wallItem.modelData !== null && wallItem.modelData.parentDir === Paths.wallsdir
 
-                    ImageAnalyser {
-                        id: colorAnalyzer
-
-                        rescaleSize: 64
-                        onDominantColourChanged: {
-                            if (modelData) {
-                                root.wallpaperColors[modelData.path] = dominantColour;
-                                // Update distance for this wallpaper
-                                if (root.sortColor !== "transparent") {
-                                    root.colorDistances[modelData.path] = root.colorDistance(dominantColour, root.sortColor);
-                                    root.sortVersion++;
+                        sourceComponent: ImageAnalyser {
+                            source: Wallpapers.getThumbnailPath(wallItem.modelData.path)
+                            rescaleSize: 64
+                            onDominantColourChanged: {
+                                if (wallItem.modelData) {
+                                    root.wallpaperColors[wallItem.modelData.path] = dominantColour;
+                                    if (root.sortColor !== "transparent") {
+                                        root.colorDistances[wallItem.modelData.path] = root.colorDistance(dominantColour, root.sortColor);
+                                        root.sortVersion++;
+                                    }
                                 }
                             }
                         }

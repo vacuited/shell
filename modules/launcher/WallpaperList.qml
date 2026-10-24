@@ -129,8 +129,12 @@ PathView {
         id: previewTimer
         interval: 100
         onTriggered: {
-            if (root.currentItem)
-                Wallpapers.preview((root.currentItem as WallpaperItem).modelData.path);
+            if (root.currentItem) {
+                const path = (root.currentItem as WallpaperItem).modelData.path;
+                if (!Wallpapers.showPreview && Wallpapers.isCurrent(path))
+                    return;
+                Wallpapers.preview(path);
+            }
         }
     }
 
