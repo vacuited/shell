@@ -19,9 +19,10 @@ A personal fork of [caelestia-dots/shell](https://github.com/caelestia-dots/shel
 | :--- | :--- | :--- |
 | **Wallpaper Engine Auto-Pause** | Automatically suspends `linux-wallpaperengine` (`SIGSTOP`) behind windows or on battery power | Drops CPU/GPU usage to 0%, resumes instantly (`SIGCONT`) upon desktop exposure |
 | **Zero-Flash WE Transitions** | Preserves previous frame during engine startup (`holdSource`) | Eliminates black screens, low-res flashes, and stutter between live wallpapers |
+| **GPU-Cached `.ktx` Thumbnails** | BC3 GPU-compressed `.ktx` thumbnail pipeline (`Caelestia.Multimedia`) | Instantaneous zero-lag wallpaper picker loading even with 6K PNG libraries |
 | **Caelestia Notes Integration** | Built-in notes workspace pinned to the dashboard and accessible via launcher | Persistent store (`NotesStore.qml`), markdown editing, dynamic M3 surface colors |
 | **Hourly Weather Forecast** | Animated 7-day temperature curve with rain probability and conditions | Collapsed behind a fluid sliding toggle pill (`[ Hourly \| 7-Day ]`) with cached tabs |
-| **AI Assistant & Smart Tools** | Multi-turn sidebar assistant with system tool execution and long-term memory | Vision screenshots, clipboard read/write, Spotify controls, reminders, Tavily search |
+| **Lilith AI Assistant & Sidebar** | Modular sidebar assistant with headless `AiEngine` and dynamic `+18%` width expansion | Slash commands (`/new`, `/model`, `/tools`, `/history`), `<think>` blocks, tool cards, Vision, Spotify, Tavily |
 | **HP Victus Hardware Controls** | Live fan RPM gauges, platform profiles, refresh rate, and Intel Turbo Boost | Dedicated hero dashboard tab and battery popout toggle backed by `vacuited-cli` |
 | **Keep Awake Inhibitor** | Tri-state idle inhibitor toggle (`[ Off \| Prevent Sleep \| Prevent Lock & Sleep ]`) | Utilities card integration for presentations, long downloads, or active monitoring |
 | **Vertical Audio Popout** | Redesigned volume interface with vertical master slider and device cards | Filters background wallpaper audio streams; includes dynamic M3 tinted app icons |
@@ -46,11 +47,11 @@ A personal fork of [caelestia-dots/shell](https://github.com/caelestia-dots/shel
 
 ## Highlights & Changes
 
-### Wallpaper Engine Zero-Flicker & Battery Suspend
+### Wallpaper Engine Zero-Flicker, Battery Suspend & `.ktx` GPU Cache
 - Automatically suspends `linux-wallpaperengine` (`SIGSTOP`) when covered by windows or on battery power to reduce CPU/GPU usage to 0%, resuming instantly (`SIGCONT`) when visible.
 - Preserves the previous wallpaper frame during the 1.2s engine startup delay to eliminate black frames and stretched low-res thumbnail flashes.
-- Refined blurred placeholder transitions.
-- Animated GIF thumbnails play only on the active/centered carousel item to conserve resources.
+- Uses `Caelestia.Multimedia` (`Visual`) with `rgbcx` BC3 GPU-compressed `.ktx` texture caching (`~/.cache/caelestia/multimedia/image/`) for instant, zero-lag thumbnail rendering in both the Launcher and Nexus wallpaper pickers.
+- Animated GIF thumbnails (`CachingAnimatedImage`) play only on the active/centered carousel item to conserve resources.
 - Automatically falls back to the previous working wallpaper if an engine crash occurs.
 
 ### Caelestia Notes
@@ -64,14 +65,13 @@ A personal fork of [caelestia-dots/shell](https://github.com/caelestia-dots/shel
 
 ![weather preview](assets/weather.png)
 
-### AI Assistant & Smart Tools
-- **Nexus subpage configuration**: Provider and tool configuration panels directly in Nexus (`Nexus > panels > sidebar > AI providers` / `AI tools`).
-- **Multi-provider support**: Custom OpenAI-compatible endpoints, OpenRouter integration, dynamic model selection, and credentials stored in `~/.config/caelestia/ai_providers.json`.
-- **System-integrated tool suite**: Vision screenshots (`grim` + `hyprctl`), clipboard read/write (`wl-paste` / `wl-copy`), media playback (`playerctl`), system metrics, and Tavily web search backed by `~/.config/caelestia/ai_tools.json`.
-- **Spotify integration**: Dedicated `spotify_search`, `spotify_play`, and `spotify_status` tools.
-- **Reminders & notifications**: Scheduled reminders and immediate desktop notifications backed by `~/.config/caelestia/ai_reminders.json`.
-- **Long-term memory**: Persistent user preferences and factual memory store in `~/.config/caelestia/ai_memory.json`.
-- **Chat history persistence**: Reliable session storage in `~/.config/caelestia/ai_chats.json` with eager flushes on drawer close.
+### Lilith AI Assistant & Sidebar Architecture
+- **Headless background engine (`AiEngine.qml`)**: Decouples SSE/NDJSON streaming, multi-turn `ai_tools.py` execution, `<think>` reasoning tag extraction, and v2 session persistence (`~/.config/caelestia/ai_chats.json`) from sidebar drawer open/close lifecycles.
+- **Dynamic sidebar width & expanding pill header**: Smoothly expands the sidebar width by `+18%` (`430px` → `507px`) when switching to the `Lilith` tab, paired with a centered dynamic expanding pill navigation header (`Notifications`, `Lilith`, `News`).
+- **Modular UI & slash command palette**: Decomposed into dedicated components (`ThinkingBlock`, `ToolCallBlock`, `MessageBubble` with 1-click `wl-copy` code blocks, `ChatView` with intelligent scroll-lock, `LilithMascot`, `PromptComposer` with docked model chip & tool toggles, `SlashMenu` for `/new`, `/reset`, `/clear`, `/history`, `/model`, `/tools`, `ModelPickerModal`, and `HistorySheet`).
+- **Dedicated global shortcuts**: Instant toggle & input auto-focus via `caelestia:aiAssistant` (`SUPER + A`) and fresh chat creation via `caelestia:aiAssistantNew` (`SUPER + SHIFT + A`).
+- **Nexus subpage configuration**: Provider and tool configuration panels directly in Nexus (`Nexus > Panels > Sidebar > AI Providers` / `AI Tools`).
+- **Multi-provider & smart tool suite**: Custom OpenAI-compatible endpoints, OpenRouter, Gemini, Vision screenshots (`grim` + `hyprctl`), clipboard read/write (`wl-paste` / `wl-copy`), Spotify (`spotify_search`, `spotify_play`, `spotify_status`), reminders (`~/.config/caelestia/ai_reminders.json`), long-term memory (`~/.config/caelestia/ai_memory.json`), and Tavily web search.
 
 ### Hardware Controls
 - **Hero fan telemetry**: Dedicated CPU and GPU fan cards featuring live spinning fan discs, RPM counters, temperature pills, and live GPU wattage.
@@ -109,7 +109,9 @@ All shell toggles and menus can be bound via Hyprland [global shortcuts](https:/
 | `caelestia:launcher` | Toggle application launcher |
 | `caelestia:dashboard` | Toggle system dashboard |
 | `caelestia:controlCenter` | Open control center / quick toggles |
-| `caelestia:sidebar` | Toggle AI assistant sidebar |
+| `caelestia:sidebar` | Toggle notification / AI / news sidebar |
+| `caelestia:aiAssistant` | Toggle Lilith AI assistant tab with instant input focus |
+| `caelestia:aiAssistantNew` | Open Lilith AI assistant on a fresh chat session |
 | `caelestia:utilities` | Toggle utilities drawer |
 | `caelestia:session` | Toggle power / session menu |
 | `caelestia:emoji` | Open emoji and glyph picker |
@@ -130,6 +132,8 @@ bind = SUPER, RETURN, global, caelestia:launcher
 bind = SUPER, S, global, caelestia:controlCenter
 bind = SUPER, D, global, caelestia:dashboard
 bind = SUPER, N, global, caelestia:sidebar
+bind = SUPER, A, global, caelestia:aiAssistant
+bind = SUPER SHIFT, A, global, caelestia:aiAssistantNew
 bind = SUPER, M, global, caelestia:utilities
 
 # Sub-tools & pickers
