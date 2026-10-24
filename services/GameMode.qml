@@ -7,13 +7,19 @@ import Quickshell.Io
 import Caelestia
 import Caelestia.Config
 import Caelestia.I18n
+import Caelestia.State
 import qs.services
 import qs.utils
 
 Singleton {
     id: root
 
-    property alias enabled: props.enabled
+    property bool enabled: RuntimeState.gameMode
+
+    onEnabledChanged: {
+        if (RuntimeState.gameMode !== enabled)
+            RuntimeState.gameMode = enabled;
+    }
 
     property bool _autoEnabled: false
 
@@ -22,7 +28,7 @@ Singleton {
         if (!GlobalConfig.utilities.gameMode.autoEnable || regexes.length === 0) {
             if (_autoEnabled) {
                 _autoEnabled = false;
-                props.enabled = false;
+                RuntimeState.gameMode = false;
             }
             return;
         }
@@ -37,7 +43,7 @@ Singleton {
 
         if (_autoEnabled !== isRunning) {
             _autoEnabled = isRunning;
-            props.enabled = isRunning;
+            RuntimeState.gameMode = isRunning;
         }
     }
 
@@ -54,7 +60,7 @@ Singleton {
         function onAutoEnableRegexesChanged(): void { root.evaluateAutoEnable(); }
     }
 
-    function setDynamicConfs(): void {
+    function applyGameMode(): void {
         const gameModeConfig = GlobalConfig.utilities.gameMode;
         let options = {};
         if (gameModeConfig.disableHyprlandAnimations) options["animations:enabled"] = 0;
@@ -67,7 +73,7 @@ Singleton {
             options["decoration:rounding"] = 0;
         }
         options["general:allow_tearing"] = 1;
-        
+
         if (gameModeConfig.disableWindowTransparency) {
             options["decoration:active_opacity"] = 1;
             options["decoration:inactive_opacity"] = 1;
@@ -85,30 +91,34 @@ Singleton {
         }
     }
 
-    onEnabledChanged: {
-        if (enabled) {
-            setDynamicConfs();
+    function syncState(enableDisable: bool): void {
+        if (RuntimeState.gameMode) {
+            root.applyGameMode();
             if (GlobalConfig.utilities.toasts.gameModeChanged)
                 Toaster.toast(Tr.tr("Game mode enabled"), Tr.tr("Disabled Hyprland animations, blur, gaps and shadows"), "gamepad");
-        } else {
+        } else if (enableDisable) {
             Hypr.extras.message("reload");
             if (GlobalConfig.utilities.toasts.gameModeChanged)
                 Toaster.toast(Tr.tr("Game mode disabled"), Tr.tr("Hyprland settings restored"), "gamepad");
         }
     }
 
-    PersistentProperties {
-        id: props
+    Component.onCompleted: syncState(false)
 
-        property bool enabled: Hypr.options["animations:enabled"] === 0 // qmllint disable missing-property
+    Connections {
+        function onGameModeChanged(): void {
+            if (root.enabled !== RuntimeState.gameMode)
+                root.enabled = RuntimeState.gameMode;
+            root.syncState(true);
+        }
 
-        reloadableId: "gameMode"
+        target: RuntimeState
     }
 
     Connections {
         function onConfigReloaded(): void {
-            if (props.enabled)
-                root.setDynamicConfs();
+            if (RuntimeState.gameMode)
+                root.applyGameMode();
         }
 
         target: Hypr
@@ -116,19 +126,19 @@ Singleton {
 
     IpcHandler {
         function isEnabled(): bool {
-            return props.enabled;
+            return RuntimeState.gameMode;
         }
 
         function toggle(): void {
-            props.enabled = !props.enabled;
+            RuntimeState.gameMode = !RuntimeState.gameMode;
         }
 
         function enable(): void {
-            props.enabled = true;
+            RuntimeState.gameMode = true;
         }
 
         function disable(): void {
-            props.enabled = false;
+            RuntimeState.gameMode = false;
         }
 
         target: "gameMode"

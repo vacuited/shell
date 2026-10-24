@@ -1,14 +1,15 @@
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import Caelestia
 import Caelestia.Config
 import Caelestia.Models
+import Caelestia.State
 import qs.components
 import qs.components.effects
 import qs.components.images
 import qs.services
 import qs.utils
-import Quickshell.Io
 
 Item {
     id: root
@@ -39,6 +40,8 @@ Item {
     }
 
     StateLayer {
+        id: stateLayer
+
         radius: Tokens.rounding.large
         onClicked: {
             Wallpapers.setWallpaper(root.modelData.path);
@@ -59,7 +62,7 @@ Item {
         }
     }
 
-    StyledClippingRect {
+    ClipRect {
         id: image
 
         anchors.horizontalCenter: parent.horizontalCenter

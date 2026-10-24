@@ -7,25 +7,50 @@ pragma ComponentBehavior: Bound
 //@ pragma DefaultEnv QT_QUICK_FLICKABLE_WHEEL_DECELERATION=10000
 
 import QtQml
+import QtQuick
 import Quickshell
+import Quickshell.Services.SystemTray
 import Caelestia.Config
 import qs.components.containers
-import qs.utils
+import qs.daemons
+import qs.modules
+import qs.modules.areapicker
+import qs.modules.background
+import qs.modules.drawers
+import qs.modules.lock
+import qs.modules.polkit
+import qs.modules.shimeji
 import qs.services
-import "modules"
-import "modules/drawers"
-import "modules/background"
-import "modules/shimeji"
-import "modules/areapicker"
-import "modules/lock"
-import QtQuick
-import "modules/polkit"
-import Quickshell.Services.SystemTray
+import qs.utils
 
 ShellRoot {
     id: root
 
     settings.watchFiles: false
+
+    Component.onCompleted: {
+        // Force certain singletons to load on shell init instead of lazily
+        IdleInhibitor;
+        GameMode;
+        Notifs;
+        Players;
+        Brightness;
+        AiProviders;
+        AiTools;
+        AiEngine;
+
+        if (GlobalConfig.utilities.vpn.enabled)
+            VPN;
+
+        Qt.callLater(() => {
+            Weather.reload();
+            PastafarianCalendar.reload();
+        });
+    }
+
+    FontLoader {
+        source: Quickshell.shellPath("assets/google-sans-flex/GoogleSansFlex-VariableFont_GRAD,ROND,opsz,slnt,wdth,wght.ttf")
+    }
 
     Binding {
         target: ShellState
@@ -33,9 +58,7 @@ ShellRoot {
         value: root
     }
 
-    GSFLoader {}
-    ServiceLoader {}
-
+    // Modules
     Background {}
     DesktopLyricsOverlay {}
     BadAppleOverlay {}
@@ -55,14 +78,8 @@ ShellRoot {
         }
     }
 
+    // Daemons
     Shortcuts {}
-
-    Component.onCompleted: {
-        Qt.callLater(() => {
-            Weather.reload();
-            PastafarianCalendar.reload();
-        });
-    }
     BatteryMonitor {}
     IdleMonitors {
         lock: lock
