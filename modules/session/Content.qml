@@ -99,6 +99,14 @@ Column {
             root.screenState.session = false;
             if (!SessionManager.exec(command)) {
                 if (command.length > 0) {
+                    if (command[0] === "hyprshutdown") {
+                        const postIdx = command.indexOf("--post-cmd");
+                        const fallbackCmd = (postIdx !== -1 && postIdx + 1 < command.length) ? command[postIdx + 1] : "hyprctl dispatch exit";
+                        Quickshell.execDetached(["sh", "-c", 'if command -v hyprshutdown >/dev/null 2>&1; then exec "$@"; else eval "$CAELESTIA_FALLBACK"; fi', "sh", ...command], {
+                            environment: { "CAELESTIA_FALLBACK": fallbackCmd }
+                        });
+                        return;
+                    }
                     let hasShellOp = command.some(arg => arg === "&&" || arg === "||" || arg === ";" || arg === "|" || arg === ">" || arg === "<");
                     if (hasShellOp || command.length === 1) {
                         Quickshell.execDetached(["sh", "-c", command.join(" ")]);

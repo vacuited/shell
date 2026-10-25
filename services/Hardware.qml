@@ -19,7 +19,7 @@ Singleton {
     property real gpuPower: 0.0
     property string gpuState: "D3 Sleep"
     property bool turbo: true
-    property bool isSupported: true
+    property bool isSupported: false
     property bool isBusy: false
 
     function refreshStatus(): void {
@@ -58,11 +58,21 @@ Singleton {
     Process {
         id: statusProc
         command: ["caelestia", "hardware", "status", "--json"]
+        onExited: (exitCode) => {
+            if (exitCode !== 0) {
+                root.isSupported = false;
+                pollTimer.running = false;
+            }
+        }
         stdout: StdioCollector {
             onStreamFinished: {
                 try {
                     const data = JSON.parse(text);
-                    if (data.supported !== undefined) root.isSupported = Boolean(data.supported);
+                    if (data.supported !== undefined) {
+                        root.isSupported = Boolean(data.supported);
+                        if (!root.isSupported)
+                            pollTimer.running = false;
+                    }
                     if (!writeProc.running) {
                         if (data.profile) root.profile = data.profile;
                         if (data.fanMode) root.fanMode = data.fanMode;

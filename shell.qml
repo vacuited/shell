@@ -38,6 +38,7 @@ ShellRoot {
         AiProviders;
         AiTools;
         AiEngine;
+        HyprSunset;
 
         if (GlobalConfig.utilities.vpn.enabled)
             VPN;

@@ -27,6 +27,7 @@ A personal fork of [caelestia-dots/shell](https://github.com/caelestia-dots/shel
 | **Keep Awake Inhibitor** | Tri-state idle inhibitor toggle (`[ Off \| Prevent Sleep \| Prevent Lock & Sleep ]`) | Utilities card integration for presentations, long downloads, or active monitoring |
 | **Vertical Audio Popout** | Redesigned volume interface with vertical master slider and device cards | Filters background wallpaper audio streams; includes dynamic M3 tinted app icons |
 | **Google Lens Screen Search** | Regional Google Lens search button in Utilities (`center_focus_strong`) | Triggers area selection, uploads region, and opens results in default browser |
+| **Nexus Night Mode** | Blue-light filter quick toggle (`dark_mode`) & live color temperature slider (`1000 K – 6500 K`) | Flicker-free live gamma adjustment via `hyprsunset` daemon and `hyprctl hyprsunset` IPC |
 | **Draggable Quick Toggles** | Nexus settings editor (`Panels > Utilities`) with drag-and-drop reordering | Custom positioning, visibility toggles, removal, and entry restoration dialog |
 | **Hyprshutdown Graceful Exits** | Graceful session termination dialog with Caelestia M3 cards and blur | Seamless application teardown before session `logout`, `shutdown`, and `reboot` |
 
@@ -192,4 +193,5 @@ Per-monitor overrides can be placed in `~/.config/caelestia/monitors/<monitor_na
 | **Midnight Shell** | [dim-ghub/midnight-shell](https://github.com/dim-ghub/midnight-shell) | Base fork with initial styling, launchers, and extensions |
 | **Caelestia Notes** | [Denzils-repo/Caelestia_Notes](https://github.com/Denzils-repo/Caelestia_Notes) | Notes tab component and store logic |
 | **Caelestia Hourly Weather** | [ItsXyzzy/Caelestia-Hourly-Weather](https://github.com/ItsXyzzy/Caelestia-Hourly-Weather) | Hourly forecast and spline temperature curve |
+| **Nexus Night Mode** | [AEON-mod/Scripts](https://github.com/AEON-mod/Scripts/tree/main/Nexus-NightMode) | `HyprSunset` service, quick toggle, and live temperature slider |
 | **Quickshell** | [outfoxxed/quickshell](https://quickshell.outfoxxed.me) | Flexible Qt6 desktop shell toolkit |

@@ -337,18 +337,25 @@ Item {
             id: profiles
 
             property string current: {
-                if (Hardware.profile === "cool")
-                    return cool.icon;
-                if (Hardware.profile === "quiet" || PowerProfiles.profile === PowerProfile.PowerSaver)
+                if (Hardware.isSupported) {
+                    if (Hardware.profile === "cool")
+                        return cool.icon;
+                    if (Hardware.profile === "quiet")
+                        return saver.icon;
+                    if (Hardware.profile === "performance")
+                        return perf.icon;
+                    return balance.icon;
+                }
+                if (PowerProfiles.profile === PowerProfile.PowerSaver)
                     return saver.icon;
-                if (Hardware.profile === "performance" || PowerProfiles.profile === PowerProfile.Performance)
+                if (PowerProfiles.profile === PowerProfile.Performance)
                     return perf.icon;
                 return balance.icon;
             }
 
             Layout.alignment: Qt.AlignHCenter
 
-            implicitWidth: saver.implicitHeight + cool.implicitHeight + balance.implicitHeight + perf.implicitHeight + Tokens.padding.medium * 2 + Tokens.spacing.largeIncreased * 3
+            implicitWidth: saver.implicitHeight + (Hardware.isSupported ? cool.implicitHeight + Tokens.spacing.largeIncreased : 0) + balance.implicitHeight + perf.implicitHeight + Tokens.padding.medium * 2 + Tokens.spacing.largeIncreased * 2
             implicitHeight: Math.max(saver.implicitHeight, cool.implicitHeight, balance.implicitHeight, perf.implicitHeight) + Tokens.padding.small
 
             color: Colours.tPalette.m3surfaceContainer
@@ -412,6 +419,7 @@ Item {
             Profile {
                 id: cool
 
+                visible: Hardware.isSupported
                 anchors.verticalCenter: parent.verticalCenter
                 anchors.left: saver.right
                 anchors.leftMargin: Tokens.spacing.largeIncreased
@@ -425,7 +433,7 @@ Item {
                 id: balance
 
                 anchors.verticalCenter: parent.verticalCenter
-                anchors.left: cool.right
+                anchors.left: Hardware.isSupported ? cool.right : saver.right
                 anchors.leftMargin: Tokens.spacing.largeIncreased
 
                 icon: "balance"
@@ -472,7 +480,8 @@ Item {
             radius: Tokens.rounding.full
             color: profiles.current === parent.icon ? Colours.palette.m3onPrimary : Colours.palette.m3onSurface
             onClicked: {
-                Hardware.setProfile(profItem.targetProfile);
+                if (Hardware.isSupported)
+                    Hardware.setProfile(profItem.targetProfile);
                 if (profItem.fallbackProfile !== -1) {
                     PowerProfiles.profile = profItem.fallbackProfile;
                 }

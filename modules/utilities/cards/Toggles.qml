@@ -31,6 +31,8 @@ StyledRect {
 
             if (item.id === "vpn")
                 return GlobalConfig.utilities.vpn.selectedProvider.length > 0;
+            if (item.id === "nightMode")
+                return HyprSunset.available;
 
             return true;
         });
@@ -144,6 +146,14 @@ StyledRect {
                         icon: "notifications_off"
                         checked: PersistentState.doNotDisturb
                         onClicked: PersistentState.doNotDisturb = !PersistentState.doNotDisturb
+                    }
+                }
+                DelegateChoice {
+                    roleValue: "nightMode"
+                    delegate: Toggle {
+                        icon: "dark_mode"
+                        checked: HyprSunset.active
+                        onClicked: HyprSunset.toggle()
                     }
                 }
                 DelegateChoice {

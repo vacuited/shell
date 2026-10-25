@@ -18,6 +18,7 @@ PageBase {
         settings: qsTr("Settings"),
         gameMode: qsTr("Game mode"),
         dnd: qsTr("Do not disturb"),
+        nightMode: qsTr("Night mode"),
         vpn: qsTr("VPN"),
         quickshare: qsTr("Quick Share"),
         wallpaper: qsTr("Wallpaper selector"),
@@ -160,6 +161,29 @@ PageBase {
                     enabled: true
                 });
                 root.targetConfig.save();
+            }
+        }
+
+        // Night Mode
+        SectionHeader {
+            visible: HyprSunset.available
+            text: qsTr("Night mode")
+        }
+
+        SliderRow {
+            readonly property int minTemp: 1000
+            readonly property int maxTemp: 6500
+
+            visible: HyprSunset.available
+            first: true
+            last: true
+            icon: "dark_mode"
+            label: qsTr("Color temperature")
+            valueLabel: HyprSunset.temperature + qsTr("K")
+            value: (HyprSunset.temperature - minTemp) / (maxTemp - minTemp)
+            onMoved: v => {
+                const temp = Math.round(minTemp + v * (maxTemp - minTemp));
+                HyprSunset.start(temp);
             }
         }
     }
