@@ -82,6 +82,16 @@ CustomMouseArea {
         return y > screen.height - Math.max(Config.border.minThickness, Config.border.thickness + panelHeight) - (isCorner ? Config.border.rounding : 0) && withinPanelWidth(panel, x, y);
     }
 
+    function inNotch(x: real, y: real): bool {
+        if (!panels.notch || panels.notch.offsetScale >= 1)
+            return false;
+        const topTrigger = Math.max(Config.border.minThickness, Config.border.thickness);
+        const nx = panels.leftMargin + panels.notch.x;
+        const ny = panels.topMargin + panels.notch.y;
+        const nh = panels.notch.height * (1 - panels.notch.offsetScale);
+        return x >= nx && x <= nx + panels.notch.width && y >= topTrigger && y <= ny + nh + Tokens.padding.small;
+    }
+
     function onWheel(event: WheelEvent): void {
         if (fullscreen)
             return;
@@ -94,7 +104,11 @@ CustomMouseArea {
     acceptedButtons: fullscreen ? Qt.NoButton : Qt.AllButtons
     hoverEnabled: true
 
-    onPressed: event => dragStart = Qt.point(event.x, event.y)
+    onPressed: event => {
+        dragStart = Qt.point(event.x, event.y);
+        if (Config.notch.expandMode === "click" && panels.notch.hasControls && inNotch(event.x, event.y))
+            panels.notch.toggleExpanded();
+    }
     onContainsMouseChanged: {
         if (!containsMouse) {
             // Only hide if not activated by shortcut
@@ -108,6 +122,9 @@ CustomMouseArea {
 
             if (!utilitiesShortcutActive)
                 screenState.utilities = false;
+
+            if (panels.notch)
+                panels.notch.expanded = false;
 
             if (!popouts.currentName.startsWith("traymenu") || ((popouts.current as StackView)?.depth ?? 0) <= 1) {
                 popouts.hasCurrent = false;
@@ -265,8 +282,36 @@ CustomMouseArea {
                 screenState.launcher = false;
         }
 
-        // Show dashboard on hover
+        // Show dashboard on hover (top edge strip and left/right of notch always pop out dashboard)
         const showDashboard = Config.dashboard.showOnHover && inTopPanel(panels.dashboard, x, y);
+
+        // Notch hover / click / disabled expansion logic
+        if (panels.notch) {
+            const mode = Config.notch.expandMode;
+            if (mode === "none" || !panels.notch.hasControls || showDashboard) {
+                panels.notch.expanded = false;
+            } else if (mode === "hover") {
+                if (inNotch(x, y)) {
+                    panels.notch.expanded = true;
+                } else if (panels.notch.expanded) {
+                    const topTrigger = Math.max(Config.border.minThickness, Config.border.thickness);
+                    const nx = panels.leftMargin + panels.notch.x;
+                    const ny = panels.topMargin + panels.notch.y;
+                    const nh = panels.notch.height;
+                    const inNotchGrace = x >= nx - 16 && x <= nx + panels.notch.width + 16 && y >= topTrigger && y <= ny + nh + 16;
+                    if (!inNotchGrace)
+                        panels.notch.expanded = false;
+                }
+            } else if (panels.notch.expanded) {
+                const topTrigger = Math.max(Config.border.minThickness, Config.border.thickness);
+                const nx = panels.leftMargin + panels.notch.x;
+                const ny = panels.topMargin + panels.notch.y;
+                const nh = panels.notch.height;
+                const inNotchGrace = x >= nx - 24 && x <= nx + panels.notch.width + 24 && y >= topTrigger && y <= ny + nh + 24;
+                if (!inNotchGrace)
+                    panels.notch.expanded = false;
+            }
+        }
 
         // Always update visibility based on hover if not in shortcut mode
         if (!dashboardShortcutActive) {

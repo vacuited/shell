@@ -14,7 +14,6 @@ import qs.services
 import qs.utils
 import qs.modules.nexus
 import qs.modules.bar.popouts as BarPopouts
-import "../../background"
 
 StyledRect {
     id: root
@@ -244,6 +243,14 @@ StyledRect {
                             root.screenState.utilities = false;
                             Quickshell.execDetached(["caelestia", "search"]);
                         }
+                    }
+                }
+                DelegateChoice {
+                    roleValue: "focus"
+                    delegate: Toggle {
+                        icon: FocusTimer.running ? "timer" : "timer_off"
+                        checked: FocusTimer.running
+                        onClicked: FocusTimer.toggle()
                     }
                 }
             }

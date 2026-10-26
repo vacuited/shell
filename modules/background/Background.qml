@@ -509,5 +509,34 @@ Variants {
                 absY: lyricsLoader.y
             }
         }
+
+        Loader {
+            id: widgetsLoader
+
+            readonly property var monitor: Hypr.monitorFor(win.modelData)
+            readonly property bool occupied: !(monitor?.activeWorkspace?.toplevels?.values.every(t => t.lastIpcObject?.floating) ?? true)
+            property real occupiedProg: occupied ? 1 : 0
+            readonly property real reveal: Config.background.desktopWidgets.hideWithWindows ? 1 - occupiedProg : 1
+
+            Behavior on occupiedProg {
+                Anim {
+                    type: Anim.DefaultEffects
+                }
+            }
+
+            active: Config.background.desktopWidgets.enabled && reveal > 0.01
+            visible: reveal > 0.01
+            opacity: reveal
+            scale: 0.97 + 0.03 * reveal
+
+            x: 0
+            y: 0
+            width: parent.width
+            height: parent.height
+
+            sourceComponent: DesktopWidgets {
+                wallpaper: behindClock
+            }
+        }
     }
 }

@@ -265,13 +265,25 @@ PageBase {
 
         ToggleRow {
             Layout.fillWidth: true
-            last: true
             text: qsTr("Terminal")
             configNode: root.targetConfig.dashboard
             propertyName: "showTerminal"
             checked: root.targetConfig.dashboard.showTerminal
             onToggled: {
                 root.targetConfig.dashboard.showTerminal = checked;
+                root.targetConfig.save();
+            }
+        }
+
+        ToggleRow {
+            Layout.fillWidth: true
+            last: true
+            text: qsTr("Focus timer")
+            configNode: root.targetConfig.dashboard
+            propertyName: "showFocus"
+            checked: root.targetConfig.dashboard.showFocus
+            onToggled: {
+                root.targetConfig.dashboard.showFocus = checked;
                 root.targetConfig.save();
             }
         }

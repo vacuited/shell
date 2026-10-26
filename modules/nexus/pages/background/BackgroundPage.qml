@@ -36,11 +36,18 @@ PageBase {
         }
 
         NavRow {
-            last: true
             icon: "pets"
             text: qsTr("Shimeji characters")
             subtext: root.targetConfig.shimeji.enabled ? qsTr("Enabled") : qsTr("Disabled")
             onClicked: root.nState.openSubPage(4)
+        }
+
+        NavRow {
+            last: true
+            icon: "widgets"
+            text: qsTr("Desktop widgets")
+            subtext: root.targetConfig.background.desktopWidgets.enabled ? qsTr("Enabled") : qsTr("Disabled")
+            onClicked: root.nState.openSubPage(5)
         }
     }
 }

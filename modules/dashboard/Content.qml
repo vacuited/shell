@@ -55,6 +55,12 @@ Item {
                 enabled: Config.dashboard.showTerminal
             },
             {
+                component: focusComponent,
+                iconName: "timer",
+                text: Tr.tr("Focus"),
+                enabled: Config.dashboard.showFocus
+            },
+            {
                 component: notesComponent,
                 iconName: "edit_note",
                 text: Tr.tr("Notes"),
@@ -253,6 +259,12 @@ Item {
                 id: terminalComponent
 
                 TerminalTab {}
+            }
+
+            Component {
+                id: focusComponent
+
+                FocusTab {}
             }
 
             Behavior on contentX {

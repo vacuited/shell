@@ -2,5 +2,7 @@ module qs.modules.nexus.pages.background
 BackgroundPage 1.0 BackgroundPage.qml
 DesktopClockPage 1.0 DesktopClockPage.qml
 DesktopLyricsPage 1.0 DesktopLyricsPage.qml
+DesktopWidgetsPage 1.0 DesktopWidgetsPage.qml
 ShimejiPage 1.0 ShimejiPage.qml
 VisualiserPage 1.0 VisualiserPage.qml
+WidgetGridEditor 1.0 WidgetGridEditor.qml

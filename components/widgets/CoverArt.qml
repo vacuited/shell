@@ -14,7 +14,9 @@ Item {
     id: root
 
     readonly property alias shape: shape
-    property bool rotate: true
+    property bool rotate: Players.active?.isPlaying ?? false
+    property alias spinning: root.rotate
+    property string source: Players.getArtUrl(Players.active)
 
     property bool hadPrevious
     property color fallbackColour: Colours.layer(Colours.palette.m3surfaceContainerHighest, 2)
@@ -48,7 +50,6 @@ Item {
 
             Anim on rotation {
                 running: root.rotate
-                paused: !root.rotate || !Players.active?.isPlaying
                 from: 360
                 to: 0
                 duration: 23500
@@ -98,7 +99,7 @@ Item {
 
         anchors.fill: parent
 
-        source: Players.getArtUrl(Players.active)
+        source: root.source
 
         layer.enabled: true
         layer.effect: Mask {

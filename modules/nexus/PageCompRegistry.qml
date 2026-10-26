@@ -66,6 +66,17 @@ QtObject {
                 Component {
                     ShimejiPage {}
                 }
+                Component {
+                    DesktopWidgetsPage {}
+                }
+            }
+        },
+        Component {
+            // Shell assets
+            StackPage {
+                Component {
+                    AssetsPage {}
+                }
             }
         },
         Component {
@@ -209,6 +220,9 @@ QtObject {
                 }
                 Component {
                     AiToolsPanel {}
+                }
+                Component {
+                    NotchPanel {}
                 }
             }
         },

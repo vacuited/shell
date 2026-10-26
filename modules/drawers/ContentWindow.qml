@@ -202,6 +202,15 @@ StyledWindow {
         }
 
         PanelBg {
+            id: notchBg
+
+            panel: panels.notch
+            deformAmount: 0.1
+            implicitWidth: panels.notch.offsetScale < 0.999 ? panels.notch.width : 0
+            implicitHeight: panels.notch.offsetScale < 0.999 ? panels.notch.height : 0
+        }
+
+        PanelBg {
             id: launcherBg
 
             panel: panels.launcher
@@ -452,6 +461,9 @@ StyledWindow {
 
             dashboard.transform: Matrix4x4 {
                 matrix: dashBg.deformMatrix
+            }
+            notch.transform: Matrix4x4 {
+                matrix: notchBg.deformMatrix
             }
             launcher.transform: Matrix4x4 {
                 matrix: launcherBg.deformMatrix

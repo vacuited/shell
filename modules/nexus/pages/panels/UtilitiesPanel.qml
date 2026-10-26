@@ -25,7 +25,8 @@ PageBase {
         badapple: qsTr("Bad Apple"),
         pauseWallpaper: qsTr("Pause video wallpaper"),
         pipPause: qsTr("Pause PiP"),
-        search: qsTr("Google Lens search")
+        search: qsTr("Google Lens search"),
+        focus: qsTr("Focus timer")
     })
 
     title: Tr.tr("Utilities")

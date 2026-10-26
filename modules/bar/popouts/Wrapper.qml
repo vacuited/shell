@@ -168,7 +168,7 @@ Item {
                 anchors.fill: parent
                 nState.screen: root.screen
                 nState.animatingContainer: nexus.opacity < 1
-                nState.currentPageIdx: ({ "appearance": 0, "network": 3, "bluetooth": 4, "audio": 5 })[root.queuedMode] ?? 0
+                nState.currentPageIdx: Math.max(0, PageRegistry.indexOfKey(root.queuedMode))
                 onClose: root.close()
             }
         }

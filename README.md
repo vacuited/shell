@@ -28,6 +28,10 @@ A personal fork of [caelestia-dots/shell](https://github.com/caelestia-dots/shel
 | **Vertical Audio Popout** | Redesigned volume interface with vertical master slider and device cards | Filters background wallpaper audio streams; includes dynamic M3 tinted app icons |
 | **Google Lens Screen Search** | Regional Google Lens search button in Utilities (`center_focus_strong`) | Triggers area selection, uploads region, and opens results in default browser |
 | **Nexus Night Mode** | Blue-light filter quick toggle (`dark_mode`) & live color temperature slider (`1000 K – 6500 K`) | Flicker-free live gamma adjustment via `hyprsunset` daemon and `hyprctl hyprsunset` IPC |
+| **Dynamic Island Notch** | Top-center morphing `BlobRect` pill (`modules/notch/`) for clock, media, and active Pomodoro countdown | Configurable `Hover` / `Click` / `Disabled` quick controls drawer, `Always compact` mode, individual media/focus control toggles, and unimpeded top-border Dashboard hover |
+| **Desktop Widgets & Grid Editor** | 6 glassmorphic desktop cards (`Weather`, `Focus timer`, `Calendar`, `System resources`, `Now playing`, `Battery`) on a 40px snapping grid | Interactive miniature `WidgetGridEditor` under `Nexus > Background elements`, wallpaper blur, and auto-fade when tiled windows open |
+| **Pomodoro Focus Suite** | Multi-phase focus timer singleton (`FocusTimer.qml`) with `Focus` / `Short Break` / `Long Break` cycles, Dashboard `FocusTab`, and Utilities quick toggle | Synced across Dashboard, Notch, Desktop Widget, Utilities toggle, and `qs -c caelestia ipc call pomodoro` |
+| **Shell Assets Customizer** | Nexus settings page (`Appearance > Shell assets`) for profile picture, system logo, animated GIFs (`sessionGif`, `mediaGif`), and notification placeholders | 1-click file picker copy and reset to default into `~/.local/share/caelestia/assets/` |
 | **Draggable Quick Toggles** | Nexus settings editor (`Panels > Utilities`) with drag-and-drop reordering | Custom positioning, visibility toggles, removal, and entry restoration dialog |
 | **Hyprshutdown Graceful Exits** | Graceful session termination dialog with Caelestia M3 cards and blur | Seamless application teardown before session `logout`, `shutdown`, and `reboot` |
 
@@ -100,6 +104,19 @@ A personal fork of [caelestia-dots/shell](https://github.com/caelestia-dots/shel
 ### Hyprshutdown Graceful Session Controls & Blur Layer Rules
 - **graceful session teardown**: integrated `hyprshutdown` across session controls (`logout`, `shutdown`, `reboot`), displaying active running applications in an M3 modal card before exiting.
 - **dynamic blur layer-rules**: configured real-time hyprland blur and ignore-alpha layer-rules for the `hyprshutdown` namespace in `Colours.qml`.
+
+### Dynamic Island Notch, Desktop Widgets, Pomodoro Focus Suite & Shell Assets
+- **Ported from [cykler01/cykler-caelestia](https://github.com/cykler01/cykler-caelestia)**:
+  - **Dynamic Island Notch (`modules/notch/`)**: Top-center metaball pill integrated into `BlobGroup` (`ContentWindow.qml`) with spinning album art (`CoverArt`), track/artist display, mirrored single-row Cava `VisualiserBars`, and smooth retraction into the top border when the Dashboard opens.
+  - **Desktop Widgets (`modules/background/DesktopWidgets.qml`, `utils/widgetgrid.js`)**: 6 glassmorphic desktop widget cards (`Weather`, `Focus timer`, `Calendar`, `System resources`, `Now playing`, `Battery`) snapping to a 40px grid with live wallpaper blur and automatic fade-out when tiled windows occupy the workspace, paired with an interactive drag-and-drop miniature screen preview (`WidgetGridEditor.qml`).
+  - **Shell Assets Customizer (`modules/nexus/pages/AssetsPage.qml`)**: Dedicated `Appearance > Shell assets` settings page to customize or reset the user profile picture (`~/.face`), system logo, animated GIFs (`sessionGif`, `mediaGif`), and empty-notification placeholder images (`noNotifsPic`, `lockNoNotifsPic`).
+- **Vacuited Customizations & Enhancements**:
+  - **Full Multi-Phase Pomodoro Engine (`services/FocusTimer.qml`)**: Upgraded the single-countdown timer into a full Pomodoro service with `Focus`, `Short Break`, and `Long Break` phases, configurable cycle intervals, daily completed sessions and focused time tracking, `autoAdvance`, completion toast notifications, and `qs -c caelestia ipc call pomodoro <toggle|reset|skip|status>` IPC support.
+  - **Dashboard Focus Tab (`modules/dashboard/FocusTab.qml`) & Utilities Toggle**: Added a dedicated `Focus` tab in the Dashboard (placed right before `Notes` so `Notes` stays at the far right) featuring a circular progress ring, phase selector pills, duration steppers, and daily statistics cards, plus a 1-click `focus` quick toggle in Utilities.
+  - **Smart Active-Only Notch Pomodoro & Expandable Quick Controls**: The Notch only displays the Pomodoro countdown ring and short controls (`Play/Pause`, `Skip`, `Reset`) after a focus session has been explicitly started (`FocusTimer.sessionActive`), hiding them completely when inactive or reset.
+  - **Configurable Notch Expansion & Compact Modes (`NotchPanel.qml`)**: Added an inline Quick Controls drawer with selectable **Expand controls** behavior (`Hover to expand`, `Click to expand`, or `Disabled`), an **Always compact** toggle alongside `Compact when windows are open`, and individual toggles to enable/disable **Media controls** and **Focus timer controls** independently.
+  - **Unimpeded Top-Border Dashboard Hover (`Interactions.qml`)**: Excluded the top border trigger strip (`y < borderThickness`) from Notch hit-testing so hovering above or beside the Notch always pops out the Dashboard seamlessly.
+  - **Clean Settings Architecture**: Placed `Desktop widgets` under `Nexus > Background elements` (omitting desktop app shortcut icons) and preserved full `caelestia::shell` C++ namespace and `VisualiserBars.displayValues` compatibility.
 
 ## Global Shortcuts
 
@@ -194,4 +211,5 @@ Per-monitor overrides can be placed in `~/.config/caelestia/monitors/<monitor_na
 | **Caelestia Notes** | [Denzils-repo/Caelestia_Notes](https://github.com/Denzils-repo/Caelestia_Notes) | Notes tab component and store logic |
 | **Caelestia Hourly Weather** | [ItsXyzzy/Caelestia-Hourly-Weather](https://github.com/ItsXyzzy/Caelestia-Hourly-Weather) | Hourly forecast and spline temperature curve |
 | **Nexus Night Mode** | [AEON-mod/Scripts](https://github.com/AEON-mod/Scripts/tree/main/Nexus-NightMode) | `HyprSunset` service, quick toggle, and live temperature slider |
+| **Cykler Caelestia** | [cykler01/cykler-caelestia](https://github.com/cykler01/cykler-caelestia) | Dynamic Island Notch, Desktop Widgets grid engine, and Shell Assets customizer |
 | **Quickshell** | [outfoxxed/quickshell](https://quickshell.outfoxxed.me) | Flexible Qt6 desktop shell toolkit |

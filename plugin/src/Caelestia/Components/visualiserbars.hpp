@@ -21,6 +21,9 @@ class VisualiserBars : public QQuickPaintedItem {
     Q_PROPERTY(int animationDuration READ animationDuration WRITE setAnimationDuration NOTIFY animationDurationChanged)
     Q_PROPERTY(bool settled READ settled NOTIFY settledChanged)
 
+    Q_PROPERTY(bool mirrored READ mirrored WRITE setMirrored NOTIFY mirroredChanged)
+    Q_PROPERTY(bool singleRow READ singleRow WRITE setSingleRow NOTIFY singleRowChanged)
+
 public:
     explicit VisualiserBars(QQuickItem* parent = nullptr);
 
@@ -50,6 +53,12 @@ public:
 
     [[nodiscard]] bool settled() const;
 
+    [[nodiscard]] bool mirrored() const;
+    void setMirrored(bool mirrored);
+
+    [[nodiscard]] bool singleRow() const;
+    void setSingleRow(bool singleRow);
+
 signals:
     void valuesChanged();
     void displayValuesChanged();
@@ -59,9 +68,11 @@ signals:
     void spacingChanged();
     void animationDurationChanged();
     void settledChanged();
+    void mirroredChanged();
+    void singleRowChanged();
 
 private:
-    void drawSide(QPainter* painter, bool rightSide);
+    void drawGroup(QPainter* painter, qreal xOffset, qreal groupWidth, bool reverse);
 
     QVector<double> m_targetValues;
     QVector<double> m_displayValues;
@@ -71,6 +82,8 @@ private:
     qreal m_spacing = 0.0;
     int m_animationDuration = 200;
     bool m_settled = true;
+    bool m_mirrored = false;
+    bool m_singleRow = false;
 };
 
 } // namespace caelestia::shell::components

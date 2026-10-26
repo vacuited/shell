@@ -27,6 +27,7 @@ class DashboardConfig : public settings::ObjectNode {
     CONFIG_PROPERTY(bool, showWeather, true)
     CONFIG_PROPERTY(bool, showWeatherLocation, true)
     CONFIG_PROPERTY(bool, showTerminal, true)
+    CONFIG_PROPERTY(bool, showFocus, true)
     CONFIG_PROPERTY(bool, showHyprlandSplash, false)
     CONFIG_PROPERTY(bool, colorizeMediaGif, true)
     CONFIG_PROPERTY(bool, useMediaShapes, false)

@@ -16,6 +16,15 @@ Singleton {
     readonly property MprisPlayer active: props.manualActive ?? list.find(p => getIdentity(p) === GlobalConfig.services.defaultPlayer) ?? list[0] ?? null
     property alias manualActive: props.manualActive
 
+    signal trackChanged(title: string, artist: string)
+    property MprisPlayer rememberedPlayer: null
+    readonly property MprisPlayer recentPlayer: list.find(p => p.isPlaying) ?? root.rememberedPlayer ?? root.active
+
+    onListChanged: {
+        if (root.rememberedPlayer && !list.includes(root.rememberedPlayer))
+            root.rememberedPlayer = null;
+    }
+
     // Apps that expose in-app volume control over MPRIS. Sources not in this list
     // fall back to per-stream PipeWire volume control. Add new entries here.
     readonly property list<string> appVolumePlayers: [ "Spotify", "Fastpotify" ]
@@ -56,9 +65,6 @@ Singleton {
     // artist updates (common with mpv-mpris + yt-dlp player) never retrigger it. Watch
     // title/artist too and toast once both are usable.
     function maybeToastNowPlaying(): void {
-        if (!GlobalConfig.utilities.toasts.nowPlaying)
-            return;
-
         const player = root.active;
         if (!player)
             return;
@@ -73,6 +79,11 @@ Singleton {
             return;
 
         lastNowPlayingKey = key;
+        root.trackChanged(title, artist);
+
+        if (!GlobalConfig.utilities.toasts.nowPlaying)
+            return;
+
         Toaster.toast(Tr.tr("Now playing"), Tr.trCtx("%1 - %2", "track artist and title").arg(artist).arg(title), "music_note");
     }
 
@@ -89,6 +100,11 @@ Singleton {
 
         function onTrackArtistChanged(): void {
             root.maybeToastNowPlaying();
+        }
+
+        function onIsPlayingChanged(): void {
+            if (root.active?.isPlaying)
+                root.rememberedPlayer = root.active;
         }
 
         target: root.active
