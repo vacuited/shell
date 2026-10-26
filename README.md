@@ -1,150 +1,74 @@
-<h1 align=center>Vacuited Shell</h1>
+<div align="center">
 
-<div align=center>
+# vacuited shell
 
-![GitHub last commit](https://img.shields.io/github/last-commit/vacuited/shell?style=for-the-badge&labelColor=101418&color=9ccbfb)&nbsp;![GitHub repo size](https://img.shields.io/github/repo-size/vacuited/shell?style=for-the-badge&labelColor=101418&color=d3bfe6)&nbsp;![GitHub license](https://img.shields.io/github/license/vacuited/shell?style=for-the-badge&labelColor=101418&color=96f1f1)
+<sub>my personal quickshell setup for caelestia, originally forked from [caelestia-dots/shell](https://github.com/caelestia-dots/shell) via [midnight-shell](https://github.com/dim-ghub/midnight-shell)</sub>
 
-A personal fork of [caelestia-dots/shell](https://github.com/caelestia-dots/shell) based on [midnight-shell](https://github.com/dim-ghub/midnight-shell).
+<br>
+
+[![last commit](https://img.shields.io/github/last-commit/vacuited/shell?style=flat-square&color=9ccbfb)](https://github.com/vacuited/shell)
+[![repo size](https://img.shields.io/github/repo-size/vacuited/shell?style=flat-square&color=d3bfe6)](https://github.com/vacuited/shell)
+[![license](https://img.shields.io/github/license/vacuited/shell?style=flat-square&color=96f1f1)](https://github.com/vacuited/shell)
 
 </div>
 
 > [!WARNING]
-> **Built for my machine first.** These features and hardware controls are tailored for my own setup (HP Victus 15) and are not guaranteed to work reliably everywhere. Behavior may differ on your system. Use at your own *risk*.
+> built for my own machine first (hp victus 15). hardware toggles n fan controls r tailored to my specs so things might act cooked on other setups. use at ur own risk bro💔
 
-## Features
+---
 
-### Vacuited shell
+## changes & features
 
-| Feature | Description | Status & Implementation |
-| :--- | :--- | :--- |
-| **Wallpaper Engine Auto-Pause** | Automatically suspends `linux-wallpaperengine` (`SIGSTOP`) behind windows or on battery power | Drops CPU/GPU usage to 0%, resumes instantly (`SIGCONT`) upon desktop exposure |
-| **Zero-Flash WE Transitions** | Preserves previous frame during engine startup (`holdSource`) | Eliminates black screens, low-res flashes, and stutter between live wallpapers |
-| **GPU-Cached `.ktx` Thumbnails** | BC3 GPU-compressed `.ktx` thumbnail pipeline (`Caelestia.Multimedia`) | Instantaneous zero-lag wallpaper picker loading even with 6K PNG libraries |
-| **Caelestia Notes Integration** | Built-in notes workspace pinned to the dashboard and accessible via launcher | Persistent store (`NotesStore.qml`), markdown editing, dynamic M3 surface colors |
-| **Hourly Weather Forecast** | Animated 7-day temperature curve with rain probability and conditions | Collapsed behind a fluid sliding toggle pill (`[ Hourly \| 7-Day ]`) with cached tabs |
-| **Lilith AI Assistant & Sidebar** | Modular sidebar assistant with headless `AiEngine` and dynamic `+18%` width expansion | Slash commands (`/new`, `/model`, `/tools`, `/history`), `<think>` blocks, tool cards, Vision, Spotify, Tavily |
-| **HP Victus Hardware Controls** | Live fan RPM gauges, platform profiles, refresh rate, and Intel Turbo Boost | Dedicated hero dashboard tab and battery popout toggle backed by `vacuited-cli` |
-| **Keep Awake Inhibitor** | Tri-state idle inhibitor toggle (`[ Off \| Prevent Sleep \| Prevent Lock & Sleep ]`) | Utilities card integration for presentations, long downloads, or active monitoring |
-| **Vertical Audio Popout** | Redesigned volume interface with vertical master slider and device cards | Filters background wallpaper audio streams; includes dynamic M3 tinted app icons |
-| **Google Lens Screen Search** | Regional Google Lens search button in Utilities (`center_focus_strong`) | Triggers area selection, uploads region, and opens results in default browser |
-| **Nexus Night Mode** | Blue-light filter quick toggle (`dark_mode`) & live color temperature slider (`1000 K – 6500 K`) | Flicker-free live gamma adjustment via `hyprsunset` daemon and `hyprctl hyprsunset` IPC |
-| **Dynamic Island Notch** | Top-center morphing `BlobRect` pill (`modules/notch/`) for clock, media, and active Pomodoro countdown | Configurable `Hover` / `Click` / `Disabled` quick controls drawer, `Always compact` mode, individual media/focus control toggles, and unimpeded top-border Dashboard hover |
-| **Desktop Widgets & Grid Editor** | 6 glassmorphic desktop cards (`Weather`, `Focus timer`, `Calendar`, `System resources`, `Now playing`, `Battery`) on a 40px snapping grid | Interactive miniature `WidgetGridEditor` under `Nexus > Background elements`, wallpaper blur, and auto-fade when tiled windows open |
-| **Pomodoro Focus Suite** | Multi-phase focus timer singleton (`FocusTimer.qml`) with `Focus` / `Short Break` / `Long Break` cycles, Dashboard `FocusTab`, and Utilities quick toggle | Synced across Dashboard, Notch, Desktop Widget, Utilities toggle, and `qs -c caelestia ipc call pomodoro` |
-| **Shell Assets Customizer** | Nexus settings page (`Appearance > Shell assets`) for profile picture, system logo, animated GIFs (`sessionGif`, `mediaGif`), and notification placeholders | 1-click file picker copy and reset to default into `~/.local/share/caelestia/assets/` |
-| **Draggable Quick Toggles** | Nexus settings editor (`Panels > Utilities`) with drag-and-drop reordering | Custom positioning, visibility toggles, removal, and entry restoration dialog |
-| **Hyprshutdown Graceful Exits** | Graceful session termination dialog with Caelestia M3 cards and blur | Seamless application teardown before session `logout`, `shutdown`, and `reboot` |
+### dynamic island notch & desktop widgets
+<sub>ported from [cykler-caelestia](https://github.com/cykler01/cykler-caelestia) n heavily reworked to fit my setup</sub>
+- **notch / dynamic island**: morphing top pill with live cava visualiser bars, spinning album art, clock, n active pomodoro countdown
+- **notch controls drawer**: expands on hover or click (or disable entirely in nexus) with short media n focus controls. has misclick guards n auto-collapses cleanly
+- **smart compact mode**: auto-shrinks when windows r open to save space, or toggle `always compact` in settings
+- **top edge dashboard access**: fixed hit-testing so hovering the very top edge above or beside the notch still opens the dashboard smoothly without fighting the notch
+- **desktop widgets**: 6 snapping cards (weather, focus timer, calendar, sys resources, now playing, battery) on a 40px grid with wallpaper blur n auto-fade when tiled windows open
+- **nexus grid editor**: visual drag-and-drop miniature under `nexus > background elements` to reposition cards freely
+- **shell assets page**: custom profile pic (`~/.face`), system logo, gifs (`sessionGif`, `mediaGif`), n empty notification placeholders under `nexus > appearance > shell assets`
 
-### Inherited Midnight
+### focus suite (pomodoro)
+- **multi-phase timer**: focus, short break, n long break intervals with custom cycles, daily session/time stats, n completion toasts
+- **active-only notch**: timer countdown n short controls (`play/pause`, `skip`, `reset`) only show up in the notch when a session is actually running. stays completely hidden when idle
+- **dashboard focus tab**: dedicated tab right before notes with circular progress ring, duration adjustments, n session history
+- **quick toggle & ipc**: 1-click toggle in utilities drawer n full ipc support via `caelestia ipc call pomodoro <toggle|reset|skip|status>`
 
-| Category | Features |
-| :--- | :--- |
-| **Launchers** | Emoji and glyph picker, clipboard history manager, window switcher, and keybinds list |
-| **Wallpapers** | Native GIF and video wallpaper playback with auto-pause, plus Wallhaven integration |
-| **Visual Effects & Easter Eggs** | Bad Apple shader effect masking the background, Bezel mode, and dynamic palette extraction |
-| **Mini-Games & Utilities** | Playable Chrome Dino runner inside the notification dock |
-| **Dashboard** | Developer console terminal tab with history and autocomplete, system telemetry, and weather |
-| **Status Bar & Dock** | macOS-style dock, Material workspace shapes, DND toggle, and live drag-and-drop editor |
-| **Desktop Gadgets** | Floating desktop lyrics with background blur, Shimeji screen pets, and desktop clock |
-| **Lock Screen** | Configurable auto-lock on startup (`lockOnStartup`), redesigned profile and clock layout |
-| **Hyprland Integration** | Window focus and dispatching commands via Lua (`hl.dsp`) |
-| **QuickShare & Polkit** | Android file transfers via Avahi daemon; built-in animated Polkit authentication daemon |
+### wallpaper engine & visuals
+- **auto-pause on battery & windows**: suspends `linux-wallpaperengine` (`SIGSTOP`) when covered or unplugged so it drops to 0% cpu/gpu, resumes instantly (`SIGCONT`) on desktop exposure
+- **zero-flash transitions**: holds previous frame during startup (`holdSource`) to kill black flashes, paired with blurred fallback wash on engine crashes
+- **gpu-cached thumbnails (`.ktx`)**: uses `Caelestia.Multimedia` BC3 texture cache for instant lag-free wallpaper scrolling
+- **carousel gif playback**: only animates gif thumbnails on the centered card to keep overhead light
 
-## Highlights & Changes
+### lilith ai assistant & sidebar
+- **headless background engine (`AiEngine.qml`)**: persistent streaming, tool calling, `<think>` reasoning extraction, n multi-turn session storage (`~/.config/caelestia/ai_chats.json`) running decoupled from the sidebar ui
+- **dynamic width & expanding pill header**: smoothly expands sidebar by `+18%` on the ai tab with a clean expanding pill nav (`notifications`, `lilith`, `news`)
+- **modular cards & tools**: clean thinking blocks, message bubbles with 1-click copy, slash menu (`/new`, `/model`, `/tools`, `/history`), vision screen capture (`grim`), spotify playback/search, reminders, n web search
+- **shortcuts**: instant toggle n autofocus via `SUPER + A` (`caelestia:aiAssistant`) or fresh session via `SUPER + SHIFT + A`
 
-### Wallpaper Engine Zero-Flicker, Battery Suspend & `.ktx` GPU Cache
-- Automatically suspends `linux-wallpaperengine` (`SIGSTOP`) when covered by windows or on battery power to reduce CPU/GPU usage to 0%, resuming instantly (`SIGCONT`) when visible.
-- Preserves the previous wallpaper frame during the 1.2s engine startup delay to eliminate black frames and stretched low-res thumbnail flashes.
-- Uses `Caelestia.Multimedia` (`Visual`) with `rgbcx` BC3 GPU-compressed `.ktx` texture caching (`~/.cache/caelestia/multimedia/image/`) for instant, zero-lag thumbnail rendering in both the Launcher and Nexus wallpaper pickers.
-- Animated GIF thumbnails (`CachingAnimatedImage`) play only on the active/centered carousel item to conserve resources.
-- Automatically falls back to the previous working wallpaper if an engine crash occurs.
+### hardware controls (hp victus)
+- **fan & thermal gauges**: live spinning fan discs with rpm readouts, package/die temps, n live wattage
+- **quick hardware toggles**: 1-click switching for fan mode (`auto` / `max boost`), intel turbo boost (`base` / `boost`), n display refresh rate (`60hz` / `144hz`)
+- **power profiles & cool mode**: 4-profile switcher (`quiet`, `cool`, `balanced`, `performance`) synced with battery popout n `vacuited-cli` polkit backend. hides automatically on unsupported machines
 
-### Caelestia Notes
-- Integrated [Caelestia Notes](https://github.com/Denzils-repo/Caelestia_Notes) directly into the shell dashboard and launcher.
-- Tab order preserved at the far right of the dashboard tabs (cuz i like that way).
+### notes, weather & utilities
+- **caelestia notes**: integrated markdown workspace with store, kept at the far right of dashboard tabs
+- **hourly weather**: scrollable 7-day temperature curve n rain chances tucked behind a clean animated pill (`[ hourly | 7-day ]`)
+- **vertical audio popout**: vertical master slider next to device cards, per-app volume sliders, n dynamic m3 tinted app icons (wallpaper audio filtered out)
+- **keep awake inhibitor**: 3-stage toggle in utilities (`off`, `prevent sleep`, `prevent lock & sleep`)
+- **google lens screen search**: regional search button in utilities drawer
+- **draggable quick toggles**: drag-and-drop reordering editor in `nexus > panels > utilities`
+- **hyprshutdown graceful exits**: session dialog showing running apps before logout, reboot, or shutdown
 
-### Hourly Weather Forecast
-- Integrated [Caelestia Hourly Weather](https://github.com/ItsXyzzy/Caelestia-Hourly-Weather) into the weather tab with a scrollable 7-day temperature curve, rain chance, and day summary.
-- Collapsed hourly and 7-day forecasts behind an animated toggle pill (`[ Hourly | 7-Day ]`) to keep the dashboard compact.
-- Gated initial height animations and cached active tabs for fluid 144 FPS swiping without curve re-tessellation lag.
+---
 
-![weather preview](assets/weather.png)
+## global shortcuts
 
-### Lilith AI Assistant & Sidebar Architecture
-- **Headless background engine (`AiEngine.qml`)**: Decouples SSE/NDJSON streaming, multi-turn `ai_tools.py` execution, `<think>` reasoning tag extraction, and v2 session persistence (`~/.config/caelestia/ai_chats.json`) from sidebar drawer open/close lifecycles.
-- **Dynamic sidebar width & expanding pill header**: Smoothly expands the sidebar width by `+18%` (`430px` → `507px`) when switching to the `Lilith` tab, paired with a centered dynamic expanding pill navigation header (`Notifications`, `Lilith`, `News`).
-- **Modular UI & slash command palette**: Decomposed into dedicated components (`ThinkingBlock`, `ToolCallBlock`, `MessageBubble` with 1-click `wl-copy` code blocks, `ChatView` with intelligent scroll-lock, `LilithMascot`, `PromptComposer` with docked model chip & tool toggles, `SlashMenu` for `/new`, `/reset`, `/clear`, `/history`, `/model`, `/tools`, `ModelPickerModal`, and `HistorySheet`).
-- **Dedicated global shortcuts**: Instant toggle & input auto-focus via `caelestia:aiAssistant` (`SUPER + A`) and fresh chat creation via `caelestia:aiAssistantNew` (`SUPER + SHIFT + A`).
-- **Nexus subpage configuration**: Provider and tool configuration panels directly in Nexus (`Nexus > Panels > Sidebar > AI Providers` / `AI Tools`).
-- **Multi-provider & smart tool suite**: Custom OpenAI-compatible endpoints, OpenRouter, Gemini, Vision screenshots (`grim` + `hyprctl`), clipboard read/write (`wl-paste` / `wl-copy`), Spotify (`spotify_search`, `spotify_play`, `spotify_status`), reminders (`~/.config/caelestia/ai_reminders.json`), long-term memory (`~/.config/caelestia/ai_memory.json`), and Tavily web search.
-
-### Hardware Controls
-- **Hero fan telemetry**: Dedicated CPU and GPU fan cards featuring live spinning fan discs, RPM counters, temperature pills, and live GPU wattage.
-- **3-column hardware toggles**: Instant switching for fan mode (`[ Auto | Max Boost ]`), Intel Turbo Boost (`[ Base | Boost ]`), and display refresh rate (`[ 60 Hz | 144 Hz ]`).
-- **4-profile power & thermal selector**: Full-width selector for `[ Quiet | Cool | Balanced | Performance ]` with instant sync across ACPI platform profiles, battery popout, and power-profiles-daemon.
-- **Battery popout cool mode**: Extended the status bar battery popout with a native 4th `Cool` profile button and liquid tank indicators.
-- **Seamless backend integration**: Backed by `vacuited-cli` (`caelestia hardware`) and a Polkit helper for zero-password transitions.
-- **Automatic hardware detection**: Tailored specifically for the **HP Victus 15** (`hp-wmi`, dual fans, `intel_pstate`, and RTX 40 series). Unsupported systems automatically hide the tab without logging errors.
-
-### Keep Awake & Idle Inhibitor
-- Integrated a 3-button power control into the utilities card (`[ Off | Prevent Sleep | Prevent Lock & Sleep ]`).
-- Prevents idle timeouts from turning displays off or suspending during long downloads or presentations.
-
-### Audio Popout Redesign
-- Repositioned the primary volume slider vertically alongside output and input device cards using a compact M3 filled pill.
-- Streamlined per-application volume controls directly above settings with dynamic M3-recolourable app icons, full-width sliders, and automatic background wallpaper stream filtering.
-
-![audio preview](assets/audio.png)
-
-### Utilities Quick Toggles & Google Lens
-- **Google Lens screen search**: Added a dedicated `center_focus_strong` quick toggle to the Utilities drawer to instantly capture screen regions and query Google Lens.
-- **Interactive drag-and-drop editor**: Nexus settings (`Nexus > Panels > Utilities`) now features a draggable `ListEditor` allowing complete reordering, toggling, removing, and re-adding of quick toggle buttons.
-- **Screenshot mode isolation**: Resolved an issue where `searchMode` persisted in `AreaPicker`, preventing standard screenshot tools from opening until shell reload.
-
-### Hyprshutdown Graceful Session Controls & Blur Layer Rules
-- **graceful session teardown**: integrated `hyprshutdown` across session controls (`logout`, `shutdown`, `reboot`), displaying active running applications in an M3 modal card before exiting.
-- **dynamic blur layer-rules**: configured real-time hyprland blur and ignore-alpha layer-rules for the `hyprshutdown` namespace in `Colours.qml`.
-
-### Dynamic Island Notch, Desktop Widgets, Pomodoro Focus Suite & Shell Assets
-- **Ported from [cykler01/cykler-caelestia](https://github.com/cykler01/cykler-caelestia)**:
-  - **Dynamic Island Notch (`modules/notch/`)**: Top-center metaball pill integrated into `BlobGroup` (`ContentWindow.qml`) with spinning album art (`CoverArt`), track/artist display, mirrored single-row Cava `VisualiserBars`, and smooth retraction into the top border when the Dashboard opens.
-  - **Desktop Widgets (`modules/background/DesktopWidgets.qml`, `utils/widgetgrid.js`)**: 6 glassmorphic desktop widget cards (`Weather`, `Focus timer`, `Calendar`, `System resources`, `Now playing`, `Battery`) snapping to a 40px grid with live wallpaper blur and automatic fade-out when tiled windows occupy the workspace, paired with an interactive drag-and-drop miniature screen preview (`WidgetGridEditor.qml`).
-  - **Shell Assets Customizer (`modules/nexus/pages/AssetsPage.qml`)**: Dedicated `Appearance > Shell assets` settings page to customize or reset the user profile picture (`~/.face`), system logo, animated GIFs (`sessionGif`, `mediaGif`), and empty-notification placeholder images (`noNotifsPic`, `lockNoNotifsPic`).
-- **Vacuited Customizations & Enhancements**:
-  - **Full Multi-Phase Pomodoro Engine (`services/FocusTimer.qml`)**: Upgraded the single-countdown timer into a full Pomodoro service with `Focus`, `Short Break`, and `Long Break` phases, configurable cycle intervals, daily completed sessions and focused time tracking, `autoAdvance`, completion toast notifications, and `qs -c caelestia ipc call pomodoro <toggle|reset|skip|status>` IPC support.
-  - **Dashboard Focus Tab (`modules/dashboard/FocusTab.qml`) & Utilities Toggle**: Added a dedicated `Focus` tab in the Dashboard (placed right before `Notes` so `Notes` stays at the far right) featuring a circular progress ring, phase selector pills, duration steppers, and daily statistics cards, plus a 1-click `focus` quick toggle in Utilities.
-  - **Smart Active-Only Notch Pomodoro & Expandable Quick Controls**: The Notch only displays the Pomodoro countdown ring and short controls (`Play/Pause`, `Skip`, `Reset`) after a focus session has been explicitly started (`FocusTimer.sessionActive`), hiding them completely when inactive or reset.
-  - **Configurable Notch Expansion & Compact Modes (`NotchPanel.qml`)**: Added an inline Quick Controls drawer with selectable **Expand controls** behavior (`Hover to expand`, `Click to expand`, or `Disabled`), an **Always compact** toggle alongside `Compact when windows are open`, and individual toggles to enable/disable **Media controls** and **Focus timer controls** independently.
-  - **Unimpeded Top-Border Dashboard Hover (`Interactions.qml`)**: Excluded the top border trigger strip (`y < borderThickness`) from Notch hit-testing so hovering above or beside the Notch always pops out the Dashboard seamlessly.
-  - **Clean Settings Architecture**: Placed `Desktop widgets` under `Nexus > Background elements` (omitting desktop app shortcut icons) and preserved full `caelestia::shell` C++ namespace and `VisualiserBars.displayValues` compatibility.
-
-## Global Shortcuts
-
-All shell toggles and menus can be bound via Hyprland [global shortcuts](https://wiki.hypr.land/Configuring/Basics/Binds/#dbus-global-shortcuts).
-
-| Shortcut Name | Description |
-| :--- | :--- |
-| `caelestia:launcher` | Toggle application launcher |
-| `caelestia:dashboard` | Toggle system dashboard |
-| `caelestia:controlCenter` | Open control center / quick toggles |
-| `caelestia:sidebar` | Toggle notification / AI / news sidebar |
-| `caelestia:aiAssistant` | Toggle Lilith AI assistant tab with instant input focus |
-| `caelestia:aiAssistantNew` | Open Lilith AI assistant on a fresh chat session |
-| `caelestia:utilities` | Toggle utilities drawer |
-| `caelestia:session` | Toggle power / session menu |
-| `caelestia:emoji` | Open emoji and glyph picker |
-| `caelestia:clipboard` | Open clipboard history manager |
-| `caelestia:windowSwitcher` | Open active window switcher |
-| `caelestia:keybinds` | Open keybinds list |
-| `caelestia:wallpaper` | Open wallpaper selector |
-| `caelestia:terminal` | Toggle developer terminal drawer |
-
-### Hyprland Bind Examples
-
-Add these lines to your Hyprland configuration (`~/.config/hypr/hyprland.conf` or user config):
+bind these in ur hyprland config:
 
 ```conf
-# Launchers & menus
+# drawers & menus
 bind = SUPER, SPACE, global, caelestia:launcher
 bind = SUPER, RETURN, global, caelestia:launcher
 bind = SUPER, S, global, caelestia:controlCenter
@@ -154,7 +78,7 @@ bind = SUPER, A, global, caelestia:aiAssistant
 bind = SUPER SHIFT, A, global, caelestia:aiAssistantNew
 bind = SUPER, M, global, caelestia:utilities
 
-# Sub-tools & pickers
+# pickers & tools
 bind = SUPER, E, global, caelestia:emoji
 bind = SUPER, V, global, caelestia:clipboard
 bind = SUPER, W, global, caelestia:windowSwitcher
@@ -163,53 +87,30 @@ bind = SUPER, B, global, caelestia:wallpaper
 bind = SUPER, T, global, caelestia:terminal
 ```
 
-## Installation & Build
+---
 
-### Prerequisites
+## install & build
 
-Ensure you have Quickshell and core dependencies installed:
-- `quickshell-git`
-- `brightnessctl`, `ddcutil`, `libpipewire`, `wireplumber`, `networkmanager`
-- `qt6-base`, `qt6-declarative`, `cmake`, `ninja`
-
-### Manual Build
-
-To build the shell plugin and install directly to your local configuration:
-
-```bash
-# Clone the repository
-git clone https://github.com/vacuited/shell.git ~/.config/quickshell/caelestia
-cd ~/.config/quickshell/caelestia
-
-# Build and install the QML plugin locally
+```fish
+# build plugin n install
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/ -DINSTALL_QSCONFDIR="$HOME/.config/quickshell/caelestia"
 cmake --build build
 sudo cmake --install build
-sudo chown -R $USER ~/.config/quickshell/caelestia
-```
 
-To run or restart the shell daemon:
-
-```bash
+# run or reload shell
 caelestia shell -d -r
 ```
 
-## Configuration
+---
 
-All shell options are configured via `~/.config/caelestia/shell.json`.
+## credits
 
-Per-monitor overrides can be placed in `~/.config/caelestia/monitors/<monitor_name>/shell.json`. Get connected monitor names via `hyprctl monitors -j | jq -r '.[].name'`.
-
-</details>
-
-## Credits
-
-| Project | Upstream / Source | Contribution |
+| project | upstream | what we took / based on |
 | :--- | :--- | :--- |
-| **Caelestia Shell** | [caelestia-dots/shell](https://github.com/caelestia-dots/shell) | Original Quickshell desktop environment |
-| **Midnight Shell** | [dim-ghub/midnight-shell](https://github.com/dim-ghub/midnight-shell) | Base fork with initial styling, launchers, and extensions |
-| **Caelestia Notes** | [Denzils-repo/Caelestia_Notes](https://github.com/Denzils-repo/Caelestia_Notes) | Notes tab component and store logic |
-| **Caelestia Hourly Weather** | [ItsXyzzy/Caelestia-Hourly-Weather](https://github.com/ItsXyzzy/Caelestia-Hourly-Weather) | Hourly forecast and spline temperature curve |
-| **Nexus Night Mode** | [AEON-mod/Scripts](https://github.com/AEON-mod/Scripts/tree/main/Nexus-NightMode) | `HyprSunset` service, quick toggle, and live temperature slider |
-| **Cykler Caelestia** | [cykler01/cykler-caelestia](https://github.com/cykler01/cykler-caelestia) | Dynamic Island Notch, Desktop Widgets grid engine, and Shell Assets customizer |
-| **Quickshell** | [outfoxxed/quickshell](https://quickshell.outfoxxed.me) | Flexible Qt6 desktop shell toolkit |
+| **caelestia shell** | [caelestia-dots/shell](https://github.com/caelestia-dots/shell) | original quickshell desktop environment |
+| **midnight shell** | [dim-ghub/midnight-shell](https://github.com/dim-ghub/midnight-shell) | initial base fork, styling, launchers, desktop gadgets |
+| **cykler caelestia** | [cykler01/cykler-caelestia](https://github.com/cykler01/cykler-caelestia) | dynamic island notch, desktop widgets grid, shell assets page |
+| **caelestia notes** | [Denzils-repo/Caelestia_Notes](https://github.com/Denzils-repo/Caelestia_Notes) | notes tab component n store |
+| **caelestia hourly weather** | [ItsXyzzy/Caelestia-Hourly-Weather](https://github.com/ItsXyzzy/Caelestia-Hourly-Weather) | hourly forecast n spline curve |
+| **nexus night mode** | [AEON-mod/Scripts](https://github.com/AEON-mod/Scripts/tree/main/Nexus-NightMode) | hyprsunset service, toggle, n temp slider |
+| **quickshell** | [outfoxxed/quickshell](https://quickshell.outfoxxed.me) | qt6 desktop shell framework |
