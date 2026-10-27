@@ -55,24 +55,32 @@ Item {
         }
     }
 
+    onTabsChanged: {
+        if (root.tabs && root.tabs.length > 0 && root.screenState.dashboardTab >= root.tabs.length)
+            root.screenState.dashboardTab = root.tabs.length - 1;
+    }
+
     Item {
         id: indicator
 
         anchors.top: bar.bottom
         anchors.topMargin: 5
+        visible: bar.count > 0
 
         implicitWidth: {
             const tab = bar.currentItem;
             if (tab)
                 return tab.implicitWidth;
-            const width = (root.nonAnimWidth - bar.spacing * (bar.count - 1)) / bar.count;
+            const count = Math.max(1, bar.count);
+            const width = (root.nonAnimWidth - bar.spacing * (count - 1)) / count;
             return width;
         }
         implicitHeight: 3
 
         x: {
             const tab = bar.currentItem;
-            const width = (root.nonAnimWidth - bar.spacing * (bar.count - 1)) / bar.count;
+            const count = Math.max(1, bar.count);
+            const width = (root.nonAnimWidth - bar.spacing * (count - 1)) / count;
             const tabWidth = tab?.implicitWidth ?? width;
             return width * bar.currentIndex + (width - tabWidth) / 2;
         }

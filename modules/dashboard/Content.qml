@@ -16,58 +16,79 @@ Item {
     required property ScreenState screenState
     required property FileDialog facePicker
 
+    readonly property var tabDefs: ({
+        dashboard: {
+            id: "dashboard",
+            component: dashComponent,
+            iconName: "dashboard",
+            text: Tr.tr("Dashboard")
+        },
+        media: {
+            id: "media",
+            component: mediaComponent,
+            iconName: "queue_music",
+            text: Tr.tr("Media")
+        },
+        weather: {
+            id: "weather",
+            component: weatherComponent,
+            iconName: "cloud",
+            text: Tr.tr("Weather")
+        },
+        performance: {
+            id: "performance",
+            component: performanceComponent,
+            iconName: "speed",
+            text: Tr.tr("Performance")
+        },
+        hardware: {
+            id: "hardware",
+            component: hardwareComponent,
+            iconName: "tune",
+            text: Tr.tr("Hardware"),
+            available: Hardware.isSupported
+        },
+        terminal: {
+            id: "terminal",
+            component: terminalComponent,
+            iconName: "terminal",
+            text: qsTr("Terminal")
+        },
+        focus: {
+            id: "focus",
+            component: focusComponent,
+            iconName: "timer",
+            text: Tr.tr("Focus")
+        },
+        notes: {
+            id: "notes",
+            component: notesComponent,
+            iconName: "edit_note",
+            text: Tr.tr("Notes")
+        }
+    })
+
     readonly property var dashboardTabs: {
-        const allTabs = [
-            {
-                component: dashComponent,
-                iconName: "dashboard",
-                text: Tr.tr("Dashboard"),
-                enabled: Config.dashboard.showDashboard
-            },
-            {
-                component: mediaComponent,
-                iconName: "queue_music",
-                text: Tr.tr("Media"),
-                enabled: Config.dashboard.showMedia
-            },
-            {
-                component: weatherComponent,
-                iconName: "cloud",
-                text: Tr.tr("Weather"),
-                enabled: Config.dashboard.showWeather
-            },
-            {
-                component: performanceComponent,
-                iconName: "speed",
-                text: Tr.tr("Performance"),
-                enabled: Config.dashboard.showPerformance
-            },
-            {
-                component: hardwareComponent,
-                iconName: "tune",
-                text: Tr.tr("Hardware"),
-                enabled: Hardware.isSupported
-            },
-            {
-                component: terminalComponent,
-                iconName: "terminal",
-                text: qsTr("Terminal"),
-                enabled: Config.dashboard.showTerminal
-            },
-            {
-                component: focusComponent,
-                iconName: "timer",
-                text: Tr.tr("Focus"),
-                enabled: Config.dashboard.showFocus
-            },
-            {
-                component: notesComponent,
-                iconName: "edit_note",
-                text: Tr.tr("Notes"),
-                enabled: true
+        const tabsConfig = Config.dashboard.tabs;
+        if (tabsConfig && tabsConfig.values && tabsConfig.values.length > 0) {
+            const seenIds = new Set();
+            const list = [];
+            for (const entry of tabsConfig.values) {
+                if (!entry.enabled || seenIds.has(entry.id))
+                    continue;
+                seenIds.add(entry.id);
+                const def = tabDefs[entry.id];
+                if (def && (def.available === undefined || def.available)) {
+                    list.push(def);
+                }
             }
-        ];
-        return allTabs.filter(tab => tab.enabled);
+            return list;
+        }
+
+        const defaultOrder = ["dashboard", "media", "weather", "performance", "hardware", "terminal", "focus", "notes"];
+        return defaultOrder
+            .map(id => tabDefs[id])
+            .filter(def => def && (def.available === undefined || def.available));
     }
 
     readonly property real nonAnimWidth: view.implicitWidth + viewWrapper.anchors.margins * 2

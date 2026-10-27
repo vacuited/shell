@@ -7,6 +7,7 @@ import Caelestia.I18n
 import M3Shapes
 import qs.components
 import qs.components.controls
+import qs.services
 import qs.modules.nexus.common
 
 PageBase {
@@ -14,6 +15,22 @@ PageBase {
 
     title: Tr.tr("Dashboard")
     isSubPage: true
+
+    readonly property var builtinTabs: {
+        const tabs = {
+            dashboard: qsTr("Dashboard"),
+            media: qsTr("Media"),
+            weather: qsTr("Weather"),
+            performance: qsTr("Performance"),
+            terminal: qsTr("Terminal"),
+            focus: qsTr("Focus timer"),
+            notes: qsTr("Notes")
+        };
+        if (Hardware.isSupported) {
+            tabs.hardware = qsTr("Hardware");
+        }
+        return tabs;
+    }
 
     readonly property list<MenuItem> dashboardShapeItems: [
         MenuItem {
@@ -217,73 +234,68 @@ PageBase {
             text: Tr.tr("Tabs")
         }
 
-        ToggleRow {
+        ListEditor {
+            function labelFor(item: var): string {
+                const prettyName = root.builtinTabs[item.id];
+                if (prettyName)
+                    return prettyName;
+                const label = item.id.replace(/([A-Z])/g, " $1");
+                return label.charAt(0).toUpperCase() + label.slice(1).toLowerCase();
+            }
+
+            function toggledFor(item: var): bool {
+                return item.enabled;
+            }
+
+            z: 1
             first: true
-            text: qsTr("Dashboard")
-            configNode: root.targetConfig.dashboard
-            propertyName: "showDashboard"
-            checked: root.targetConfig.dashboard.showDashboard
-            onToggled: {
-                root.targetConfig.dashboard.showDashboard = checked;
-                root.targetConfig.save();
+            values: root.targetConfig.dashboard.tabs ? root.targetConfig.dashboard.tabs.values : []
+            onItemMoved: (from, to) => {
+                if (root.targetConfig.dashboard.tabs) {
+                    root.targetConfig.dashboard.tabs.move(from, to);
+                    root.targetConfig.save();
+                }
+            }
+            onItemRemoved: index => {
+                if (root.targetConfig.dashboard.tabs) {
+                    root.targetConfig.dashboard.tabs.remove(index);
+                    root.targetConfig.save();
+                }
+            }
+            onItemToggled: (index, checked) => {
+                if (root.targetConfig.dashboard.tabs) {
+                    root.targetConfig.dashboard.tabs.at(index).enabled = checked;
+                    root.targetConfig.save();
+                }
             }
         }
 
-        ToggleRow {
-            text: qsTr("Media")
-            configNode: root.targetConfig.dashboard
-            propertyName: "showMedia"
-            checked: root.targetConfig.dashboard.showMedia
-            onToggled: {
-                root.targetConfig.dashboard.showMedia = checked;
-                root.targetConfig.save();
-            }
-        }
+        DialogSelectButton {
+            id: addTabContainer
 
-        ToggleRow {
-            text: qsTr("Performance")
-            configNode: root.targetConfig.dashboard
-            propertyName: "showPerformance"
-            checked: root.targetConfig.dashboard.showPerformance
-            onToggled: {
-                root.targetConfig.dashboard.showPerformance = checked;
-                root.targetConfig.save();
-            }
-        }
+            rootParent: root.flickable
+            icon: "add"
+            label: Tr.tr("Add tab")
+            header: Tr.tr("Add new tab")
+            acceptLabel: Tr.trCtx("Add", "button")
 
-        ToggleRow {
-            Layout.fillWidth: true
-            text: qsTr("Weather")
-            configNode: root.targetConfig.dashboard
-            propertyName: "showWeather"
-            checked: root.targetConfig.dashboard.showWeather
-            onToggled: {
-                root.targetConfig.dashboard.showWeather = checked;
-                root.targetConfig.save();
+            model: {
+                const builtins = Object.keys(root.builtinTabs).map(k => ({
+                    id: k,
+                    label: root.builtinTabs[k]
+                }));
+                const current = root.targetConfig.dashboard.tabs ? root.targetConfig.dashboard.tabs.values : [];
+                return builtins.filter(b => !current.some(v => v.id === b.id));
             }
-        }
 
-        ToggleRow {
-            Layout.fillWidth: true
-            text: qsTr("Terminal")
-            configNode: root.targetConfig.dashboard
-            propertyName: "showTerminal"
-            checked: root.targetConfig.dashboard.showTerminal
-            onToggled: {
-                root.targetConfig.dashboard.showTerminal = checked;
-                root.targetConfig.save();
-            }
-        }
+            onAccepted: {
+                if (!selectedItem || !root.targetConfig.dashboard.tabs)
+                    return;
 
-        ToggleRow {
-            Layout.fillWidth: true
-            last: true
-            text: qsTr("Focus timer")
-            configNode: root.targetConfig.dashboard
-            propertyName: "showFocus"
-            checked: root.targetConfig.dashboard.showFocus
-            onToggled: {
-                root.targetConfig.dashboard.showFocus = checked;
+                root.targetConfig.dashboard.tabs.insert({
+                    id: selectedItem,
+                    enabled: true
+                });
                 root.targetConfig.save();
             }
         }

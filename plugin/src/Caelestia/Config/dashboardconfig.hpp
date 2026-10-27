@@ -5,6 +5,9 @@
 
 namespace caelestia::shell::config {
 
+using Qt::StringLiterals::operator""_s;
+using settings::vmap;
+
 class DashboardPerformance : public settings::ObjectNode {
     CONFIG_NODE(DashboardPerformance, settings::ObjectNode)
 
@@ -40,6 +43,17 @@ class DashboardConfig : public settings::ObjectNode {
     CONFIG_GLOBAL_PROPERTY(int, resourceUpdateInterval, 1000)
     CONFIG_PROPERTY(int, dragThreshold, 50)
     CONFIG_SUBOBJECT(DashboardPerformance, performance)
+    CONFIG_LIST(EntryList, tabs,
+        DEFAULT_ARG({
+            LIST_ENTRY(dashboard, true),
+            LIST_ENTRY(media, true),
+            LIST_ENTRY(weather, true),
+            LIST_ENTRY(performance, true),
+            LIST_ENTRY(hardware, true),
+            LIST_ENTRY(terminal, true),
+            LIST_ENTRY(focus, true),
+            LIST_ENTRY(notes, true),
+        }))
 };
 
 } // namespace caelestia::shell::config

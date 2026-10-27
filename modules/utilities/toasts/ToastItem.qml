@@ -19,9 +19,7 @@ StyledRect {
     radius: Tokens.rounding.large
     color: {
         let baseColor = Colours.palette.m3surface;
-        if (root.modelData.type === Toast.Success)
-            baseColor = Colours.palette.m3successContainer;
-        else if (root.modelData.type === Toast.Warning)
+        if (root.modelData.type === Toast.Warning)
             baseColor = Colours.palette.m3secondary;
         else if (root.modelData.type === Toast.Error)
             baseColor = Colours.palette.m3errorContainer;
@@ -35,8 +33,6 @@ StyledRect {
     border.width: 1
     border.color: {
         let colour = Colours.palette.m3outlineVariant;
-        if (root.modelData.type === Toast.Success)
-            colour = Colours.palette.m3success;
         if (root.modelData.type === Toast.Warning)
             colour = Colours.palette.m3secondaryContainer;
         if (root.modelData.type === Toast.Error)
@@ -65,8 +61,6 @@ StyledRect {
         StyledRect {
             radius: Tokens.rounding.large
             color: {
-                if (root.modelData.type === Toast.Success)
-                    return Colours.palette.m3success;
                 if (root.modelData.type === Toast.Warning)
                     return Colours.palette.m3secondaryContainer;
                 if (root.modelData.type === Toast.Error)
@@ -83,8 +77,6 @@ StyledRect {
                 anchors.centerIn: parent
                 text: root.modelData.icon
                 color: {
-                    if (root.modelData.type === Toast.Success)
-                        return Colours.palette.m3onSuccess;
                     if (root.modelData.type === Toast.Warning)
                         return Colours.palette.m3onSecondaryContainer;
                     if (root.modelData.type === Toast.Error)
@@ -105,8 +97,6 @@ StyledRect {
                 Layout.fillWidth: true
                 text: Tr.trMarked(root.modelData.title)
                 color: {
-                    if (root.modelData.type === Toast.Success)
-                        return Colours.palette.m3onSuccessContainer;
                     if (root.modelData.type === Toast.Warning)
                         return Colours.palette.m3onSecondary;
                     if (root.modelData.type === Toast.Error)
@@ -122,8 +112,6 @@ StyledRect {
                 textFormat: Text.StyledText
                 text: Tr.trMarked(root.modelData.message)
                 color: {
-                    if (root.modelData.type === Toast.Success)
-                        return Colours.palette.m3onSuccessContainer;
                     if (root.modelData.type === Toast.Warning)
                         return Colours.palette.m3onSecondary;
                     if (root.modelData.type === Toast.Error)

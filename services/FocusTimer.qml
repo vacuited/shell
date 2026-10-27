@@ -106,7 +106,7 @@ Singleton {
                     Tr.tr("Focus session complete!"),
                     Tr.tr("Completed %1 focus session(s). Time for a break.").arg(completedSessions),
                     "task_alt",
-                    Toast.Success
+                    Toast.Info
                 );
             }
             if (completedSessions > 0 && completedSessions % cyclesBeforeLongBreak === 0)
