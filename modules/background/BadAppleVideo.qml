@@ -41,9 +41,10 @@ Item {
 
                 MediaPlayer {
                     id: mediaPlayer
-                    source: `${Quickshell.shellDir}/assets/badapple.mp4`
+                    source: Qt.resolvedUrl(Quickshell.shellPath("assets/badapple.mp4"))
                     videoOutput: videoOutput
                     audioOutput: audioOut
+                    loops: MediaPlayer.Infinite
                     Component.onCompleted: mediaPlayer.play()
                 }
 

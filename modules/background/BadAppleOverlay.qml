@@ -25,10 +25,8 @@ Variants {
         anchors.left: true
         anchors.right: true
 
-        mask: Region {
-            width: root.width
-            height: root.height
-        }
+        visible: BadApplePlayer.shouldPlay
+        mask: Region {}
 
         Item {
             id: badAppleMaskContainer
@@ -51,13 +49,9 @@ Variants {
                     sourceItem: badAppleMaskSource.videoOutput
                     hideSource: true
                 }
-                property real videoRatio: {
-                    if (badAppleMaskSource.videoOutput.sourceRect.height > 0)
-                        return badAppleMaskSource.videoOutput.sourceRect.width / badAppleMaskSource.videoOutput.sourceRect.height;
-                    return 16.0 / 9.0;
-                }
-                property real screenRatio: root.width / root.height
-                fragmentShader: "qrc:/shaders/badapple.frag.qsb"
+                property real videoRatio: 4.0 / 3.0
+                property real screenRatio: root.width / Math.max(1, root.height)
+                fragmentShader: Qt.resolvedUrl("../../assets/shaders/badapple.frag.qsb")
             }
         }
 

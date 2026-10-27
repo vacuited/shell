@@ -14,6 +14,7 @@ import qs.services
 import qs.utils
 import qs.modules.nexus
 import qs.modules.bar.popouts as BarPopouts
+import "../../background"
 
 StyledRect {
     id: root
