@@ -76,14 +76,21 @@ Item {
         return bars;
     }
 
-    implicitWidth: mainCol.implicitWidth + (compact ? Tokens.padding.medium : Tokens.padding.large) * 2
-    implicitHeight: mainCol.implicitHeight + (compact ? Tokens.padding.small : Tokens.padding.medium) * 2
+    readonly property int hPad: compact ? Tokens.padding.medium : Tokens.padding.large
+    readonly property int vPad: compact ? 6 : Tokens.padding.small
+    readonly property int bottomPad: compact ? 6 : Tokens.padding.small
+
+    implicitWidth: mainCol.implicitWidth + hPad * 2
+    implicitHeight: mainCol.implicitHeight + vPad + bottomPad
+    clip: true
 
     ColumnLayout {
         id: mainCol
 
-        anchors.centerIn: parent
-        spacing: Tokens.spacing.small * root.expandProg
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.top: parent.top
+        anchors.topMargin: root.vPad
+        spacing: Math.round((compact ? Tokens.spacing.extraSmall : Tokens.spacing.small) * root.expandProg)
 
         RowLayout {
             id: layout
@@ -297,8 +304,8 @@ Item {
             visible: root.expandProg > 0.01
             Layout.alignment: Qt.AlignHCenter
             implicitWidth: controlsRow.implicitWidth
-            implicitHeight: controlsRow.implicitHeight * root.expandProg
-            opacity: root.expandProg
+            implicitHeight: Math.round(controlsRow.implicitHeight * root.expandProg)
+            opacity: Math.max(0, (root.expandProg - 0.25) / 0.75)
             clip: true
 
             MouseArea {

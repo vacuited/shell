@@ -68,16 +68,13 @@ Item {
     implicitWidth: content.implicitWidth
     implicitHeight: content.implicitHeight
     opacity: 1 - offsetScale
+    clip: true
 
     Behavior on offsetScale {
         Anim {}
     }
 
     Behavior on implicitWidth {
-        Anim {}
-    }
-
-    Behavior on implicitHeight {
         Anim {}
     }
 
