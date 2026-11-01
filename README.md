@@ -21,19 +21,21 @@
 
 ### Dynamic Island Notch & Desktop Widgets
 <sub>Ported from [cykler-caelestia](https://github.com/cykler01/cykler-caelestia) and heavily reworked to fit my setup and be cleaner/minimal</sub>
-- **Notch / Dynamic Island**: Morphing top pill with live Cava visualiser bars, spinning album art, clock, and active Pomodoro countdown.
-- **Notch Controls Drawer**: Expands on hover or click (or disable entirely in settings) with media and focus controls. Includes misclick guards and auto-collapses cleanly.
+- **Notch / Dynamic Island**: Morphing top pill with Caelestia `BlobRect` jelly physics, live Cava visualiser bars, spinning album art, clock, and active Pomodoro countdown.
+- **Notch Controls Drawer**: Expands with shape-morphing `ButtonRow` media and focus controls, auto-collapses cleanly, and slides seamlessly into the top border when apps enter fullscreen or the dashboard opens.
 - **Smart Compact Mode**: Auto-shrinks when windows are open to save space, or toggle `Always compact` in settings.
 - **Top Edge Dashboard Access**: Fixed hit-testing so hovering the very top edge above or beside the notch still opens the dashboard smoothly without fighting the notch.
 - **Desktop Widgets**: 6 snapping cards (Weather, Focus timer, Calendar, System resources, Now playing, Battery) on a 40px grid with wallpaper blur and auto-fade when tiled windows open.
 - **Nexus Grid Editor**: Visual drag-and-drop miniature under `Nexus > Background elements` to reposition cards freely.
 - **Shell Assets Page**: Custom profile picture (`~/.face`), system logo, GIFs (`sessionGif`, `mediaGif`), and empty notification placeholders under `Nexus > Appearance > Shell assets`.
 
-### Focus Suite (Pomodoro)
-- **Multi-Phase Timer**: Focus, short break, and long break intervals with custom cycles, daily session/time stats, and completion toasts.
-- **Active-Only Notch**: Timer countdown and short controls (`Play/Pause`, `Skip`, `Reset`) only show up in the notch when a session is actively running. Stays completely hidden when idle.
-- **Dashboard Focus Tab**: Dedicated tab right before Notes with circular progress ring, duration adjustments, and session history.
-- **Quick Toggle & IPC**: 1-click toggle in Utilities drawer and full IPC support via `caelestia ipc call pomodoro <toggle|reset|skip|status>`.
+### Focus Suite & Digital Wellbeing
+- **Multi-Phase Engine**: Countdown timer and stopwatch flow modes with crash freeze recovery, subject tagging, audio chimes, and automatic DND inside a free-floating Caelestia Bento dashboard tab.
+- **Study Ledger & Goals**: Permanent local history with daily goal progress, animated `StreakFlame` with rest day forgiveness, and weekly breakdown by subject.
+- **Screen Time & Distraction Shield**: Tracks active window usage (`~/.local/state/caelestia/screentime.json`) with a 7-day bar chart, per-app daily time limits, and Focus Distraction Shield (toast nudges or Strict Shield auto-defocus during study sessions).
+- **Active-Only Notch**: Compact display showing timer countdown and active subject tag during focus, with drawer controls for play, +5m extension, skip, and reset.
+- **Dedicated Nexus Settings**: Full configuration page under `Panels > Dashboard > Focus tab` for cycles, presets, goals, subjects, transition chimes, app limits, and shield rules.
+- **Quick Toggle & IPC**: 1-click toggle in Utilities drawer and full IPC support via `caelestia ipc call pomodoro <toggle|reset|skip|extend|status>`.
 
 ### Wallpaper Engine & Visuals
 - **Auto-Pause on Battery & Windows**: Suspends `linux-wallpaperengine` (`SIGSTOP`) when covered or unplugged so it drops to 0% CPU/GPU, resuming instantly (`SIGCONT`) on desktop exposure.
@@ -48,8 +50,8 @@
 - **Shortcuts**: Instant toggle and autofocus via `SUPER + A` (`caelestia:aiAssistant`) or fresh session via `SUPER + SHIFT + A`.
 
 ### Hardware Controls (HP Victus)
-- **Fan & Thermal Gauges**: Live spinning fan discs with RPM readouts, package/die temps, and live wattage.
-- **Quick Hardware Toggles**: 1-click switching for fan mode (`Auto` / `Max Boost`), Intel Turbo Boost (`Base` / `Boost`), and display refresh rate (`60Hz` / `144Hz`).
+- **Fan & Thermal Gauges**: `CircularProgress` fan rings with live RPM-driven `FrameAnimation` spinning fans, bold RPM readouts, GPU wattage badge, and Caelestia `StyledProgressBar` levels.
+- **Quick Hardware Toggles**: 1-click switching for fan mode (`Auto` / `Max Boost`), Intel Turbo Boost (`Base` / `Boost`), and display refresh rate (`60Hz` / `144Hz`) with morphing `MaterialShape` badges.
 - **Power Profiles & Cool Mode**: 4-profile switcher (`Quiet`, `Cool`, `Balanced`, `Performance`) synced with battery popout and `vacuited-cli` polkit backend. Hides automatically on unsupported machines.
 
 ### Notes, Weather & Utilities

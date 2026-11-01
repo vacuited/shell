@@ -83,6 +83,7 @@ RowLayout {
         RowLayout {
             Layout.alignment: Qt.AlignHCenter
             spacing: Tokens.spacing.small
+            visible: !FocusTimer.isStopwatch
 
             IconButton {
                 icon: "remove"

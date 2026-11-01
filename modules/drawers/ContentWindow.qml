@@ -64,12 +64,13 @@ StyledWindow {
         screenState.launcher = false;
         screenState.session = false;
         screenState.dashboard = false;
+        panels.notch.expanded = false;
         panels.popouts.close();
     }
 
     name: "drawers"
     WlrLayershell.exclusionMode: ExclusionMode.Ignore
-    WlrLayershell.layer: (fsTransitionProg > 0 && contentItem.Config.general.showOverFullscreen) || (hasSpecialWorkspace && hasFullscreenOnNormalWs) ? WlrLayer.Overlay : WlrLayer.Top
+    WlrLayershell.layer: (fsTransitionProg > 0 && (contentItem.Config.general.showOverFullscreen || fsTransitionProg < 1 || panels.notch.visible)) || (hasSpecialWorkspace && hasFullscreenOnNormalWs) ? WlrLayer.Overlay : WlrLayer.Top
     WlrLayershell.keyboardFocus: screenState.launcher || screenState.session || screenState.dashboard || screenState.sidebar || panels.popouts.hasCurrent ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
     mask: hasFullscreen ? emptyRegion : regions
@@ -205,9 +206,10 @@ StyledWindow {
             id: notchBg
 
             panel: panels.notch
-            deformAmount: 0.1
-            implicitWidth: panels.notch.offsetScale < 0.999 ? panels.notch.width : 0
-            implicitHeight: panels.notch.offsetScale < 0.999 ? panels.notch.height : 0
+            deformAmount: panels.notch.shouldBeActive ? 0.42 : 0.1
+            y: Math.max(panels.topMargin - panels.notch.height - 2, panels.notch.y + panels.topMargin)
+            implicitWidth: panels.notch.width
+            implicitHeight: panels.notch.height
         }
 
         PanelBg {

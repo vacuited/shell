@@ -235,6 +235,7 @@ Item {
 
         screen: root.screen
         screenState: root.screenState
+        fullscreen: root.bar.fullscreen
     }
 
     BarPopouts.ClipWrapper {

@@ -13,12 +13,16 @@ Item {
 
     required property ShellScreen screen
     required property ScreenState screenState
+    property bool fullscreen: false
+
+    property bool initialized: false
+    Component.onCompleted: Qt.callLater(() => root.initialized = true)
 
     property bool shown: false
     property bool expanded: false
     property bool cavaWarm: false
 
-    readonly property bool playing: Players.active?.isPlaying === true
+    readonly property bool playing: Players.recentPlayer?.isPlaying ?? false
     readonly property bool hasRecent: Players.recentPlayer !== null
     readonly property bool focusActive: FocusTimer.active
 
@@ -34,8 +38,16 @@ Item {
 
     readonly property bool trackActive: (root.playing || root.focusActive) && shown
 
-    readonly property bool shouldBeActive: Config.notch.enabled && (persistent || trackActive || (expanded && hasControls)) && !screenState.dashboard && !screenState.launcher
+    readonly property bool shouldBeActive: !fullscreen && Config.notch.enabled && (persistent || trackActive || (expanded && hasControls)) && !screenState.dashboard && !screenState.launcher
     property real offsetScale: shouldBeActive ? 0 : 1
+
+    Behavior on offsetScale {
+        enabled: root.initialized
+        Anim {
+            id: offsetAnim
+            type: Anim.DefaultSpatial
+        }
+    }
 
     onShouldBeActiveChanged: {
         if (!shouldBeActive)
@@ -56,35 +68,29 @@ Item {
     }
 
     ServiceRef {
-        service: Config.notch.enabled && root.playing && !UPower.onBattery && !GameMode.enabled ? Audio.cava : null
+        service: Config.notch.enabled && root.playing && !GameMode.enabled ? Audio.cava : null
     }
 
-    readonly property bool visualiserLive: trackActive || !UPower.onBattery
+    readonly property bool visualiserLive: !GameMode.enabled
 
     visible: offsetScale < 1
     x: (parent.width - width) / 2
-    y: (-height - 5) * offsetScale
+    y: (-height - 2) * Math.min(1, offsetScale)
 
     implicitWidth: content.implicitWidth
     implicitHeight: content.implicitHeight
-    opacity: 1 - offsetScale
+    opacity: 1 - Math.min(1, offsetScale)
     clip: true
-
-    Behavior on offsetScale {
-        Anim {}
-    }
-
-    Behavior on implicitWidth {
-        Anim {}
-    }
 
     Connections {
         function onValuesChanged(): void {
             if (root.cavaWarm)
                 return;
             const values = Audio.cava.values;
+            if (!values || values.length === 0)
+                return;
             for (let i = 0; i < values.length; i++) {
-                if (values[i] >= 0.4) {
+                if (values[i] >= 0.05) {
                     root.cavaWarm = true;
                     return;
                 }
@@ -125,9 +131,10 @@ Item {
 
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
-        active: root.shouldBeActive || root.visible
+        active: Config.notch.enabled
 
         sourceComponent: Pill {
+            panelActive: root.shouldBeActive
             cavaWarm: root.cavaWarm
             allowLive: root.visualiserLive
             showMedia: root.showMedia

@@ -27,6 +27,9 @@ Item {
         }
     }
 
+    property bool initialized: false
+    Component.onCompleted: Qt.callLater(() => root.initialized = true)
+
     readonly property real nonAnimHeight: (content.item as Content)?.nonAnimHeight ?? 0
     readonly property bool shouldBeActive: screenState.dashboard && Config.dashboard.enabled
     property real offsetScale: shouldBeActive ? 0 : 1
@@ -38,6 +41,7 @@ Item {
     opacity: 1 - offsetScale
 
     Behavior on offsetScale {
+        enabled: root.initialized
         Anim {}
     }
 

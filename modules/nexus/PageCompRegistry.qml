@@ -224,6 +224,9 @@ QtObject {
                 Component {
                     NotchPanel {}
                 }
+                Component {
+                    FocusPanel {}
+                }
             }
         },
         Component {

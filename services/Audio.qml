@@ -119,6 +119,18 @@ Singleton {
         }
     }
 
+    function playFocusEnd(): void {
+        if (GlobalConfig.audio.sounds.enabled && GlobalConfig.focus.chime) {
+            sfxFocusEnd.play();
+        }
+    }
+
+    function playBreakEnd(): void {
+        if (GlobalConfig.audio.sounds.enabled && GlobalConfig.focus.chime) {
+            sfxBreakEnd.play();
+        }
+    }
+
     function playCameraClick(): void {
         playSound(sfxCameraClick, GlobalConfig.audio.sounds.cameraClick);
     }
@@ -296,6 +308,20 @@ Singleton {
         id: notificationSound
 
         source: Qt.resolvedUrl("../assets/sounds/notifications/" + GlobalConfig.audio.sounds.notificationSound)
+        volume: GlobalConfig.audio.sounds.notificationVolume
+    }
+
+    SoundEffect {
+        id: sfxFocusEnd
+
+        source: Qt.resolvedUrl("../assets/sounds/notifications/" + GlobalConfig.focus.focusEndSound)
+        volume: GlobalConfig.audio.sounds.notificationVolume
+    }
+
+    SoundEffect {
+        id: sfxBreakEnd
+
+        source: Qt.resolvedUrl("../assets/sounds/notifications/" + GlobalConfig.focus.breakEndSound)
         volume: GlobalConfig.audio.sounds.notificationVolume
     }
 }

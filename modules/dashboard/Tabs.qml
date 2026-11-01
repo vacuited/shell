@@ -2,7 +2,6 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
-import QtQuick.Templates
 import Quickshell
 import Caelestia.Config
 import qs.components
@@ -16,42 +15,30 @@ Item {
     required property ScreenState screenState
     required property var tabs
 
-    readonly property alias count: bar.count
+    readonly property int count: tabRepeater.count
+    readonly property int currentIndex: root.screenState.dashboardTab
+    readonly property Item currentItem: {
+        tabRepeater.count;
+        return tabRepeater.itemAt(currentIndex);
+    }
 
     implicitHeight: bar.implicitHeight + bar.anchors.topMargin + indicator.implicitHeight + indicator.anchors.topMargin + separator.implicitHeight
 
-    TabBar {
+    RowLayout {
         id: bar
 
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
         anchors.topMargin: Tokens.sizes.dashboard.tabIndicatorSpacing
-
-        currentIndex: root.screenState.dashboardTab
-        onCurrentIndexChanged: root.screenState.dashboardTab = currentIndex
-
-        implicitHeight: contentHeight
-        background: null
-        contentItem: RowLayout {
-            spacing: 0
-
-            Repeater {
-                model: bar.contentModel
-            }
-        }
+        spacing: 0
 
         Repeater {
-            model: ScriptModel {
-                values: root.tabs
-            }
+            id: tabRepeater
 
-            delegate: Tab {
-                required property var modelData
+            model: root.tabs
 
-                iconName: modelData.iconName
-                text: modelData.text
-            }
+            delegate: Tab {}
         }
     }
 
@@ -65,24 +52,24 @@ Item {
 
         anchors.top: bar.bottom
         anchors.topMargin: 5
-        visible: bar.count > 0
+        visible: root.count > 0
 
         implicitWidth: {
-            const tab = bar.currentItem;
+            const tab = root.currentItem;
             if (tab)
                 return tab.implicitWidth;
-            const count = Math.max(1, bar.count);
+            const count = Math.max(1, root.count);
             const width = (root.nonAnimWidth - bar.spacing * (count - 1)) / count;
             return width;
         }
         implicitHeight: 3
 
         x: {
-            const tab = bar.currentItem;
-            const count = Math.max(1, bar.count);
+            const tab = root.currentItem;
+            const count = Math.max(1, root.count);
             const width = (root.nonAnimWidth - bar.spacing * (count - 1)) / count;
             const tabWidth = tab?.implicitWidth ?? width;
-            return width * bar.currentIndex + (width - tabWidth) / 2;
+            return width * root.currentIndex + (width - tabWidth) / 2;
         }
 
         clip: true
@@ -117,24 +104,29 @@ Item {
         color: Colours.palette.m3outlineVariant
     }
 
-    component Tab: TabButton {
+    component Tab: Item {
         id: tab
 
-        required property string iconName
-        readonly property bool current: TabBar.tabBar.currentItem === this
+        required property int index
+        required property var modelData
+
+        readonly property string iconName: modelData.iconName ?? ""
+        readonly property string text: modelData.text ?? ""
+        readonly property bool current: root.currentIndex === tab.index
 
         Layout.fillWidth: true
         Layout.preferredWidth: 1 // Uniform width across all tabs
-        implicitWidth: implicitContentWidth
-        implicitHeight: implicitContentHeight
-        background: null
+        implicitWidth: mouse.implicitWidth
+        implicitHeight: mouse.implicitHeight
 
-        contentItem: CustomMouseArea {
+        CustomMouseArea {
             id: mouse
+
+            anchors.fill: parent
 
             function onWheel(event: WheelEvent): void {
                 if (event.angleDelta.y < 0)
-                    root.screenState.dashboardTab = Math.min(root.screenState.dashboardTab + 1, bar.count - 1);
+                    root.screenState.dashboardTab = Math.min(root.screenState.dashboardTab + 1, root.count - 1);
                 else if (event.angleDelta.y > 0)
                     root.screenState.dashboardTab = Math.max(root.screenState.dashboardTab - 1, 0);
             }
@@ -145,7 +137,7 @@ Item {
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
 
-            onPressed: root.screenState.dashboardTab = tab.TabBar.index
+            onPressed: root.screenState.dashboardTab = tab.index
 
             StateLayer {
                 id: stateLayer
@@ -158,7 +150,7 @@ Item {
 
                 radius: Tokens.rounding.medium
                 color: tab.current ? Colours.palette.m3primary : Colours.palette.m3onSurface
-                onClicked: root.screenState.dashboardTab = tab.TabBar.index
+                onClicked: root.screenState.dashboardTab = tab.index
             }
 
             MaterialIcon {

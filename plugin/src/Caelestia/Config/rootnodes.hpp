@@ -5,6 +5,7 @@
 #include "appearanceconfig.hpp"
 #include "audioconfig.hpp"
 #include "aiconfig.hpp"
+#include "focusconfig.hpp"
 #include "backgroundconfig.hpp"
 #include "barconfig.hpp"
 #include "borderconfig.hpp"
@@ -53,6 +54,7 @@ class ConfigRoot : public settings::RootNode {
     CONFIG_SUBOBJECT(ShimejiConfig, shimeji)
     CONFIG_SUBOBJECT(AudioConfig, audio)
     CONFIG_SUBOBJECT(AiConfig, ai)
+    CONFIG_SUBOBJECT(FocusConfig, focus)
 
 public:
     explicit ConfigRoot(const QString& path, ConfigRoot* fallback = nullptr, QObject* parent = nullptr);

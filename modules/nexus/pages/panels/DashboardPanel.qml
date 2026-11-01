@@ -217,7 +217,6 @@ PageBase {
         }
 
         ToggleRow {
-            last: true
             text: qsTr("Show clock seconds")
             subtext: qsTr("Display seconds for the clock in the main panel")
             configNode: root.targetConfig.dashboard
@@ -227,6 +226,13 @@ PageBase {
                 root.targetConfig.dashboard.showClockSeconds = checked;
                 root.targetConfig.save();
             }
+        }
+
+        NavRow {
+            last: true
+            icon: "timer"
+            text: Tr.tr("Focus tab")
+            onClicked: root.nState.openSubPage(18)
         }
 
         // Tabs

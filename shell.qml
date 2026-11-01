@@ -39,6 +39,7 @@ ShellRoot {
         AiTools;
         AiEngine;
         HyprSunset;
+        ScreenTime;
 
         if (GlobalConfig.utilities.vpn.enabled)
             VPN;
