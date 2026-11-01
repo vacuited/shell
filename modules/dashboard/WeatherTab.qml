@@ -43,7 +43,7 @@ Item {
 
         const snowCodes = [71, 73, 75, 77, 85, 86];
         const wetCodes = [51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82, 95, 96, 99].concat(snowCodes);
-        const timeOf = h => Qt.formatDateTime(new Date(h.timestamp.replace("T", " ").replace(/-/g, "/")), Units.twelveHourClock ? "h A" : "HH:mm");
+        const timeOf = h => Tr.formatDateTime(new Date(h.timestamp.replace("T", " ").replace(/-/g, "/")), Units.twelveHourClock ? "h A" : "HH:mm");
 
         const parts = [Tr.tr("%1 now").arg(Weather.description)];
 
@@ -91,7 +91,7 @@ Item {
                 }
 
                 StyledText {
-                    text: new Date().toLocaleDateString(Qt.locale(), "dddd, MMMM d")
+                    text: Tr.formatDateTime(new Date(), "dddd, MMMM d")
                     font: Tokens.font.body.small
                     color: Colours.palette.m3onSurfaceVariant
                 }
@@ -371,7 +371,7 @@ Item {
 
                             StyledText {
                                 Layout.alignment: Qt.AlignHCenter
-                                text: forecastItem.index === 0 ? Tr.trCtx("Today", "forecast column") : new Date(forecastItem.modelData.date).toLocaleDateString(Qt.locale(), "ddd")
+                                text: forecastItem.index === 0 ? Tr.trCtx("Today", "forecast column") : Tr.formatDateTime(new Date(forecastItem.modelData.date), "ddd")
                                 font: Tokens.font.body.builders.medium.weight(Font.DemiBold).build()
                                 color: Colours.palette.m3primary
                             }
@@ -379,7 +379,7 @@ Item {
                             StyledText {
                                 Layout.topMargin: -Tokens.spacing.extraSmall
                                 Layout.alignment: Qt.AlignHCenter
-                                text: new Date(forecastItem.modelData.date).toLocaleDateString(Qt.locale(), "MMM d")
+                                text: Tr.formatDateTime(new Date(forecastItem.modelData.date), "MMM d")
                                 font: Tokens.font.body.small
                                 opacity: 0.7
                                 color: Colours.palette.m3onSurfaceVariant
@@ -543,7 +543,7 @@ Item {
         function hourLabel(entry: var): string {
             if (entry.hour === 0) {
                 const d = new Date(entry.timestamp.replace("T", " ").replace(/-/g, "/"));
-                return d.toLocaleDateString(Qt.locale(), "ddd");
+                return Tr.formatDateTime(d, "ddd");
             }
             return formatHour(entry.hour);
         }
