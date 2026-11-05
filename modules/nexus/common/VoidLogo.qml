@@ -31,7 +31,6 @@ Item {
 
     readonly property real scaleFactor: Math.min(width, height) / 128.0
 
-    // Call surge() on launcher open, workspace switch, or hover
     function surge() {
         if (!root.reduceMotion) {
             surgeAnim.restart();
@@ -46,14 +45,16 @@ Item {
         anchors.centerIn: parent
         scale: root.scaleFactor
 
-        // 1. VOID
+        // 1. VOID (Pitch-black liquid ink aura backing the crescent moon)
         Shape {
             id: voidLayer
 
             anchors.fill: parent
             preferredRendererType: Shape.CurveRenderer
             visible: !root.monoMode
-            scale: root.reduceMotion ? 1.0 : 0.0
+            scale: root.reduceMotion ? 1.0 : 0.4
+            rotation: root.reduceMotion ? 0.0 : -90.0
+            opacity: root.reduceMotion ? 1.0 : 0.0
             transformOrigin: Item.Center
 
             ShapePath {
@@ -62,12 +63,12 @@ Item {
                 fillColor: root.voidColor
 
                 PathSvg {
-                    path: "M 30 64 A 34 34 0 1 1 98 64 A 34 34 0 1 1 30 64 Z"
+                    path: "M 95.5 34.5 C 77.5 14.5 43.5 13.5 24.2 33.2 C 20.5 37 17.8 41.5 15.8 46.5 C 17.8 44.5 19.8 43.2 21.5 42.8 C 12.5 58.5 13.2 79.5 24.5 95.2 C 22.2 93.2 20.5 90.5 19.2 87.2 C 22.2 95.5 28.5 102.5 37.2 107.2 C 56.2 117.2 81.5 111.2 97.2 93.2 C 82.5 105.5 62.2 107.2 46.2 97.8 C 52.2 99.5 58.2 99.2 63.8 97.2 C 48.8 96.2 37.2 86.8 33.2 73.2 C 36.2 78.5 41.2 82.5 46.8 84.5 C 36.2 76.5 31.5 62.8 34.8 49.2 C 34.8 55.5 37.5 61.2 41.8 65.2 C 36.8 54.5 39.2 41.2 48.5 32.8 C 45.2 36.8 43.8 41.5 44.2 46.2 C 47.8 34.8 58.2 27.2 70.5 26.2 C 79.8 25.5 88.8 28.5 95.5 34.5 Z"
                 }
             }
         }
 
-        // 2. HORIZON (Main Bloody Moon Body)
+        // 2. HORIZON (Main Bloody Crescent Moon Body)
         Item {
             id: horizonIdle
 
@@ -80,7 +81,7 @@ Item {
                 anchors.fill: parent
                 preferredRendererType: Shape.CurveRenderer
                 transformOrigin: Item.Center
-                scale: root.reduceMotion ? 1.0 : 1.6
+                scale: root.reduceMotion ? 1.0 : 1.55
                 rotation: root.reduceMotion ? 0.0 : -120.0
                 opacity: root.reduceMotion ? 1.0 : 0.0
 
@@ -91,14 +92,14 @@ Item {
 
                     PathSvg {
                         path: root.monoMode
-                            ? "M 23.5 85.6 A 41.2 38.2 -28.07 1 1 96.25 46.8 A 41.2 38.2 -28.07 1 1 23.5 85.6 Z M 80 94 A 34 34 0 0 0 48 34 C 40.8 37.5 36 43.2 34.5 49.5 C 36.5 48.2 38.5 48 40.5 48.8 C 35.5 52.5 32.8 57.8 32.2 63.8 C 34.8 62.5 37.2 62.4 39.8 63.5 C 36.2 67.8 34.8 73.5 35.8 79.2 C 38.2 78 40.8 77.8 43.5 78.8 C 42.8 84 46.2 89.5 53.8 93.2 C 61.8 96.8 71.2 96.8 80 94 Z M 33.5 40.5 C 26.2 48.5 22.4 59.5 22.8 70.8 C 23.5 82.8 30.8 92.8 43.2 97.2 C 50.8 99.8 59.2 100.2 66.8 98.8 C 55.8 98.2 45.2 94.2 39.2 86.8 C 40.8 87.2 42.5 87 44.2 86.2 C 37.5 83.5 32.8 78.2 31.2 71.8 C 32.8 72.2 34.5 72 36.2 71.2 C 30.8 68.2 27.8 62.8 27.5 56.5 C 29.2 57 30.8 56.8 32.5 56 C 29.5 51.8 29.8 45.8 33.5 40.5 Z"
-                            : "M 23.5 85.6 A 41.2 38.2 -28.07 1 1 96.25 46.8 A 41.2 38.2 -28.07 1 1 23.5 85.6 Z M 80 94 A 34 34 0 0 0 48 34 C 40.8 37.5 36 43.2 34.5 49.5 C 36.5 48.2 38.5 48 40.5 48.8 C 35.5 52.5 32.8 57.8 32.2 63.8 C 34.8 62.5 37.2 62.4 39.8 63.5 C 36.2 67.8 34.8 73.5 35.8 79.2 C 38.2 78 40.8 77.8 43.5 78.8 C 42.8 84 46.2 89.5 53.8 93.2 C 61.8 96.8 71.2 96.8 80 94 Z"
+                            ? "M 92 33 C 75 17.5 44 16.5 26.5 34.5 C 23.2 38.2 20.8 42.2 19.2 46.8 C 20.8 44.8 22.4 43.8 23.8 43.5 C 15.8 58.5 16.2 78.2 26.8 92.8 C 24.8 90.8 23.2 88.2 22.2 85.2 C 24.5 92.5 30.2 99.2 38.2 103.8 C 55.5 113.5 79.5 108.2 94 92 C 80.5 103.2 61.5 104.8 46.5 95.8 C 51.5 97.2 56.8 97.2 61.5 95.5 C 47.5 94.8 36.2 86.2 31.8 73.5 C 34.5 78.2 38.8 81.8 43.8 83.8 C 33.8 76.2 29.2 63.2 32.2 50.2 C 32.2 55.8 34.5 60.8 38.2 64.5 C 33.5 54.5 35.8 42.2 44.5 34.2 C 41.8 37.8 40.5 41.8 40.8 45.8 C 44.2 35.2 54.2 27.8 66.2 26.8 C 75.5 26 84.8 28.2 92 33 Z M 28.5 48.5 C 27.5 52.8 28.2 57.5 30.8 61.5 C 30.2 68.5 31.2 75.5 33.8 81.8 C 38.2 92.5 47.2 100.2 58.2 103.5 C 45.2 102.2 33.8 94.8 28.2 83.8 C 22.8 72.8 23.2 59.5 28.5 48.5 Z"
+                            : "M 92 33 C 75 17.5 44 16.5 26.5 34.5 C 23.2 38.2 20.8 42.2 19.2 46.8 C 20.8 44.8 22.4 43.8 23.8 43.5 C 15.8 58.5 16.2 78.2 26.8 92.8 C 24.8 90.8 23.2 88.2 22.2 85.2 C 24.5 92.5 30.2 99.2 38.2 103.8 C 55.5 113.5 79.5 108.2 94 92 C 80.5 103.2 61.5 104.8 46.5 95.8 C 51.5 97.2 56.8 97.2 61.5 95.5 C 47.5 94.8 36.2 86.2 31.8 73.5 C 34.5 78.2 38.8 81.8 43.8 83.8 C 33.8 76.2 29.2 63.2 32.2 50.2 C 32.2 55.8 34.5 60.8 38.2 64.5 C 33.5 54.5 35.8 42.2 44.5 34.2 C 41.8 37.8 40.5 41.8 40.8 45.8 C 44.2 35.2 54.2 27.8 66.2 26.8 C 75.5 26 84.8 28.2 92 33 Z"
                     }
                 }
             }
         }
 
-        // 3. HORIZON-VEINS (Dark Coagulated Blood Layer)
+        // 3. HORIZON-VEINS (Dark Coagulated Blood Tendrils)
         Item {
             id: veinsIdle
 
@@ -112,7 +113,7 @@ Item {
                 anchors.fill: parent
                 preferredRendererType: Shape.CurveRenderer
                 transformOrigin: Item.Center
-                scale: root.reduceMotion ? 1.0 : 1.68
+                scale: root.reduceMotion ? 1.0 : 1.65
                 rotation: root.reduceMotion ? 0.0 : -138.0
                 opacity: root.reduceMotion ? 1.0 : 0.0
 
@@ -122,13 +123,13 @@ Item {
                     fillColor: root.veinsColor
 
                     PathSvg {
-                        path: "M 33.5 40.5 C 26.2 48.5 22.4 59.5 22.8 70.8 C 23.5 82.8 30.8 92.8 43.2 97.2 C 50.8 99.8 59.2 100.2 66.8 98.8 C 55.8 98.2 45.2 94.2 39.2 86.8 C 40.8 87.2 42.5 87 44.2 86.2 C 37.5 83.5 32.8 78.2 31.2 71.8 C 32.8 72.2 34.5 72 36.2 71.2 C 30.8 68.2 27.8 62.8 27.5 56.5 C 29.2 57 30.8 56.8 32.5 56 C 29.5 51.8 29.8 45.8 33.5 40.5 Z"
+                        path: "M 31.5 36.5 C 22.8 48.5 19.8 64.5 24.5 79.5 C 29.2 94.2 42.5 104.5 58.5 106.2 C 68.5 107.2 78.5 104.5 86.5 98.5 C 75.2 103.2 62.2 103.5 50.8 98.8 C 54.8 99.5 58.8 99.2 62.5 97.8 C 48.2 96.8 36.2 87.8 30.8 74.8 C 33.5 78.8 37.2 81.8 41.5 83.5 C 31.8 75.8 27.2 62.8 29.5 49.8 C 29.8 54.5 31.5 58.8 34.5 62.2 C 29.8 53.5 30.2 43.5 35.2 35.5 C 33.8 35.8 32.5 36.2 31.5 36.5 Z"
                     }
                 }
             }
         }
 
-        // 4. HORIZON-HIGHLIGHT (Bright Moonlit Rim Sliver)
+        // 4. HORIZON-HIGHLIGHT (Bright Moonlit Upper-Left Rim Sliver)
         Shape {
             id: highlightLayer
 
@@ -146,12 +147,12 @@ Item {
                 fillColor: root.highlightColor
 
                 PathSvg {
-                    path: "M 64 30 C 58.5 30 53 31.4 48 34 C 40.8 37.5 36 43.2 34.5 49.5 C 36.5 48.2 38.5 48 40.5 48.8 C 35.5 52.5 32.8 57.8 32.2 63.8 C 34.8 62.5 37.2 62.4 39.8 63.5 C 36.2 67.8 34.8 73.5 35.8 79.2 C 33.2 73.2 33.8 67.2 36.8 62.8 C 34.4 62 32 62.4 29.8 64 C 30.4 57.2 33.2 51.5 37.5 47.8 C 35.4 47.2 33.4 47.8 31.8 49.5 C 33.8 42.2 39.2 35.8 47.2 32.2 C 52.5 29.8 58.2 29.2 64 30 Z"
+                    path: "M 74.5 24.2 C 56.5 19.2 36.8 25.8 26.8 41.2 C 21.2 49.8 19.2 60.2 20.8 70.2 C 21.2 61.5 24.2 52.8 29.8 45.8 C 27.8 50.2 26.8 54.8 27.2 59.5 C 29.5 46.8 38.2 35.5 50.5 30.2 C 46.8 32.8 43.8 36.2 41.8 40.2 C 49.5 30.5 61.8 24.8 74.5 24.2 Z"
                 }
             }
         }
 
-        // 5. BLOOD DROPLETS / SPLASHES
+        // 5. THREE 4-POINT CRIMSON STARS
         Shape {
             id: p1
 
@@ -160,11 +161,11 @@ Item {
             transformOrigin: Item.Center
             opacity: root.reduceMotion ? 1.0 : 0.0
 
-            property real ox: root.reduceMotion ? 0.0 : -5.2
-            property real oy: root.reduceMotion ? 0.0 : -3.2
+            property real ox: root.reduceMotion ? 0.0 : 4.2
+            property real oy: root.reduceMotion ? 0.0 : -4.2
             property real dx: 0.0
             property real dy: 0.0
-            property real rotAngle: root.reduceMotion ? 0.0 : -18.0
+            property real rotAngle: root.reduceMotion ? 0.0 : -16.0
 
             transform: [
                 Translate {
@@ -184,7 +185,7 @@ Item {
                 fillColor: root.monoMode ? "#FFFFFF" : root.particleColor
 
                 PathSvg {
-                    path: "M 22.8 38.8 C 17.5 37.8 12.2 35.2 9.2 31.2 C 7.5 28.8 9.2 25.8 12.2 26.8 C 15.8 28.2 18.8 32.2 22.8 38.8 Z"
+                    path: "M 96 17 Q 97 21.8 101 23 Q 97 24.2 96 29 Q 95 24.2 91 23 Q 95 21.8 96 17 Z"
                 }
             }
         }
@@ -197,11 +198,11 @@ Item {
             transformOrigin: Item.Center
             opacity: root.reduceMotion ? 1.0 : 0.0
 
-            property real ox: root.reduceMotion ? 0.0 : 4.8
-            property real oy: root.reduceMotion ? 0.0 : -3.6
+            property real ox: root.reduceMotion ? 0.0 : 4.2
+            property real oy: root.reduceMotion ? 0.0 : 2.8
             property real dx: 0.0
             property real dy: 0.0
-            property real rotAngle: root.reduceMotion ? 0.0 : -18.0
+            property real rotAngle: root.reduceMotion ? 0.0 : -16.0
 
             transform: [
                 Translate {
@@ -221,7 +222,7 @@ Item {
                 fillColor: root.monoMode ? "#FFFFFF" : root.particleColor
 
                 PathSvg {
-                    path: "M 99.5 33.5 C 102.2 29.2 105.8 25.5 109.5 24.2 C 111.8 23.5 113.2 25.8 111.2 28.2 C 108.8 31.2 104.5 32.8 99.5 33.5 Z"
+                    path: "M 92 77.2 Q 92.84 80.99 96 82 Q 92.84 83.01 92 86.8 Q 91.16 83.01 88 82 Q 91.16 80.99 92 77.2 Z"
                 }
             }
         }
@@ -234,11 +235,11 @@ Item {
             transformOrigin: Item.Center
             opacity: root.reduceMotion ? 1.0 : 0.0
 
-            property real ox: root.reduceMotion ? 0.0 : 3.8
-            property real oy: root.reduceMotion ? 0.0 : 4.4
+            property real ox: root.reduceMotion ? 0.0 : -4.8
+            property real oy: root.reduceMotion ? 0.0 : -2.8
             property real dx: 0.0
             property real dy: 0.0
-            property real rotAngle: root.reduceMotion ? 0.0 : -18.0
+            property real rotAngle: root.reduceMotion ? 0.0 : -16.0
 
             transform: [
                 Translate {
@@ -258,13 +259,13 @@ Item {
                 fillColor: root.monoMode ? "#FFFFFF" : root.particleColor
 
                 PathSvg {
-                    path: "M 90.5 101.8 C 94.8 102.5 99.2 104.5 101.8 107.8 C 103.2 109.8 101.2 111.8 98.8 110.2 C 95.8 108.2 93.2 105.2 90.5 101.8 Z"
+                    path: "M 14 29.8 Q 14.74 33.12 17.5 34 Q 14.74 34.88 14 38.2 Q 13.26 34.88 10.5 34 Q 13.26 33.12 14 29.8 Z"
                 }
             }
         }
     }
 
-    // INTERACTIVE SURGE PULSE (on hover / click / trigger)
+    // INTERACTIVE SURGE PULSE
     ParallelAnimation {
         id: surgeAnim
 
@@ -312,24 +313,44 @@ Item {
         running: !root.reduceMotion
         onFinished: root.animationCompleted()
 
-        // 1. Void expansion (0 -> 700ms)
-        SequentialAnimation {
+        // 1. Void aura slash-in (0 -> 700ms)
+        ParallelAnimation {
             NumberAnimation {
                 target: voidLayer
-                property: "scale"
+                property: "opacity"
                 from: 0.0
-                to: 1.03
-                duration: 545
+                to: 1.0
+                duration: 220
                 easing.type: Easing.OutCubic
             }
 
             NumberAnimation {
                 target: voidLayer
-                property: "scale"
-                from: 1.03
-                to: 1.0
-                duration: 155
-                easing.type: Easing.InOutQuad
+                property: "rotation"
+                from: -90.0
+                to: 0.0
+                duration: 700
+                easing.type: Easing.OutCubic
+            }
+
+            SequentialAnimation {
+                NumberAnimation {
+                    target: voidLayer
+                    property: "scale"
+                    from: 0.4
+                    to: 1.03
+                    duration: 545
+                    easing.type: Easing.OutCubic
+                }
+
+                NumberAnimation {
+                    target: voidLayer
+                    property: "scale"
+                    from: 1.03
+                    to: 1.0
+                    duration: 155
+                    easing.type: Easing.InOutQuad
+                }
             }
         }
 
@@ -352,7 +373,7 @@ Item {
                 NumberAnimation {
                     target: horizonLayer
                     property: "scale"
-                    from: 1.6
+                    from: 1.55
                     to: 1.0
                     duration: 1100
                     easing.type: Easing.OutExpo
@@ -432,7 +453,7 @@ Item {
                 NumberAnimation {
                     target: veinsLayer
                     property: "scale"
-                    from: 1.68
+                    from: 1.65
                     to: 1.0
                     duration: 1120
                     easing.type: Easing.OutCubic
@@ -493,7 +514,7 @@ Item {
             }
         }
 
-        // 3a. Droplet 1 (800 -> 1360ms + idle drift)
+        // 3a. Star 1 (800 -> 1360ms + idle drift)
         SequentialAnimation {
             PauseAnimation {
                 duration: 800
@@ -512,7 +533,7 @@ Item {
                 NumberAnimation {
                     target: p1
                     property: "ox"
-                    from: -5.2
+                    from: 4.2
                     to: 0.0
                     duration: 560
                     easing.type: Easing.OutCubic
@@ -521,7 +542,7 @@ Item {
                 NumberAnimation {
                     target: p1
                     property: "oy"
-                    from: -3.2
+                    from: -4.2
                     to: 0.0
                     duration: 560
                     easing.type: Easing.OutCubic
@@ -530,7 +551,7 @@ Item {
                 NumberAnimation {
                     target: p1
                     property: "rotAngle"
-                    from: -18.0
+                    from: -16.0
                     to: 0.0
                     duration: 560
                     easing.type: Easing.OutCubic
@@ -545,7 +566,7 @@ Item {
                         target: p1
                         property: "dx"
                         from: 0.0
-                        to: 1.8
+                        to: 1.4
                         duration: 2300
                         easing.type: Easing.InOutSine
                     }
@@ -554,7 +575,7 @@ Item {
                         target: p1
                         property: "dy"
                         from: 0.0
-                        to: 1.1
+                        to: -1.2
                         duration: 2300
                         easing.type: Easing.InOutSine
                     }
@@ -564,8 +585,8 @@ Item {
                     NumberAnimation {
                         target: p1
                         property: "dx"
-                        from: 1.8
-                        to: -1.4
+                        from: 1.4
+                        to: -1.2
                         duration: 4600
                         easing.type: Easing.InOutSine
                     }
@@ -573,8 +594,8 @@ Item {
                     NumberAnimation {
                         target: p1
                         property: "dy"
-                        from: 1.1
-                        to: -0.9
+                        from: -1.2
+                        to: 1.0
                         duration: 4600
                         easing.type: Easing.InOutSine
                     }
@@ -584,7 +605,7 @@ Item {
                     NumberAnimation {
                         target: p1
                         property: "dx"
-                        from: -1.4
+                        from: -1.2
                         to: 0.0
                         duration: 2300
                         easing.type: Easing.InOutSine
@@ -593,7 +614,7 @@ Item {
                     NumberAnimation {
                         target: p1
                         property: "dy"
-                        from: -0.9
+                        from: 1.0
                         to: 0.0
                         duration: 2300
                         easing.type: Easing.InOutSine
@@ -602,7 +623,7 @@ Item {
             }
         }
 
-        // 3b. Droplet 2 (920 -> 1480ms + idle drift)
+        // 3b. Star 2 (920 -> 1480ms + idle drift)
         SequentialAnimation {
             PauseAnimation {
                 duration: 920
@@ -621,7 +642,7 @@ Item {
                 NumberAnimation {
                     target: p2
                     property: "ox"
-                    from: 4.8
+                    from: 4.2
                     to: 0.0
                     duration: 560
                     easing.type: Easing.OutCubic
@@ -630,7 +651,7 @@ Item {
                 NumberAnimation {
                     target: p2
                     property: "oy"
-                    from: -3.6
+                    from: 2.8
                     to: 0.0
                     duration: 560
                     easing.type: Easing.OutCubic
@@ -639,7 +660,7 @@ Item {
                 NumberAnimation {
                     target: p2
                     property: "rotAngle"
-                    from: -18.0
+                    from: -16.0
                     to: 0.0
                     duration: 560
                     easing.type: Easing.OutCubic
@@ -654,7 +675,7 @@ Item {
                         target: p2
                         property: "dx"
                         from: 0.0
-                        to: -1.6
+                        to: -1.5
                         duration: 2600
                         easing.type: Easing.InOutSine
                     }
@@ -663,7 +684,7 @@ Item {
                         target: p2
                         property: "dy"
                         from: 0.0
-                        to: 1.2
+                        to: 1.1
                         duration: 2600
                         easing.type: Easing.InOutSine
                     }
@@ -673,7 +694,7 @@ Item {
                     NumberAnimation {
                         target: p2
                         property: "dx"
-                        from: -1.6
+                        from: -1.5
                         to: 1.2
                         duration: 5200
                         easing.type: Easing.InOutSine
@@ -682,7 +703,7 @@ Item {
                     NumberAnimation {
                         target: p2
                         property: "dy"
-                        from: 1.2
+                        from: 1.1
                         to: -1.0
                         duration: 5200
                         easing.type: Easing.InOutSine
@@ -711,7 +732,7 @@ Item {
             }
         }
 
-        // 3c. Droplet 3 (1040 -> 1600ms + idle drift)
+        // 3c. Star 3 (1040 -> 1600ms + idle drift)
         SequentialAnimation {
             PauseAnimation {
                 duration: 1040
@@ -730,7 +751,7 @@ Item {
                 NumberAnimation {
                     target: p3
                     property: "ox"
-                    from: 3.8
+                    from: -4.8
                     to: 0.0
                     duration: 560
                     easing.type: Easing.OutCubic
@@ -739,7 +760,7 @@ Item {
                 NumberAnimation {
                     target: p3
                     property: "oy"
-                    from: 4.4
+                    from: -2.8
                     to: 0.0
                     duration: 560
                     easing.type: Easing.OutCubic
@@ -748,7 +769,7 @@ Item {
                 NumberAnimation {
                     target: p3
                     property: "rotAngle"
-                    from: -18.0
+                    from: -16.0
                     to: 0.0
                     duration: 560
                     easing.type: Easing.OutCubic
@@ -763,7 +784,7 @@ Item {
                         target: p3
                         property: "dx"
                         from: 0.0
-                        to: -1.3
+                        to: -1.4
                         duration: 2900
                         easing.type: Easing.InOutSine
                     }
@@ -772,7 +793,7 @@ Item {
                         target: p3
                         property: "dy"
                         from: 0.0
-                        to: -1.6
+                        to: -1.1
                         duration: 2900
                         easing.type: Easing.InOutSine
                     }
@@ -782,8 +803,8 @@ Item {
                     NumberAnimation {
                         target: p3
                         property: "dx"
-                        from: -1.3
-                        to: 1.1
+                        from: -1.4
+                        to: 1.2
                         duration: 5800
                         easing.type: Easing.InOutSine
                     }
@@ -791,8 +812,8 @@ Item {
                     NumberAnimation {
                         target: p3
                         property: "dy"
-                        from: -1.6
-                        to: 1.3
+                        from: -1.1
+                        to: 1.0
                         duration: 5800
                         easing.type: Easing.InOutSine
                     }
@@ -802,7 +823,7 @@ Item {
                     NumberAnimation {
                         target: p3
                         property: "dx"
-                        from: 1.1
+                        from: 1.2
                         to: 0.0
                         duration: 2900
                         easing.type: Easing.InOutSine
@@ -811,7 +832,7 @@ Item {
                     NumberAnimation {
                         target: p3
                         property: "dy"
-                        from: 1.3
+                        from: 1.0
                         to: 0.0
                         duration: 2900
                         easing.type: Easing.InOutSine
