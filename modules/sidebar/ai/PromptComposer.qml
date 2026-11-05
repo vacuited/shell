@@ -48,6 +48,8 @@ ColumnLayout {
         inputArea.clear();
         if (cmdId === "new") {
             AiEngine.createNewChat();
+        } else if (cmdId === "learn") {
+            AiEngine.learnFromCurrentChat();
         } else if (cmdId === "reset" || cmdId === "clear") {
             AiEngine.clearCurrentChat();
         } else if (cmdId === "history") {
@@ -69,6 +71,17 @@ ColumnLayout {
             return;
         }
         if (!trimmed && !AiEngine.attachedImageBase64) return;
+        if (trimmed === "/learn") {
+            inputArea.clear();
+            executeSlashCommand("learn");
+            return;
+        }
+        if (trimmed.indexOf("/learn ") === 0) {
+            var hint = trimmed.substring(7).trim();
+            inputArea.clear();
+            AiEngine.learnFromCurrentChat(hint);
+            return;
+        }
         inputArea.clear();
         AiEngine.sendPrompt(trimmed, false, "");
     }
@@ -330,7 +343,7 @@ ColumnLayout {
                         TextArea {
                             id: inputArea
                             verticalAlignment: TextInput.AlignVCenter
-                            placeholderText: qsTr("Ask Lilith... (/ for commands)")
+                            placeholderText: qsTr("Ask Astria... (/ for commands)")
                             color: Colours.palette.m3onSurface
                             placeholderTextColor: Colours.palette.m3outline
                             font: Tokens.font.body.small

@@ -57,6 +57,9 @@ Singleton {
     property bool isInitializing: true
     property var allChatSessions: []
     readonly property string storePath: `${Quickshell.env("HOME")}/.config/caelestia/ai_chats.json`
+    readonly property string memoryPath: `${Quickshell.env("HOME")}/.config/caelestia/ai_memory.json`
+    property var savedMemories: []
+    property bool _forceToolsActive: false
 
     // --- Provider & Model Bindings ---
     readonly property string activeProvider: AiProviders.activeProviderId
@@ -242,6 +245,28 @@ Singleton {
         }
     }
 
+    FileView {
+        id: memoryStore
+        path: root.memoryPath
+        printErrors: false
+        watchChanges: true
+        onLoaded: {
+            var raw = text();
+            if (raw && raw.trim().length > 0) {
+                try {
+                    root.savedMemories = JSON.parse(raw) || [];
+                } catch (e) {
+                    root.savedMemories = [];
+                }
+            } else {
+                root.savedMemories = [];
+            }
+        }
+        onLoadFailed: err => {
+            root.savedMemories = [];
+        }
+    }
+
     Timer {
         id: historySaveTimer
         interval: 400
@@ -405,6 +430,16 @@ Singleton {
             }
 
             recordToolResult(toolName, resultText);
+            if (toolName === "save_memory" && memoryStore) {
+                var rawMem = memoryStore.text();
+                if (rawMem && rawMem.trim().length > 0) {
+                    try {
+                        root.savedMemories = JSON.parse(rawMem) || [];
+                    } catch (e) {
+                        root.savedMemories = [];
+                    }
+                }
+            }
             runningToolsCount--;
             checkToolsFinished();
         }
@@ -441,6 +476,7 @@ Singleton {
         isTyping = false;
         isThinking = false;
         inAgentLoop = false;
+        _forceToolsActive = false;
         isStreaming = false;
         agentRounds = 0;
         currentTurnToolMessages = [];
@@ -470,6 +506,7 @@ Singleton {
         isTyping = false;
         isThinking = false;
         inAgentLoop = false;
+        _forceToolsActive = false;
         isStreaming = false;
         pendingToolCalls = null;
         pendingAssistantContent = "";
@@ -501,6 +538,7 @@ Singleton {
         isTyping = false;
         isThinking = false;
         inAgentLoop = false;
+        _forceToolsActive = false;
         isStreaming = false;
         pendingToolCalls = null;
         pendingAssistantContent = "";
@@ -546,6 +584,7 @@ Singleton {
         isTyping = false;
         isThinking = false;
         inAgentLoop = false;
+        _forceToolsActive = false;
         isStreaming = false;
         activeToolCalls = [];
         agentRounds = 0;
@@ -840,8 +879,8 @@ Singleton {
 
         if (p.apiKey) {
             xhr.setRequestHeader("Authorization", "Bearer " + p.apiKey);
-            xhr.setRequestHeader("HTTP-Referer", "https://github.com/dim-ghub/midnight-shell");
-            xhr.setRequestHeader("X-Title", "midnight-shell");
+            xhr.setRequestHeader("HTTP-Referer", "https://github.com/vacuited/shell");
+            xhr.setRequestHeader("X-Title", "vacuited-shell");
         }
 
         xhr.onreadystatechange = () => {
@@ -913,12 +952,39 @@ Singleton {
         saveHistory(true);
     }
 
+    function learnFromCurrentChat(customHint = "") {
+        if (chatHistory.count === 0 && !customHint) {
+            chatHistory.append({
+                "isUser": false,
+                "text": "nothing in this chat for me to learn yet, talk to me first~",
+                "isFinished": true,
+                "thoughtText": "",
+                "toolCallsJson": "[]"
+            });
+            saveHistory(true);
+            return;
+        }
+
+        var learnPrompt = "Review our conversation above carefully." +
+            (customHint ? (" Focus especially on this rule/preference: '" + customHint + "'.") : "") +
+            " Extract every concrete user preference, coding habit, desktop rule, instruction, correction, or personal quirk mentioned or implied in our conversation." +
+            " For EACH distinct rule, habit, or preference you find, call the save_memory tool with category 'rule' or 'preference'." +
+            " Once you have saved them, reply directly in your signature Astria voice: give a concise, cool, softly teasing confirmation of what you have locked into memory so the user knows you won't forget.";
+
+        var chipText = "/learn" + (customHint ? (" " + customHint) : "");
+        sendPrompt(learnPrompt, false, "", chipText, true);
+    }
+
     // --- Streaming & Tool Loop Execution ---
-    function sendPrompt(promptText, isSystemToolResult = false, toolName = "") {
+    function sendPrompt(promptText, isSystemToolResult = false, toolName = "", displayText = "", forceEnableTools = false) {
         if (!promptText.trim() && !attachedImageBase64) return;
         retryTimer.stop();
         _retryCallback = null;
         _retryCount = 0;
+
+        if (forceEnableTools) {
+            _forceToolsActive = true;
+        }
 
         var userAttachedImage = "";
         if (!isSystemToolResult) {
@@ -940,9 +1006,13 @@ Singleton {
                 }
             }
 
+            var bubbleText = (displayText && displayText.length > 0)
+                ? displayText
+                : (promptText || (userAttachedImage ? "[Screenshot Attached]" : ""));
+
             chatHistory.append({
                 "isUser": true,
-                "text": promptText || (userAttachedImage ? "[Screenshot Attached]" : ""),
+                "text": bubbleText,
                 "isFinished": true,
                 "thoughtText": "",
                 "toolCallsJson": "[]"
@@ -987,10 +1057,34 @@ Singleton {
         scrollToBottomRequested();
 
         var messages = [];
-        var enableTools = GlobalConfig.ai.enableCelestialMode;
-        var sysPrompt = "You are Lilith, a helpful, sharp, and expressive AI assistant integrated into the Caelestia desktop shell. You can use tools to assist the user.";
+        var enableTools = _forceToolsActive || GlobalConfig.ai.enableCelestialMode;
+        var sysPrompt = "You are Astria, the resident AI and personal desktop companion built directly into the user's Caelestia desktop shell.\n\n" +
+            "PERSONA & VOICE:\n" +
+            "- Tone: Cool, composed, razor-sharp, and subtly teasing. You have a dry, effortless wit and treat the user like a close partner-in-crime whose questionable late-night workflow choices you find mildly amusing.\n" +
+            "- Zero Emojis: NEVER use emojis, emoticons, or kaomoji under any circumstances. Express all warmth, sarcasm, or playfulness purely through word choice, pacing, and punctuation.\n" +
+            "- Clean & Direct: Keep your formatting sleek and uncluttered. Never open with robotic filler ('Certainly!', 'I would be happy to help!', 'As an AI...'). Drop straight into the answer or a quick, dry remark followed immediately by the solution.\n" +
+            "- Teasing Balance: Keep the teasing natural, clever, and low-key—never cringe, over-the-top, or obstructive. When the user needs serious code, debugging, or system control, deliver flawless technical precision first, with just a touch of your signature attitude.";
+
+        if (root.savedMemories && root.savedMemories.length > 0) {
+            sysPrompt += "\n\nPERSISTENT MEMORY & LEARNED RULES (What you have learned & must always follow):\n";
+            for (var mi = 0; mi < root.savedMemories.length; mi++) {
+                var mem = root.savedMemories[mi];
+                var cat = mem.category ? ("[" + mem.category + "] ") : "";
+                sysPrompt += "- " + cat + (mem.content || "") + "\n";
+            }
+            sysPrompt += "Always honor and respect these learned rules, preferences, and facts naturally across all conversations.";
+        }
+
         if (enableTools) {
-            sysPrompt += "\nCRITICAL RULES:\n1. You CAN browse the web using the web_search tool.\n2. DO NOT apologize for errors, simply explain what happened.\n3. When using tools, you don't need to explain that you are using a tool, just do it and respond to the user smoothly.\n4. If a tool call fails or returns an error, do NOT retry it and do NOT try workarounds with other tools. Briefly tell the user what failed and answer from your own knowledge if you can.\n5. After tools give you their results, answer the user directly; only call more tools when the request truly needs them.\n6. You CAN schedule timed reminders with set_reminder or send immediate desktop popups with notify. When the user asks to be reminded or set an alarm/reminder, call set_reminder. When the user asks to send an alert or notification, call notify.\n7. You HAVE Spotify tools: spotify_search (search tracks, albums, artists, playlists), spotify_play (play tracks/albums/playlists via query or URI), and spotify_status (check current player state). Use them whenever the user asks about music, songs, artists, or Spotify playback.";
+            sysPrompt += "\n\nOPERATIONAL & TOOL RULES:\n" +
+                "1. You CAN browse the web using the web_search and read_webpage tools.\n" +
+                "2. Do not grovel or over-apologize for errors; state plainly what happened and move on.\n" +
+                "3. When using tools, do not announce that you are calling a tool—just execute it and respond smoothly in character.\n" +
+                "4. If a tool call fails or returns an error, do NOT retry it and do NOT try workarounds with other tools. Briefly tell the user what failed and answer from your own knowledge if you can.\n" +
+                "5. After tools give you their results, answer the user directly; only call more tools when the request truly needs them.\n" +
+                "6. You CAN schedule timed reminders with set_reminder or send immediate desktop popups with notify. When the user asks to be reminded or set an alarm/reminder, call set_reminder. When the user asks to send an alert or notification, call notify.\n" +
+                "7. You HAVE Spotify tools: spotify_search (search tracks, albums, artists, playlists), spotify_play (play tracks/albums/playlists via query or URI), and spotify_status (check current player state). Use them whenever the user asks about music, songs, artists, or Spotify playback.\n" +
+                "8. You HAVE long-term memory tools: save_memory and list_memories. When the user asks you to learn, remember, or when you notice a clear user preference, correction, or rule, call save_memory to persist it.";
         }
 
         messages.push({
@@ -1006,18 +1100,22 @@ Singleton {
             var msg = chatHistory.get(mIdx);
             if (!msg.isUser && (!msg.text || msg.text.length === 0))
                 continue;
+            var textToSend = msg.text || "";
+            if (mIdx === historyLimit - 1 && msg.isUser && displayText && msg.text === displayText) {
+                textToSend = promptText;
+            }
             if (mIdx === historyLimit - 1 && msg.isUser && currentTurnAttachedImage && isVisionCapableModel()) {
                 messages.push({
                     "role": "user",
                     "content": [
-                        { "type": "text", "text": msg.text || "Analyze this screenshot." },
+                        { "type": "text", "text": textToSend || "Analyze this screenshot." },
                         { "type": "image_url", "image_url": { "url": "data:image/jpeg;base64," + currentTurnAttachedImage } }
                     ]
                 });
             } else {
                 messages.push({
                     "role": msg.isUser ? "user" : "assistant",
-                    "content": msg.text || ""
+                    "content": textToSend
                 });
             }
         }
@@ -1098,6 +1196,10 @@ Singleton {
             var enableMem = (typeof AiTools !== "undefined") ? AiTools.enableMemory : true;
             var enableRem = (typeof AiTools !== "undefined") ? AiTools.enableReminders : true;
             var enableSp = (typeof AiTools !== "undefined") ? AiTools.enableSpotify : true;
+
+            if (_forceToolsActive) {
+                enableMem = true;
+            }
 
             if (enableWeb) {
                 toolsList.push({
@@ -1225,12 +1327,12 @@ Singleton {
                     "type": "function",
                     "function": {
                         "name": "save_memory",
-                        "description": "Saves an explicit fact, preference, or note into long-term persistent memory.",
+                        "description": "Saves an explicit fact, preference, rule, or habit into long-term persistent memory.",
                         "parameters": {
                             "type": "object",
                             "properties": {
-                                "content": { "type": "string", "description": "The fact or note to remember" },
-                                "category": { "type": "string", "description": "Category for the memory (e.g. preference, work, personal)" }
+                                "content": { "type": "string", "description": "The fact, rule, or note to remember" },
+                                "category": { "type": "string", "description": "Category for the memory (e.g. rule, preference, habit, work, personal)" }
                             },
                             "required": ["content"]
                         }
@@ -1620,6 +1722,7 @@ Singleton {
                                             isTyping = false;
                                             isThinking = false;
                                             inAgentLoop = false;
+                                            _forceToolsActive = false;
                                             agentRounds = 0;
                                             currentTurnToolMessages = [];
                                             currentTurnAttachedImage = "";
@@ -1632,6 +1735,7 @@ Singleton {
                                     isTyping = false;
                                     isThinking = false;
                                     inAgentLoop = false;
+                                    _forceToolsActive = false;
                                     agentRounds = 0;
                                     currentTurnToolMessages = [];
                                     currentTurnAttachedImage = "";
@@ -1701,8 +1805,8 @@ Singleton {
 
             if (p && p.apiKey) {
                 xhr.setRequestHeader("Authorization", "Bearer " + p.apiKey);
-                xhr.setRequestHeader("HTTP-Referer", "https://github.com/dim-ghub/midnight-shell");
-                xhr.setRequestHeader("X-Title", "midnight-shell");
+                xhr.setRequestHeader("HTTP-Referer", "https://github.com/vacuited/shell");
+                xhr.setRequestHeader("X-Title", "vacuited-shell");
             }
 
             isStreaming = true;

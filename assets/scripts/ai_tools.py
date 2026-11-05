@@ -309,6 +309,16 @@ def tool_save_memory(args):
     except Exception:
       memories = []
 
+  # Deduplicate: if an entry with identical content already exists, update category and timestamp
+  for m in memories:
+    if m.get("content", "").strip().lower() == content.lower():
+      m["category"] = category
+      m["timestamp"] = time.strftime("%Y-%m-%d %H:%M:%S")
+      os.makedirs(os.path.dirname(MEMORY_FILE), exist_ok=True)
+      with open(MEMORY_FILE, "w", encoding="utf-8") as f:
+        json.dump(memories, f, indent=2)
+      return True, f"Updated existing memory [{category}]: {content}"
+
   entry = {
       "id": f"mem_{int(time.time()*1000)}",
       "category": category,

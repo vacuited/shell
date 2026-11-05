@@ -16,6 +16,7 @@ Item {
 
     readonly property var allCommands: [
         { id: "new", cmd: "/new", icon: "add_comment", desc: qsTr("Start a fresh conversation") },
+        { id: "learn", cmd: "/learn", icon: "psychology", desc: qsTr("Learn habits, rules & memory from chat") },
         { id: "reset", cmd: "/reset", icon: "restart_alt", desc: qsTr("Clear the current conversation") },
         { id: "clear", cmd: "/clear", icon: "delete_sweep", desc: qsTr("Alias for /reset") },
         { id: "history", cmd: "/history", icon: "history", desc: qsTr("Toggle chat sessions history") },

@@ -31,7 +31,7 @@ Item {
             { id: "notifications", label: qsTr("Notifications"), icon: "notifications" }
         ];
         if (root.aiAvailable) {
-            list.push({ id: "ai", label: qsTr("Lilith"), icon: "smart_toy" });
+            list.push({ id: "ai", label: qsTr("Astria"), icon: "smart_toy" });
         }
         if (GlobalConfig.sidebar.showNews !== false) {
             list.push({ id: "news", label: qsTr("News"), icon: "newspaper" });
