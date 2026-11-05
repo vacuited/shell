@@ -64,7 +64,7 @@ PageBase {
 
                 property int clicks: 0
 
-                AnimatedLogo {
+                VoidLogo {
                     Layout.alignment: Qt.AlignHCenter
                     Layout.preferredWidth: implicitWidth
                     Layout.preferredHeight: implicitHeight
@@ -73,17 +73,25 @@ PageBase {
                 StyledText {
                     Layout.alignment: Qt.AlignHCenter
                     Layout.topMargin: Tokens.spacing.small
-                    text: "MiDnight"
+                    text: "Vacuited"
                     font: Tokens.font.headline.builders.large.width(110).build()
                 }
 
                 StyledText {
                     Layout.alignment: Qt.AlignHCenter
                     Layout.topMargin: Tokens.spacing.small
-                    text: qsTr("by DiM • Basically Caelestia+")
+                    text: qsTr("by vacuit")
                     color: Colours.palette.m3onSurfaceVariant
                     font: Tokens.font.label.medium
                     opacity: 0.8
+                }
+
+                StyledText {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: qsTr("Derived from MiDnight")
+                    color: Colours.palette.m3outline
+                    font: Tokens.font.label.small
+                    opacity: 0.7
                 }
 
                 StyledText {

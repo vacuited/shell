@@ -190,14 +190,14 @@ Item {
             if (Colours.variant) stateStr += " | Variant: " + Colours.variant;
 
             root.sendActivity({
-                name: "MiDnight Shell" + qsVersion,
+                name: "Vacuited Shell" + qsVersion,
                 details: detailsStr,
                 state: stateStr,
-                large_image: "https://raw.githubusercontent.com/dim-ghub/midnight-shell/main/assets/logo.png",
+                large_image: "https://raw.githubusercontent.com/vacuited/shell/main/assets/logo.png",
                 small_image: "",
                 startTimestamp: root.shellStartTime,
                 buttons: [
-                    { label: "Website", url: "https://caelestiashell.com" },
+                    { label: "Website", url: "https://github.com/vacuited/shell" },
                     { label: "GitHub", url: "https://github.com/caelestia-dots/" }
                 ]
             });

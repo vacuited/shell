@@ -110,7 +110,7 @@ PageBase {
         }
 
         SectionHeader {
-            text: qsTr("MiDnight feature overrides")
+            text: qsTr("Vacuited feature overrides")
         }
 
         ToggleRow {

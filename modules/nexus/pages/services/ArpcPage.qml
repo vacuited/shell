@@ -74,7 +74,7 @@ PageBase {
             Layout.topMargin: Tokens.spacing.extraSmall / 2 - parent.spacing
             Layout.fillWidth: true
             last: true
-            text: qsTr("Broadcast MiDnight info")
+            text: qsTr("Broadcast Vacuited info")
             subtext: qsTr("Broadcast shell uptime and system info")
             checked: GlobalConfig.services.arpcCaelestiaInfo
             onToggled: GlobalConfig.services.arpcCaelestiaInfo = checked

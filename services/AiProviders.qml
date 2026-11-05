@@ -325,8 +325,8 @@ Singleton {
         xhr.open("GET", requestUrl, true);
         if (p.apiKey) {
             xhr.setRequestHeader("Authorization", "Bearer " + p.apiKey);
-            xhr.setRequestHeader("HTTP-Referer", "https://github.com/dim-ghub/midnight-shell");
-            xhr.setRequestHeader("X-Title", "midnight-shell");
+            xhr.setRequestHeader("HTTP-Referer", "https://github.com/vacuited/shell");
+            xhr.setRequestHeader("X-Title", "vacuited-shell");
         }
 
         xhr.onreadystatechange = () => {

@@ -2,7 +2,7 @@
 
 # Vacuited Shell
 
-<sub>My personal Quickshell setup for Caelestia, originally forked from [caelestia-dots/shell](https://github.com/caelestia-dots/shell) via [midnight-shell](https://github.com/dim-ghub/midnight-shell).</sub>
+<sub>My personal Quickshell setup for Caelestia, derived from [midnight-shell](https://github.com/dim-ghub/midnight-shell) and built on [caelestia-dots/shell](https://github.com/caelestia-dots/shell).</sub>
 
 <br>
 
@@ -110,7 +110,7 @@ caelestia shell -d -r
 | Project | Upstream | What was ported / based on |
 | :--- | :--- | :--- |
 | **Caelestia Shell** | [caelestia-dots/shell](https://github.com/caelestia-dots/shell) | Original Quickshell desktop environment |
-| **Midnight Shell** | [dim-ghub/midnight-shell](https://github.com/dim-ghub/midnight-shell) | Initial base fork, styling, launchers, desktop gadgets |
+| **MiDnight Shell** | [dim-ghub/midnight-shell](https://github.com/dim-ghub/midnight-shell) | Initial base the shell was derived from: styling, launchers, desktop gadgets |
 | **Cykler Caelestia** | [cykler01/cykler-caelestia](https://github.com/cykler01/cykler-caelestia) | Dynamic Island Notch, desktop widgets grid, shell assets page |
 | **Caelestia Notes** | [Denzils-repo/Caelestia_Notes](https://github.com/Denzils-repo/Caelestia_Notes) | Notes tab component and store |
 | **Caelestia Hourly Weather** | [ItsXyzzy/Caelestia-Hourly-Weather](https://github.com/ItsXyzzy/Caelestia-Hourly-Weather) | Hourly forecast and spline curve |
