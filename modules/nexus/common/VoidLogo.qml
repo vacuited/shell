@@ -37,8 +37,6 @@ Item {
     property bool monoMode: false
     property bool skipIntroAnimation: false
     property bool reduceMotion: skipIntroAnimation
-    // Set true if you want full 360° continuous idle rotation in addition to the open spin
-    property bool fullSpinIdle: false
 
     signal animationCompleted
 
@@ -52,7 +50,7 @@ Item {
         anchors.centerIn: parent
         scale: root.scaleFactor
 
-        // 1. VOID
+        // 1. VOID (Event Horizon)
         Shape {
             id: voidLayer
 
@@ -68,66 +66,64 @@ Item {
                 fillColor: root.voidColor
 
                 PathSvg {
-                    path: "M 36 64 A 28 28 0 1 1 92 64 A 28 28 0 1 1 36 64 Z"
+                    path: "M 38.5 64 A 25.5 25.5 0 1 1 89.5 64 A 25.5 25.5 0 1 1 38.5 64 Z"
                 }
             }
         }
 
-        // 2 & 3. ACCRETION DISK + PHOTON ARCHES + HIGHLIGHT
+        // 2. INNER SPINNING PHOTON RING (id="horizon-highlight" — spins 360° behind the front accretion disk)
         Item {
-            id: ringOrbit
+            id: photonIdleSpin
 
             anchors.fill: parent
             transformOrigin: Item.Center
 
-            Item {
-                id: ringOpenContainer
+            Shape {
+                id: highlightLayer
 
                 anchors.fill: parent
+                preferredRendererType: Shape.CurveRenderer
                 transformOrigin: Item.Center
-                scale: root.reduceMotion ? 1.0 : 1.6
-                rotation: root.reduceMotion ? 0.0 : -120.0
+                scale: root.reduceMotion ? 1.0 : 1.45
+                rotation: root.reduceMotion ? 0.0 : -200.0
                 opacity: root.reduceMotion ? 1.0 : 0.0
 
-                Shape {
-                    id: horizonLayer
+                ShapePath {
+                    strokeWidth: -1
+                    strokeColor: "transparent"
+                    fillColor: root.monoMode ? "#FFFFFF" : root.highlightColor
 
-                    anchors.fill: parent
-                    preferredRendererType: Shape.CurveRenderer
-
-                    ShapePath {
-                        strokeWidth: -1
-                        strokeColor: "transparent"
-                        fillColor: root.monoMode ? "#FFFFFF" : root.horizonColor
-
-                        PathSvg {
-                            path: "M 53.91 31.01 C 38.13 35.83 32.48 53.25 30.66 62.69 C 28.84 72.13 8.37 78.71 9.74 83.2 C 11.29 88.27 32.87 81.88 40.32 87.45 C 47.77 93.01 59.12 101.05 73.94 96.51 C 88.29 92.13 92.13 77.36 95.2 68.58 C 98.27 59.8 118.97 50.54 117.59 46.05 C 116.34 41.93 96.74 51.38 89.95 44.56 C 83.16 37.75 69.21 26.33 53.91 31.01 Z M 38.54 74.4 A 27.5 27.5 0 1 1 90.44 56.44 C 74.97 65.67 56.13 72.47 38.54 74.4 Z M 43.85 82.71 C 59.54 80.21 76.35 73.61 91.46 65.54 A 27.5 27.5 0 0 1 43.85 82.71 Z"
-                        }
+                    PathSvg {
+                        path: "M 34.1 64.6 A 28.5 28.5 0 1 1 91.1 64.6 A 28.5 28.5 0 1 1 34.1 64.6 Z M 38.5 64 A 25.5 25.5 0 1 0 89.5 64 A 25.5 25.5 0 1 0 38.5 64 Z"
                     }
                 }
+            }
+        }
 
-                Shape {
-                    id: highlightLayer
+        // 3. CAELESTIA ACCRETION DISK + UPPER/LOWER LENSED ARCHES (id="horizon" — stays horizontal!)
+        Item {
+            id: diskIdleFloat
 
-                    anchors.fill: parent
-                    preferredRendererType: Shape.CurveRenderer
+            anchors.fill: parent
+            transformOrigin: Item.Center
 
-                    property real bx: 0.0
-                    property real by: 0.0
+            Shape {
+                id: horizonLayer
 
-                    transform: Translate {
-                        x: highlightLayer.bx
-                        y: highlightLayer.by
-                    }
+                anchors.fill: parent
+                preferredRendererType: Shape.CurveRenderer
+                transformOrigin: Item.Center
+                scale: root.reduceMotion ? 1.0 : 0.72
+                rotation: root.reduceMotion ? 0.0 : -14.0
+                opacity: root.reduceMotion ? 1.0 : 0.0
 
-                    ShapePath {
-                        strokeWidth: -1
-                        strokeColor: "transparent"
-                        fillColor: root.monoMode ? "#FFFFFF" : root.highlightColor
+                ShapePath {
+                    strokeWidth: -1
+                    strokeColor: "transparent"
+                    fillColor: root.monoMode ? "#FFFFFF" : root.horizonColor
 
-                        PathSvg {
-                            path: "M 17.42 80.96 C 50.92 75.95 81.06 65.06 108.12 49.26 C 82.28 69.08 52.15 79.96 17.42 80.96 Z M 37.44 71.12 A 27.5 27.5 0 0 1 63.04 36.52 C 46.75 36.65 29.9 55.08 37.44 71.12 Z"
-                        }
+                    PathSvg {
+                        path: "M 23.5 61.5 C 29.5 42 43 25 61 25 C 73.5 25 83 29 87.5 33.8 C 90.2 36.6 88 40.8 84.2 38.6 C 77.5 34.5 69.5 32.2 61.5 32.2 C 47.5 32.2 36.8 42.2 35.8 54.8 C 35.5 57.5 28 59.5 23.5 61.5 Z M 7.5 78 C 8.8 73.5 26 62.5 56 54.5 C 82 47.6 102 47.2 115.5 48.2 C 119.2 48.5 120.8 50.2 120.5 52.2 C 120.2 54.2 118.2 55.8 114.5 57.5 C 108.5 60.2 101 63.5 96.2 64.8 C 94 65.4 93.5 63.2 93.5 59.8 C 93.5 56.8 91.2 56 86 56.5 C 70 58 54 62.2 43.5 67.8 C 34.8 72.4 34.8 84.5 43.5 91.5 C 53.5 99 69.5 98.5 79.5 92 C 84.5 88.5 88 83.5 90.5 79.5 C 92.5 76.5 96.8 78.5 95 82.5 C 89 95.5 76.5 104.2 61.5 104.2 C 45 104.2 35 92 23 85.8 C 15 81.6 6.5 81.5 7.5 78 Z"
                     }
                 }
             }
@@ -142,11 +138,11 @@ Item {
             transformOrigin: Item.Center
             opacity: root.reduceMotion ? 1.0 : 0.0
 
-            property real ox: root.reduceMotion ? 0.0 : -4.6
-            property real oy: root.reduceMotion ? 0.0 : -3.1
+            property real ox: root.reduceMotion ? 0.0 : 3.8
+            property real oy: root.reduceMotion ? 0.0 : -4.4
             property real dx: 0.0
             property real dy: 0.0
-            property real rotAngle: root.reduceMotion ? 0.0 : -16.0
+            property real rotAngle: root.reduceMotion ? 0.0 : -12.0
 
             transform: [
                 Translate {
@@ -166,7 +162,7 @@ Item {
                 fillColor: root.monoMode ? "#FFFFFF" : root.particleColor
 
                 PathSvg {
-                    path: "M 16 25.5 Q 17.43 30.57 22.5 32 Q 17.43 33.43 16 38.5 Q 14.57 33.43 9.5 32 Q 14.57 30.57 16 25.5 Z"
+                    path: "M 95 20.5 Q 96.65 26.35 102.5 28 Q 96.65 29.65 95 35.5 Q 93.35 29.65 87.5 28 Q 93.35 26.35 95 20.5 Z"
                 }
             }
         }
@@ -179,11 +175,11 @@ Item {
             transformOrigin: Item.Center
             opacity: root.reduceMotion ? 1.0 : 0.0
 
-            property real ox: root.reduceMotion ? 0.0 : 4.1
-            property real oy: root.reduceMotion ? 0.0 : -3.9
+            property real ox: root.reduceMotion ? 0.0 : 4.8
+            property real oy: root.reduceMotion ? 0.0 : -2.8
             property real dx: 0.0
             property real dy: 0.0
-            property real rotAngle: root.reduceMotion ? 0.0 : -16.0
+            property real rotAngle: root.reduceMotion ? 0.0 : -12.0
 
             transform: [
                 Translate {
@@ -203,7 +199,7 @@ Item {
                 fillColor: root.monoMode ? "#FFFFFF" : root.particleColor
 
                 PathSvg {
-                    path: "M 106 19 Q 107.15 22.85 111 24 Q 107.15 25.15 106 29 Q 104.85 25.15 101 24 Q 104.85 22.85 106 19 Z"
+                    path: "M 109 33.5 Q 110.05 36.95 113.5 38 Q 110.05 39.05 109 42.5 Q 107.95 39.05 104.5 38 Q 107.95 36.95 109 33.5 Z"
                 }
             }
         }
@@ -216,11 +212,11 @@ Item {
             transformOrigin: Item.Center
             opacity: root.reduceMotion ? 1.0 : 0.0
 
-            property real ox: root.reduceMotion ? 0.0 : 4.1
-            property real oy: root.reduceMotion ? 0.0 : 3.7
+            property real ox: root.reduceMotion ? 0.0 : 5.0
+            property real oy: root.reduceMotion ? 0.0 : 2.0
             property real dx: 0.0
             property real dy: 0.0
-            property real rotAngle: root.reduceMotion ? 0.0 : -16.0
+            property real rotAngle: root.reduceMotion ? 0.0 : -12.0
 
             transform: [
                 Translate {
@@ -240,7 +236,7 @@ Item {
                 fillColor: root.monoMode ? "#FFFFFF" : root.particleColor
 
                 PathSvg {
-                    path: "M 102 94 Q 102.96 97.04 106 98 Q 102.96 98.96 102 102 Q 101.04 98.96 98 98 Q 101.04 97.04 102 94 Z"
+                    path: "M 109 78 Q 109.95 81.05 113 82 Q 109.95 82.95 109 86 Q 108.05 82.95 105 82 Q 108.05 81.05 109 78 Z"
                 }
             }
         }
@@ -253,14 +249,14 @@ Item {
         running: !root.reduceMotion
         onFinished: root.animationCompleted()
 
-        // 1. Void 0 -> 700ms (with 3% overshoot)
+        // 1. Void 0 -> 650ms (with 3% overshoot)
         SequentialAnimation {
             NumberAnimation {
                 target: voidLayer
                 property: "scale"
                 from: 0.0
                 to: 1.03
-                duration: 545
+                duration: 500
                 easing.type: Easing.OutCubic
             }
 
@@ -269,150 +265,128 @@ Item {
                 property: "scale"
                 from: 1.03
                 to: 1.0
-                duration: 155
+                duration: 150
                 easing.type: Easing.InOutQuad
             }
         }
 
-        // 2. Accretion Disk Spin-In (200 -> 1300ms) + Idle Motion
+        // 2. Inner Photon Ring spins in (150 -> 1200ms) then spins 360° continuously in idle!
         SequentialAnimation {
             PauseAnimation {
-                duration: 200
+                duration: 150
             }
 
             ParallelAnimation {
                 NumberAnimation {
-                    target: ringOpenContainer
+                    target: highlightLayer
                     property: "opacity"
                     from: 0.0
                     to: 1.0
-                    duration: 200
+                    duration: 210
                     easing.type: Easing.OutCubic
                 }
 
                 NumberAnimation {
-                    target: ringOpenContainer
+                    target: highlightLayer
                     property: "scale"
-                    from: 1.6
+                    from: 1.45
                     to: 1.0
-                    duration: 1100
+                    duration: 1050
                     easing.type: Easing.OutCubic
                 }
 
                 NumberAnimation {
-                    target: ringOpenContainer
+                    target: highlightLayer
                     property: "rotation"
-                    from: -120.0
+                    from: -200.0
                     to: 0.0
-                    duration: 1100
+                    duration: 1050
                     easing.type: Easing.OutCubic
                 }
             }
 
+            NumberAnimation {
+                target: photonIdleSpin
+                property: "rotation"
+                from: 0.0
+                to: 360.0
+                duration: 10000
+                loops: Animation.Infinite
+                easing.type: Easing.Linear
+            }
+        }
+
+        // 3. Caelestia Accretion Disk unfurls smoothly (250 -> 1250ms) then floats gently in idle
+        SequentialAnimation {
+            PauseAnimation {
+                duration: 250
+            }
+
             ParallelAnimation {
-                // Disk idle rotation (either subtle gravitational rock or 360° continuous spin)
-                SequentialAnimation {
-                    loops: Animation.Infinite
-
-                    NumberAnimation {
-                        target: ringOrbit
-                        property: "rotation"
-                        from: 0.0
-                        to: root.fullSpinIdle ? 360.0 : 2.5
-                        duration: root.fullSpinIdle ? 24000 : 3200
-                        easing.type: root.fullSpinIdle ? Easing.Linear : Easing.InOutSine
-                    }
-
-                    NumberAnimation {
-                        target: ringOrbit
-                        property: "rotation"
-                        from: 2.5
-                        to: -2.5
-                        duration: root.fullSpinIdle ? 0 : 6400
-                        easing.type: Easing.InOutSine
-                    }
-
-                    NumberAnimation {
-                        target: ringOrbit
-                        property: "rotation"
-                        from: -2.5
-                        to: 0.0
-                        duration: root.fullSpinIdle ? 0 : 3200
-                        easing.type: Easing.InOutSine
-                    }
+                NumberAnimation {
+                    target: horizonLayer
+                    property: "opacity"
+                    from: 0.0
+                    to: 1.0
+                    duration: 250
+                    easing.type: Easing.OutCubic
                 }
 
-                // Relativistic highlight surge along the -17° accretion disk plane
-                SequentialAnimation {
-                    loops: Animation.Infinite
+                NumberAnimation {
+                    target: horizonLayer
+                    property: "scale"
+                    from: 0.72
+                    to: 1.0
+                    duration: 1000
+                    easing.type: Easing.OutCubic
+                }
 
-                    ParallelAnimation {
-                        NumberAnimation {
-                            target: highlightLayer
-                            property: "bx"
-                            from: 0.0
-                            to: 1.8
-                            duration: 1600
-                            easing.type: Easing.InOutSine
-                        }
+                NumberAnimation {
+                    target: horizonLayer
+                    property: "rotation"
+                    from: -14.0
+                    to: 0.0
+                    duration: 1000
+                    easing.type: Easing.OutCubic
+                }
+            }
 
-                        NumberAnimation {
-                            target: highlightLayer
-                            property: "by"
-                            from: 0.0
-                            to: -0.55
-                            duration: 1600
-                            easing.type: Easing.InOutSine
-                        }
-                    }
+            SequentialAnimation {
+                loops: Animation.Infinite
 
-                    ParallelAnimation {
-                        NumberAnimation {
-                            target: highlightLayer
-                            property: "bx"
-                            from: 1.8
-                            to: -1.8
-                            duration: 3200
-                            easing.type: Easing.InOutSine
-                        }
+                NumberAnimation {
+                    target: diskIdleFloat
+                    property: "rotation"
+                    from: 0.0
+                    to: 1.2
+                    duration: 3000
+                    easing.type: Easing.InOutSine
+                }
 
-                        NumberAnimation {
-                            target: highlightLayer
-                            property: "by"
-                            from: -0.55
-                            to: 0.55
-                            duration: 3200
-                            easing.type: Easing.InOutSine
-                        }
-                    }
+                NumberAnimation {
+                    target: diskIdleFloat
+                    property: "rotation"
+                    from: 1.2
+                    to: -1.2
+                    duration: 6000
+                    easing.type: Easing.InOutSine
+                }
 
-                    ParallelAnimation {
-                        NumberAnimation {
-                            target: highlightLayer
-                            property: "bx"
-                            from: -1.8
-                            to: 0.0
-                            duration: 1600
-                            easing.type: Easing.InOutSine
-                        }
-
-                        NumberAnimation {
-                            target: highlightLayer
-                            property: "by"
-                            from: 0.55
-                            to: 0.0
-                            duration: 1600
-                            easing.type: Easing.InOutSine
-                        }
-                    }
+                NumberAnimation {
+                    target: diskIdleFloat
+                    property: "rotation"
+                    from: -1.2
+                    to: 0.0
+                    duration: 3000
+                    easing.type: Easing.InOutSine
                 }
             }
         }
 
-        // 3. Particle 1 (800 -> 1360ms + idle drift)
+        // 4. Particle 1 (750 -> 1310ms + idle drift)
         SequentialAnimation {
             PauseAnimation {
-                duration: 800
+                duration: 750
             }
 
             ParallelAnimation {
@@ -428,7 +402,7 @@ Item {
                 NumberAnimation {
                     target: p1
                     property: "ox"
-                    from: -4.6
+                    from: 3.8
                     to: 0.0
                     duration: 560
                     easing.type: Easing.OutCubic
@@ -437,7 +411,7 @@ Item {
                 NumberAnimation {
                     target: p1
                     property: "oy"
-                    from: -3.1
+                    from: -4.4
                     to: 0.0
                     duration: 560
                     easing.type: Easing.OutCubic
@@ -446,7 +420,7 @@ Item {
                 NumberAnimation {
                     target: p1
                     property: "rotAngle"
-                    from: -16.0
+                    from: -12.0
                     to: 0.0
                     duration: 560
                     easing.type: Easing.OutCubic
@@ -461,157 +435,137 @@ Item {
                         target: p1
                         property: "dx"
                         from: 0.0
-                        to: 1.6
-                        duration: 2600
-                        easing.type: Easing.InOutSine
-                    }
-
-                    NumberAnimation {
-                        target: p1
-                        property: "dy"
-                        from: 0.0
-                        to: 0.9
-                        duration: 2600
-                        easing.type: Easing.InOutSine
-                    }
-                }
-
-                ParallelAnimation {
-                    NumberAnimation {
-                        target: p1
-                        property: "dx"
-                        from: 1.6
-                        to: -1.6
-                        duration: 5200
-                        easing.type: Easing.InOutSine
-                    }
-
-                    NumberAnimation {
-                        target: p1
-                        property: "dy"
-                        from: 0.9
-                        to: -0.9
-                        duration: 5200
-                        easing.type: Easing.InOutSine
-                    }
-                }
-
-                ParallelAnimation {
-                    NumberAnimation {
-                        target: p1
-                        property: "dx"
-                        from: -1.6
-                        to: 0.0
-                        duration: 2600
-                        easing.type: Easing.InOutSine
-                    }
-
-                    NumberAnimation {
-                        target: p1
-                        property: "dy"
-                        from: -0.9
-                        to: 0.0
-                        duration: 2600
-                        easing.type: Easing.InOutSine
-                    }
-                }
-            }
-        }
-
-        // 4. Particle 2 (920 -> 1480ms + idle drift)
-        SequentialAnimation {
-            PauseAnimation {
-                duration: 920
-            }
-
-            ParallelAnimation {
-                NumberAnimation {
-                    target: p2
-                    property: "opacity"
-                    from: 0.0
-                    to: 1.0
-                    duration: 560
-                    easing.type: Easing.OutCubic
-                }
-
-                NumberAnimation {
-                    target: p2
-                    property: "ox"
-                    from: 4.1
-                    to: 0.0
-                    duration: 560
-                    easing.type: Easing.OutCubic
-                }
-
-                NumberAnimation {
-                    target: p2
-                    property: "oy"
-                    from: -3.9
-                    to: 0.0
-                    duration: 560
-                    easing.type: Easing.OutCubic
-                }
-
-                NumberAnimation {
-                    target: p2
-                    property: "rotAngle"
-                    from: -16.0
-                    to: 0.0
-                    duration: 560
-                    easing.type: Easing.OutCubic
-                }
-            }
-
-            SequentialAnimation {
-                loops: Animation.Infinite
-
-                ParallelAnimation {
-                    NumberAnimation {
-                        target: p2
-                        property: "dx"
-                        from: 0.0
-                        to: -1.4
-                        duration: 2800
-                        easing.type: Easing.InOutSine
-                    }
-
-                    NumberAnimation {
-                        target: p2
-                        property: "dy"
-                        from: 0.0
-                        to: 1.2
-                        duration: 2800
-                        easing.type: Easing.InOutSine
-                    }
-                }
-
-                ParallelAnimation {
-                    NumberAnimation {
-                        target: p2
-                        property: "dx"
-                        from: -1.4
                         to: 1.4
-                        duration: 5600
+                        duration: 2600
                         easing.type: Easing.InOutSine
                     }
 
                     NumberAnimation {
-                        target: p2
+                        target: p1
                         property: "dy"
-                        from: 1.2
-                        to: -1.2
-                        duration: 5600
+                        from: 0.0
+                        to: -1.1
+                        duration: 2600
                         easing.type: Easing.InOutSine
                     }
                 }
 
                 ParallelAnimation {
                     NumberAnimation {
-                        target: p2
+                        target: p1
                         property: "dx"
                         from: 1.4
+                        to: -1.4
+                        duration: 5200
+                        easing.type: Easing.InOutSine
+                    }
+
+                    NumberAnimation {
+                        target: p1
+                        property: "dy"
+                        from: -1.1
+                        to: 1.1
+                        duration: 5200
+                        easing.type: Easing.InOutSine
+                    }
+                }
+
+                ParallelAnimation {
+                    NumberAnimation {
+                        target: p1
+                        property: "dx"
+                        from: -1.4
                         to: 0.0
+                        duration: 2600
+                        easing.type: Easing.InOutSine
+                    }
+
+                    NumberAnimation {
+                        target: p1
+                        property: "dy"
+                        from: 1.1
+                        to: 0.0
+                        duration: 2600
+                        easing.type: Easing.InOutSine
+                    }
+                }
+            }
+        }
+
+        // 5. Particle 2 (870 -> 1430ms + idle drift)
+        SequentialAnimation {
+            PauseAnimation {
+                duration: 870
+            }
+
+            ParallelAnimation {
+                NumberAnimation {
+                    target: p2
+                    property: "opacity"
+                    from: 0.0
+                    to: 1.0
+                    duration: 560
+                    easing.type: Easing.OutCubic
+                }
+
+                NumberAnimation {
+                    target: p2
+                    property: "ox"
+                    from: 4.8
+                    to: 0.0
+                    duration: 560
+                    easing.type: Easing.OutCubic
+                }
+
+                NumberAnimation {
+                    target: p2
+                    property: "oy"
+                    from: -2.8
+                    to: 0.0
+                    duration: 560
+                    easing.type: Easing.OutCubic
+                }
+
+                NumberAnimation {
+                    target: p2
+                    property: "rotAngle"
+                    from: -12.0
+                    to: 0.0
+                    duration: 560
+                    easing.type: Easing.OutCubic
+                }
+            }
+
+            SequentialAnimation {
+                loops: Animation.Infinite
+
+                ParallelAnimation {
+                    NumberAnimation {
+                        target: p2
+                        property: "dx"
+                        from: 0.0
+                        to: -1.3
                         duration: 2800
+                        easing.type: Easing.InOutSine
+                    }
+
+                    NumberAnimation {
+                        target: p2
+                        property: "dy"
+                        from: 0.0
+                        to: -1.2
+                        duration: 2800
+                        easing.type: Easing.InOutSine
+                    }
+                }
+
+                ParallelAnimation {
+                    NumberAnimation {
+                        target: p2
+                        property: "dx"
+                        from: -1.3
+                        to: 1.3
+                        duration: 5600
                         easing.type: Easing.InOutSine
                     }
 
@@ -619,6 +573,26 @@ Item {
                         target: p2
                         property: "dy"
                         from: -1.2
+                        to: 1.2
+                        duration: 5600
+                        easing.type: Easing.InOutSine
+                    }
+                }
+
+                ParallelAnimation {
+                    NumberAnimation {
+                        target: p2
+                        property: "dx"
+                        from: 1.3
+                        to: 0.0
+                        duration: 2800
+                        easing.type: Easing.InOutSine
+                    }
+
+                    NumberAnimation {
+                        target: p2
+                        property: "dy"
+                        from: 1.2
                         to: 0.0
                         duration: 2800
                         easing.type: Easing.InOutSine
@@ -627,10 +601,10 @@ Item {
             }
         }
 
-        // 5. Particle 3 (1040 -> 1600ms + idle drift)
+        // 6. Particle 3 (990 -> 1550ms + idle drift)
         SequentialAnimation {
             PauseAnimation {
-                duration: 1040
+                duration: 990
             }
 
             ParallelAnimation {
@@ -646,7 +620,7 @@ Item {
                 NumberAnimation {
                     target: p3
                     property: "ox"
-                    from: 4.1
+                    from: 5.0
                     to: 0.0
                     duration: 560
                     easing.type: Easing.OutCubic
@@ -655,7 +629,7 @@ Item {
                 NumberAnimation {
                     target: p3
                     property: "oy"
-                    from: 3.7
+                    from: 2.0
                     to: 0.0
                     duration: 560
                     easing.type: Easing.OutCubic
@@ -664,7 +638,7 @@ Item {
                 NumberAnimation {
                     target: p3
                     property: "rotAngle"
-                    from: -16.0
+                    from: -12.0
                     to: 0.0
                     duration: 560
                     easing.type: Easing.OutCubic
@@ -679,7 +653,7 @@ Item {
                         target: p3
                         property: "dx"
                         from: 0.0
-                        to: -1.1
+                        to: -1.5
                         duration: 3000
                         easing.type: Easing.InOutSine
                     }
@@ -688,7 +662,7 @@ Item {
                         target: p3
                         property: "dy"
                         from: 0.0
-                        to: -1.5
+                        to: 1.0
                         duration: 3000
                         easing.type: Easing.InOutSine
                     }
@@ -698,8 +672,8 @@ Item {
                     NumberAnimation {
                         target: p3
                         property: "dx"
-                        from: -1.1
-                        to: 1.1
+                        from: -1.5
+                        to: 1.5
                         duration: 6000
                         easing.type: Easing.InOutSine
                     }
@@ -707,8 +681,8 @@ Item {
                     NumberAnimation {
                         target: p3
                         property: "dy"
-                        from: -1.5
-                        to: 1.5
+                        from: 1.0
+                        to: -1.0
                         duration: 6000
                         easing.type: Easing.InOutSine
                     }
@@ -718,7 +692,7 @@ Item {
                     NumberAnimation {
                         target: p3
                         property: "dx"
-                        from: 1.1
+                        from: 1.5
                         to: 0.0
                         duration: 3000
                         easing.type: Easing.InOutSine
@@ -727,7 +701,7 @@ Item {
                     NumberAnimation {
                         target: p3
                         property: "dy"
-                        from: 1.5
+                        from: -1.0
                         to: 0.0
                         duration: 3000
                         easing.type: Easing.InOutSine
