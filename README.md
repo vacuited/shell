@@ -93,6 +93,18 @@ bind = SUPER, T, global, caelestia:terminal
 
 ## Install & Build
 
+### Quick Install (Arch-based)
+
+```fish
+git clone https://github.com/vacuited/shell.git
+cd shell
+./install.sh
+```
+
+Checks dependencies and installs missing ones (pacman + yay/paru, bootstraps `yay` if needed), pulls in the [vacuited CLI](https://github.com/vacuited/cli) if `caelestia` is missing, builds the plugin, and deploys the QML to `~/.config/quickshell/caelestia`. Existing configs that differ are backed up first. Options: `--yes`, `--skip-deps`, `--skip-cli`, `--hardware`, `--no-hardware`, `--dry-run`. On other distros it verifies prerequisites and lists what is missing.
+
+### Manual Build
+
 ```fish
 # Build plugin and install
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/ -DINSTALL_QSCONFDIR="$HOME/.config/quickshell/caelestia"
