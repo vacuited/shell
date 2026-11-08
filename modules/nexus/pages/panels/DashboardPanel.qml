@@ -140,6 +140,35 @@ PageBase {
         width: root.cappedWidth
         spacing: Tokens.spacing.extraSmall / 2
 
+        function syncHardwareTab(): void {
+            const tabsList = root.targetConfig.dashboard.tabs;
+            if (!tabsList)
+                return;
+            const seen = new Set();
+            let changed = false;
+            for (let i = tabsList.values.length - 1; i >= 0; i--) {
+                const id = tabsList.values[i].id;
+                if (seen.has(id) || (id === "hardware" && !Hardware.isSupported)) {
+                    tabsList.remove(i);
+                    changed = true;
+                } else {
+                    seen.add(id);
+                }
+            }
+            if (changed)
+                root.targetConfig.save();
+        }
+
+        Component.onCompleted: Qt.callLater(syncHardwareTab)
+
+        Connections {
+            target: Hardware
+            function onIsSupportedChanged(): void {
+                if (!Hardware.isSupported)
+                    syncHardwareTab();
+            }
+        }
+
         // General
         SectionHeader {
             first: true
@@ -195,6 +224,7 @@ PageBase {
 
         SelectRow {
             Layout.fillWidth: true
+            last: true
             label: qsTr("Lock screen profile picture shape")
             subtext: qsTr("Choose the shape of the profile picture on the lock screen")
             configNode: root.targetConfig.lock
@@ -227,19 +257,6 @@ PageBase {
             }
         }
 
-        ToggleRow {
-            Layout.fillWidth: true
-            text: qsTr("Hyprland splash")
-            subtext: qsTr("Show the current Hyprland splash text")
-            configNode: root.targetConfig.dashboard
-            propertyName: "showHyprlandSplash"
-            checked: root.targetConfig.dashboard.showHyprlandSplash
-            onToggled: {
-                root.targetConfig.dashboard.showHyprlandSplash = checked;
-                root.targetConfig.save();
-            }
-        }
-
         NavRow {
             last: true
             icon: "timer"
@@ -253,20 +270,6 @@ PageBase {
         }
 
         ListEditor {
-            id: tabsListEditor
-
-            function realTabIndex(visibleIdx: int): int {
-                if (!root.targetConfig.dashboard.tabs || visibleIdx < 0 || visibleIdx >= values.length)
-                    return -1;
-                const targetId = values[visibleIdx].id;
-                const raw = root.targetConfig.dashboard.tabs.values;
-                for (let i = 0; i < raw.length; i++) {
-                    if (raw[i].id === targetId)
-                        return i;
-                }
-                return -1;
-            }
-
             function labelFor(item: var): string {
                 const prettyName = root.builtinTabs[item.id];
                 if (prettyName)
@@ -281,30 +284,22 @@ PageBase {
 
             z: 1
             first: true
-            last: !addTabContainer.visible
-            values: {
-                const raw = root.targetConfig.dashboard.tabs ? root.targetConfig.dashboard.tabs.values : [];
-                return raw.filter(item => item.id !== "hardware" || Hardware.isSupported);
-            }
+            values: root.targetConfig.dashboard.tabs ? root.targetConfig.dashboard.tabs.values : []
             onItemMoved: (from, to) => {
-                const realFrom = realTabIndex(from);
-                const realTo = realTabIndex(to);
-                if (realFrom !== -1 && realTo !== -1) {
-                    root.targetConfig.dashboard.tabs.move(realFrom, realTo);
+                if (root.targetConfig.dashboard.tabs) {
+                    root.targetConfig.dashboard.tabs.move(from, to);
                     root.targetConfig.save();
                 }
             }
             onItemRemoved: index => {
-                const realIdx = realTabIndex(index);
-                if (realIdx !== -1) {
-                    root.targetConfig.dashboard.tabs.remove(realIdx);
+                if (root.targetConfig.dashboard.tabs) {
+                    root.targetConfig.dashboard.tabs.remove(index);
                     root.targetConfig.save();
                 }
             }
             onItemToggled: (index, checked) => {
-                const realIdx = realTabIndex(index);
-                if (realIdx !== -1) {
-                    root.targetConfig.dashboard.tabs.at(realIdx).enabled = checked;
+                if (root.targetConfig.dashboard.tabs) {
+                    root.targetConfig.dashboard.tabs.at(index).enabled = checked;
                     root.targetConfig.save();
                 }
             }
@@ -313,7 +308,6 @@ PageBase {
         DialogSelectButton {
             id: addTabContainer
 
-            visible: model.length > 0
             rootParent: root.flickable
             icon: "add"
             label: Tr.tr("Add tab")
@@ -337,6 +331,26 @@ PageBase {
                     id: selectedItem,
                     enabled: true
                 });
+                root.targetConfig.save();
+            }
+        }
+
+        // General
+        SectionHeader {
+            text: qsTr("General")
+        }
+
+        ToggleRow {
+            first: true
+            last: true
+            Layout.fillWidth: true
+            text: qsTr("Hyprland splash")
+            subtext: qsTr("Show the current Hyprland splash text")
+            configNode: root.targetConfig.dashboard
+            propertyName: "showHyprlandSplash"
+            checked: root.targetConfig.dashboard.showHyprlandSplash
+            onToggled: {
+                root.targetConfig.dashboard.showHyprlandSplash = checked;
                 root.targetConfig.save();
             }
         }

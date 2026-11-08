@@ -139,7 +139,6 @@ PageBase {
 
             z: 1
             first: true
-            last: !addWidgetContainer.visible
             values: root.widgetsConfig.entries.values
             onItemMoved: (from, to) => {
                 root.widgetsConfig.entries.move(from, to);
@@ -156,9 +155,6 @@ PageBase {
         }
 
         DialogSelectButton {
-            id: addWidgetContainer
-
-            visible: model.length > 0
             rootParent: root.flickable
             icon: "add"
             label: qsTr("Add widget")

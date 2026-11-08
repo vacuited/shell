@@ -66,8 +66,6 @@ Item {
 
         x: {
             const tab = root.currentItem;
-            if (tab && tab.width > 0)
-                return tab.x + (tab.width - tab.implicitWidth) / 2;
             const count = Math.max(1, root.count);
             const width = (root.nonAnimWidth - bar.spacing * (count - 1)) / count;
             const tabWidth = tab?.implicitWidth ?? width;
@@ -117,7 +115,6 @@ Item {
         readonly property bool current: root.currentIndex === tab.index
 
         Layout.fillWidth: true
-        Layout.minimumWidth: 0
         Layout.preferredWidth: 1 // Uniform width across all tabs
         implicitWidth: mouse.implicitWidth
         implicitHeight: mouse.implicitHeight
