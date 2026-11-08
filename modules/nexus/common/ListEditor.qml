@@ -14,6 +14,7 @@ ListView {
 
     property alias values: valuesModel.values
     property bool first
+    property bool last
 
     signal itemMoved(from: int, to: int)
     signal itemRemoved(index: int)
@@ -70,9 +71,6 @@ ListView {
             type: Anim.DefaultEffects
             to: 1
         }
-        Anim {
-            properties: "y"
-        }
     }
 
     displaced: Transition {
@@ -97,9 +95,9 @@ ListView {
         property bool held
         property point pressPos
         property int pressIndex
-        property real lastMoveY
 
         property real topRadius: root?.first && DelegateModel.itemsIndex === 0 ? Tokens.rounding.extraLarge : Tokens.rounding.extraSmall
+        property real bottomRadius: root?.last && DelegateModel.itemsIndex === (root?.count ?? 0) - 1 ? Tokens.rounding.extraLarge : Tokens.rounding.extraSmall
         property real radiusLerpProg
 
         function lerpRadius(a: real, b: real): real {
@@ -142,6 +140,12 @@ ListView {
             }
         }
 
+        Behavior on bottomRadius {
+            Anim {
+                type: Anim.DefaultEffects
+            }
+        }
+
         StyledRect {
             id: placeholder
 
@@ -150,6 +154,8 @@ ListView {
             radius: Tokens.rounding.extraSmall
             topLeftRadius: item.topRadius
             topRightRadius: item.topRadius
+            bottomLeftRadius: item.bottomRadius
+            bottomRightRadius: item.bottomRadius
             opacity: 0
         }
 
@@ -163,7 +169,6 @@ ListView {
                 returnAnim.stop();
                 item.pressPos = Qt.point(e.x, e.y);
                 item.pressIndex = item.DelegateModel.itemsIndex;
-                item.lastMoveY = item.y;
                 item.held = true;
 
                 itemContent.x = Qt.binding(() => {
@@ -179,29 +184,32 @@ ListView {
                         return 0;
 
                     const maxOvershoot = Tokens.padding.extraLarge;
-                    const yDiff = item.y - item.lastMoveY; // Extra offset if the y of the item changed between mouseY updates
-                    const y = mouse.mouseY - item.pressPos.y - yDiff;
-                    const absY = item.mapToItem(root.contentItem, 0, y).y;
-                    const maxY = root.implicitHeight - item.implicitHeight;
-                    if (absY < 0)
-                        return y - absY - root.dampOvershoot(-absY, maxOvershoot);
-                    if (absY > maxY)
-                        return y - absY + maxY + root.dampOvershoot(absY - maxY, maxOvershoot);
-                    return y;
+                    const curContentY = item.mapToItem(root.contentItem, 0, mouse.mouseY).y;
+                    const desiredTop = curContentY - item.pressPos.y;
+                    const maxY = Math.max(0, root.implicitHeight - item.implicitHeight);
+                    let clampedTop = desiredTop;
+                    if (desiredTop < 0)
+                        clampedTop = -root.dampOvershoot(-desiredTop, maxOvershoot);
+                    else if (desiredTop > maxY)
+                        clampedTop = maxY + root.dampOvershoot(desiredTop - maxY, maxOvershoot);
+                    return clampedTop - item.y;
                 });
             }
 
             onPositionChanged: e => {
-                item.lastMoveY = item.y;
-                const absY = item.mapToItem(root.contentItem, 0, e.y).y;
+                if (!root || root.count <= 1)
+                    return;
 
-                const swap = root.itemAt(0, absY);
-                if (!swap || swap === item)
+                const curContentY = item.mapToItem(root.contentItem, 0, e.y).y;
+                const centerY = curContentY - item.pressPos.y + item.implicitHeight / 2;
+                const stride = item.implicitHeight + root.spacing;
+                if (stride <= 0)
                     return;
 
                 const idx = item.DelegateModel.itemsIndex;
-                const swapIdx = swap.DelegateModel.itemsIndex;
-                visualModel.items.move(idx, swapIdx);
+                const swapIdx = Math.max(0, Math.min(root.count - 1, Math.floor(centerY / stride)));
+                if (swapIdx !== idx)
+                    visualModel.items.move(idx, swapIdx);
             }
 
             onReleased: e => {
@@ -238,6 +246,8 @@ ListView {
                 radius: itemBg.radius
                 topLeftRadius: itemBg.topLeftRadius
                 topRightRadius: itemBg.topRightRadius
+                bottomLeftRadius: itemBg.bottomLeftRadius
+                bottomRightRadius: itemBg.bottomRightRadius
                 level: 3
                 opacity: 0
             }
@@ -250,6 +260,8 @@ ListView {
                 radius: item.lerpRadius(Tokens.rounding.extraSmall, Tokens.rounding.large)
                 topLeftRadius: item.lerpRadius(item.topRadius, Tokens.rounding.large)
                 topRightRadius: item.lerpRadius(item.topRadius, Tokens.rounding.large)
+                bottomLeftRadius: item.lerpRadius(item.bottomRadius, Tokens.rounding.large)
+                bottomRightRadius: item.lerpRadius(item.bottomRadius, Tokens.rounding.large)
             }
 
             MouseArea {
@@ -265,6 +277,8 @@ ListView {
                     radius: itemBg.radius
                     topLeftRadius: itemBg.topLeftRadius
                     topRightRadius: itemBg.topRightRadius
+                    bottomLeftRadius: itemBg.bottomLeftRadius
+                    bottomRightRadius: itemBg.bottomRightRadius
                     color: Colours.palette.m3onSurface
                     opacity: parent.containsMouse && !item.held ? 0.08 : 0
 

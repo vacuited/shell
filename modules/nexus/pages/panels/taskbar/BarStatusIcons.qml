@@ -87,6 +87,7 @@ PageBase {
         DialogSelectButton {
             id: addItemContainer
 
+            last: true
             rootParent: root.flickable
             icon: "add"
             label: Tr.tr("Add entry")

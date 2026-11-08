@@ -121,6 +121,7 @@ PageBase {
 
             z: 1
             first: true
+            last: !addItemContainer.visible
             values: root.targetConfig.utilities.quickToggles.values
             onItemMoved: (from, to) => {
                 root.targetConfig.utilities.quickToggles.move(from, to);
@@ -139,6 +140,8 @@ PageBase {
         DialogSelectButton {
             id: addItemContainer
 
+            visible: model.length > 0
+            last: true
             rootParent: root.flickable
             icon: "add"
             label: Tr.tr("Add entry")

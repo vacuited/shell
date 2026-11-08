@@ -27,7 +27,7 @@ QML_FILES=(shell.qml LICENSE)
 # Arch packages. Official repos:
 PAC_REQUIRED=(
     gcc make git cmake ninja pkgconf
-    qt6-base qt6-declarative qt6-shadertools qt6-multimedia qt6-5compat qt6-svg qt6-imageformats qt6-wayland
+    qt6-base qt6-declarative qt6-shadertools qt6-multimedia qt6-multimedia-ffmpeg qt6-5compat qt6-svg qt6-imageformats qt6-wayland
     protobuf openssl libqalculate pipewire aubio lm_sensors
     hyprland fish brightnessctl ddcutil networkmanager power-profiles-daemon
     libsecret libxml2 unzip wl-clipboard cliphist swappy grim slurp
@@ -47,6 +47,7 @@ FONTS=(
 ASSUME_YES=0
 SKIP_DEPS=0
 SKIP_CLI=0
+UPDATE_CLI=0
 DRY_RUN=0
 HARDWARE=auto
 SUDO=sudo
@@ -69,8 +70,9 @@ Usage: ./install.sh [options]
   -y, --yes          Non-interactive (answer yes, pass --noconfirm to package managers)
       --skip-deps    Do not check or install dependencies
       --skip-cli     Do not install the vacuited CLI when 'caelestia' is missing
+      --update-cli   Force rebuild and update of the vacuited CLI
       --hardware     Install the HP Victus hardware helper + polkit rule
-      --no-hardware  Never install the hardware helper (default: auto-detect hp-wmi)
+      --no-hardware  Never install the hardware helper (default: auto-detect hp-wmi fan control)
       --dry-run      Print what would run without changing anything
   -h, --help         Show this help
 
@@ -84,6 +86,7 @@ while [ $# -gt 0 ]; do
         -y|--yes) ASSUME_YES=1 ;;
         --skip-deps) SKIP_DEPS=1 ;;
         --skip-cli) SKIP_CLI=1 ;;
+        --update-cli) UPDATE_CLI=1 ;;
         --hardware) HARDWARE=yes ;;
         --no-hardware) HARDWARE=no ;;
         --dry-run) DRY_RUN=1 ;;
@@ -220,6 +223,15 @@ install_deps_arch() {
         warn "quickshell-git is not installed. This shell targets the git version of Quickshell; the stable package may lack features."
     fi
 
+    for pkg in caelestia-shell caelestia-shell-git; do
+        if pacman -Qq "$pkg" >/dev/null 2>&1; then
+            warn "System package '$pkg' is installed and may conflict with vacuited-shell."
+            if confirm "Remove conflicting package '$pkg' now?" y; then
+                run $SUDO pacman -Rdd "${YES_FLAG[@]}" "$pkg"
+            fi
+        fi
+    done
+
     # Optional extras
     mapfile -t opt_pac < <(pac_missing "${PAC_OPTIONAL[@]}")
     mapfile -t opt_aur < <(pac_missing "${AUR_OPTIONAL[@]}")
@@ -317,10 +329,22 @@ install_cli() {
 
 ORIG_PATH="$PATH"
 export PATH="$HOME/.local/bin:$PATH"
-if command -v caelestia >/dev/null 2>&1; then
-    log "caelestia CLI found: $(command -v caelestia)"
-elif [ "$SKIP_CLI" -eq 1 ]; then
-    warn "caelestia CLI missing and --skip-cli given. The shell needs it for schemes, wallpapers and toggles."
+if [ "$SKIP_CLI" -eq 1 ]; then
+    if ! command -v caelestia >/dev/null 2>&1; then
+        warn "caelestia CLI missing and --skip-cli given. The shell needs it for schemes, wallpapers and toggles."
+    fi
+elif [ "$UPDATE_CLI" -eq 1 ]; then
+    info "Updating vacuited CLI (--update-cli)..."
+    install_cli
+elif command -v caelestia >/dev/null 2>&1; then
+    if caelestia hardware -h >/dev/null 2>&1; then
+        log "vacuited CLI found: $(command -v caelestia)"
+    else
+        warn "Found upstream 'caelestia' ($(command -v caelestia)), not vacuited-cli."
+        if confirm "Install vacuited-cli to ~/.local/bin/caelestia now?" y; then
+            install_cli
+        fi
+    fi
 else
     warn "caelestia CLI not found. The shell depends on it."
     if confirm "Install the vacuited CLI now?" y; then
@@ -410,14 +434,32 @@ done
 # ---------------------------------------------------------------------------
 
 if [ "$HARDWARE" = auto ]; then
-    if [ -d /sys/devices/platform/hp-wmi ]; then HARDWARE=yes; else HARDWARE=no; fi
+    if compgen -G "/sys/devices/platform/hp-wmi/hwmon/hwmon*/pwm1_enable" >/dev/null; then
+        HARDWARE=yes
+    else
+        HARDWARE=no
+    fi
 fi
 if [ "$HARDWARE" = yes ]; then
     log "Installing the HP hardware helper and polkit rule (sudo)..."
     run $SUDO install -Dm755 "$SCRIPT_DIR/scripts/caelestia-hardware-helper" /usr/local/bin/caelestia-hardware-helper
     run $SUDO install -Dm644 "$SCRIPT_DIR/scripts/50-caelestia-hardware.rules" /etc/polkit-1/rules.d/50-caelestia-hardware.rules
 else
-    info "Skipping the hardware helper (no hp-wmi detected; use --hardware to force)."
+    info "Skipping the hardware helper (no HP Victus hp-wmi fan controller detected; use --hardware to force)."
+    if [ -e /usr/local/bin/caelestia-hardware-helper ] || [ -e /etc/polkit-1/rules.d/50-caelestia-hardware.rules ]; then
+        info "Removing unused HP hardware helper from non-HP system..."
+        run $SUDO rm -f /usr/local/bin/caelestia-hardware-helper /etc/polkit-1/rules.d/50-caelestia-hardware.rules
+    fi
+fi
+
+# ---------------------------------------------------------------------------
+# Initial Scheme & PATH
+# ---------------------------------------------------------------------------
+
+STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
+if [ "$DRY_RUN" -eq 0 ] && [ ! -f "$STATE_HOME/caelestia/scheme.json" ] && command -v caelestia >/dev/null 2>&1; then
+    info "Initializing default Caelestia color scheme..."
+    caelestia scheme set -n catppuccin -m dark >/dev/null 2>&1 || true
 fi
 
 # ---------------------------------------------------------------------------
