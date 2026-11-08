@@ -62,17 +62,36 @@ Singleton {
 
     function applyGameMode(): void {
         const gameModeConfig = GlobalConfig.utilities.gameMode;
-        let options = {};
-        if (gameModeConfig.disableHyprlandAnimations) options["animations:enabled"] = 0;
-        if (gameModeConfig.disableHyprlandShadows) options["decoration:shadow:enabled"] = 0;
-        if (gameModeConfig.disableHyprlandBlur) options["decoration:blur:enabled"] = 0;
-        if (gameModeConfig.disableHyprlandGaps) {
-            options["general:gaps_in"] = 0;
-            options["general:gaps_out"] = 0;
-            options["general:border_size"] = 1;
-            options["decoration:rounding"] = 0;
+        const baseOpts = gameModeConfig.options || {};
+        let options = Object.assign({}, baseOpts);
+        if (!gameModeConfig.disableHyprlandAnimations)
+            delete options["animations:enabled"];
+        else if (options["animations:enabled"] === undefined)
+            options["animations:enabled"] = 0;
+
+        if (!gameModeConfig.disableHyprlandShadows)
+            delete options["decoration:shadow:enabled"];
+        else if (options["decoration:shadow:enabled"] === undefined)
+            options["decoration:shadow:enabled"] = 0;
+
+        if (!gameModeConfig.disableHyprlandBlur)
+            delete options["decoration:blur:enabled"];
+        else if (options["decoration:blur:enabled"] === undefined)
+            options["decoration:blur:enabled"] = 0;
+
+        if (!gameModeConfig.disableHyprlandGaps) {
+            delete options["general:gaps_in"];
+            delete options["general:gaps_out"];
+            delete options["general:border_size"];
+            delete options["decoration:rounding"];
+        } else {
+            if (options["general:gaps_in"] === undefined) options["general:gaps_in"] = 0;
+            if (options["general:gaps_out"] === undefined) options["general:gaps_out"] = 0;
+            if (options["general:border_size"] === undefined) options["general:border_size"] = 1;
+            if (options["decoration:rounding"] === undefined) options["decoration:rounding"] = 0;
         }
-        options["general:allow_tearing"] = 1;
+        if (options["general:allow_tearing"] === undefined)
+            options["general:allow_tearing"] = 1;
 
         if (gameModeConfig.disableWindowTransparency) {
             options["decoration:active_opacity"] = 1;

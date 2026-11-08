@@ -2,6 +2,7 @@
 
 #include <qstring.h>
 #include <qvariantlist.h>
+#include <qvariantmap.h>
 
 #include "settings/objectnode.hpp"
 #include "common.hpp"
@@ -9,6 +10,7 @@
 namespace caelestia::shell::config {
 
 using Qt::StringLiterals::operator""_s;
+using settings::vmap;
 
 class UtilitiesToasts : public settings::ObjectNode {
     CONFIG_NODE(UtilitiesToasts, settings::ObjectNode)
@@ -73,6 +75,17 @@ class UtilitiesGameMode : public settings::ObjectNode {
     CONFIG_GLOBAL_PROPERTY(bool, disableShimeji, true)
     CONFIG_GLOBAL_PROPERTY(bool, autoEnable, true)
     CONFIG_GLOBAL_PROPERTY(QStringList, autoEnableRegexes, {})
+    CONFIG_PROPERTY(QVariantMap, options,
+        vmap({
+            { u"animations:enabled"_s, 0 },
+            { u"decoration:shadow:enabled"_s, 0 },
+            { u"decoration:blur:enabled"_s, 0 },
+            { u"general:gaps_in"_s, 0 },
+            { u"general:gaps_out"_s, 0 },
+            { u"general:border_size"_s, 1 },
+            { u"decoration:rounding"_s, 0 },
+            { u"general:allow_tearing"_s, 1 },
+        }))
 };
 
 class UtilitiesConfig : public settings::ObjectNode {
@@ -81,9 +94,9 @@ class UtilitiesConfig : public settings::ObjectNode {
     CONFIG_PROPERTY(bool, enabled, true)
     CONFIG_PROPERTY(int, maxToasts, 4)
     CONFIG_SUBOBJECT(UtilitiesCards, cards)
-    CONFIG_SUBOBJECT(UtilitiesToasts, toasts)
-    CONFIG_SUBOBJECT(UtilitiesVpn, vpn)
-    CONFIG_SUBOBJECT(UtilitiesGameMode, gameMode)
+    CONFIG_GLOBAL_SUBOBJECT(UtilitiesToasts, toasts)
+    CONFIG_GLOBAL_SUBOBJECT(UtilitiesVpn, vpn)
+    CONFIG_GLOBAL_SUBOBJECT(UtilitiesGameMode, gameMode)
     CONFIG_LIST(EntryList, quickToggles,
         DEFAULT_ARG({
             LIST_ENTRY(wifi, true),
