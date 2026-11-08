@@ -314,7 +314,6 @@ PageBase {
             id: addTabContainer
 
             visible: model.length > 0
-            last: true
             rootParent: root.flickable
             icon: "add"
             label: Tr.tr("Add tab")

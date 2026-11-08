@@ -159,7 +159,6 @@ PageBase {
             id: addWidgetContainer
 
             visible: model.length > 0
-            last: true
             rootParent: root.flickable
             icon: "add"
             label: qsTr("Add widget")

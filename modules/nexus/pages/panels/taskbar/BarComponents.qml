@@ -99,7 +99,6 @@ PageBase {
         }
 
         DialogSelectButton {
-            last: true
             rootParent: root.flickable
             icon: "add"
             label: qsTr("Add entry")
