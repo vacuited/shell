@@ -45,6 +45,7 @@ Searcher {
     property bool _selfSet: false
     property int selectNonce: 0
     property var _thumbCache: ({})
+    property string lastStaticHoldPath: ""
 
     function cleanPath(raw: string): string {
         if (!raw) return "";
@@ -224,13 +225,20 @@ Searcher {
         return validVideoExtensions.includes(ext);
     }
 
+    function isWorkshopEntry(parentDir: string): bool {
+        if (!parentDir) return false;
+        if (parentDir.includes("steamapps/workshop/content/431960")) return true;
+        const customDir = Skwd.workshopDir || Skwd.resolvedWorkshopDir;
+        return customDir !== "" && (parentDir === customDir || parentDir.startsWith(customDir + "/"));
+    }
+
     readonly property var categories: {
         let dummy = root.list;
         const baseDir = Paths.wallsdir;
         let cats = [];
         for (let i = 0; i < root.list.length; i++) {
             let p = root.list[i].parentDir;
-            if (p.includes("steamapps/workshop/content/431960")) {
+            if (isWorkshopEntry(p)) {
                 let cat = "Wallpaper Engine";
                 if (!cats.includes(cat)) cats.push(cat);
                 continue;
@@ -251,7 +259,7 @@ Searcher {
         for (let i = 0; i < root.list.length; i++) {
             let w = root.list[i];
             let p = w.parentDir;
-            if (p.includes("steamapps/workshop/content/431960")) {
+            if (isWorkshopEntry(p)) {
                 let cat = "Wallpaper Engine";
                 if (!grp[cat]) grp[cat] = [];
                 grp[cat].push(w);
@@ -270,7 +278,7 @@ Searcher {
     }
 
     function getCategoryFor(w: FileSystemEntry): string {
-        if (w.parentDir.includes("steamapps/workshop/content/431960")) {
+        if (isWorkshopEntry(w.parentDir)) {
             return "Wallpaper Engine";
         }
         let category = w.parentDir.slice(Paths.wallsdir.length + 1);
@@ -297,6 +305,11 @@ Searcher {
         const target = wallpaperMode === "animated" ? lastAnimated : lastStatic;
 
         if (target !== "") {
+            if (!isVideo(target) && !target.toLowerCase().endsWith(".gif") && !deriveWeDir(target)) {
+                lastStaticHoldPath = cleanPath(target);
+            } else {
+                lastStaticHoldPath = "";
+            }
             actualCurrent = target;
             if (showPreview) {
                 previewPath = target;
@@ -323,8 +336,24 @@ Searcher {
         let clean = cleanPath(path);
         if (!clean) return;
 
+        let prevWasWe = root.committedWeDir !== "";
+        let prevClean = cleanPath(root.actualCurrent);
         let wePath = deriveWeDir(clean);
         let targetPath = resolveWallpaperPath(clean);
+
+        if (wePath === "") {
+            if (!isVideo(targetPath) && !targetPath.toLowerCase().endsWith(".gif")) {
+                lastStaticHoldPath = cleanPath(targetPath);
+            } else {
+                lastStaticHoldPath = "";
+            }
+        } else {
+            if (!prevWasWe && prevClean && !isVideo(prevClean) && !prevClean.toLowerCase().endsWith(".gif") && CUtils.fileExists(prevClean)) {
+                lastStaticHoldPath = prevClean;
+            } else if (prevWasWe) {
+                lastStaticHoldPath = "";
+            }
+        }
 
         _selfSet = true;
         committedWeDir = wePath;
@@ -406,9 +435,26 @@ Searcher {
         }
     }
 
+    function getPosterPath(path: string): string {
+        let clean = cleanPath(path);
+        if (!clean) return root.fallback;
+        let weDir = deriveWeDir(clean);
+        if (weDir) {
+            return Skwd.getPosterPath(weDir) || root.fallback;
+        }
+        if (isVideo(clean)) {
+            return getWallpaperThumb(clean);
+        }
+        return clean;
+    }
+
     function getThumbnailPath(path: string): string {
         let clean = cleanPath(path);
-        if (clean.endsWith("/project.json")) {
+        if (!clean) return "";
+        let weDir = deriveWeDir(clean);
+        if (weDir) {
+            let cached = Skwd.getCachedPosterPath(weDir);
+            if (cached) return cached;
             return resolveWallpaperPath(clean);
         }
         if (isVideo(clean)) {
@@ -479,12 +525,22 @@ Searcher {
             root.weDirLoaded = true;
             if (root.pathLoaded) {
                 root.syncWeDir(false);
+                if (root.committedWeDir === "") {
+                    const cleanWall = root.cleanPath(root.actualCurrent);
+                    if (cleanWall && !root.isVideo(cleanWall) && !cleanWall.toLowerCase().endsWith(".gif"))
+                        root.lastStaticHoldPath = cleanWall;
+                }
             }
         }
         onLoadFailed: {
             root.weDirLoaded = true;
             if (root.pathLoaded) {
                 root.syncWeDir(false);
+                if (root.committedWeDir === "") {
+                    const cleanWall = root.cleanPath(root.actualCurrent);
+                    if (cleanWall && !root.isVideo(cleanWall) && !cleanWall.toLowerCase().endsWith(".gif"))
+                        root.lastStaticHoldPath = cleanWall;
+                }
             }
         }
     }
@@ -506,7 +562,10 @@ Searcher {
                 wall = root.fallback;
                 Quickshell.execDetached(["caelestia", "wallpaper", "-f", root.fallback, ...root.smartArg]);
             }
+            let wasPathLoaded = root.pathLoaded;
             let isExternal = (root.pathLoaded && root.storedTarget !== wall);
+            let prevWasWe = root.committedWeDir !== "";
+            let prevClean = root.cleanPath(root.actualCurrent);
             root._selfSet = true;
             root.actualCurrent = wall;
             root._selfSet = false;
@@ -523,6 +582,20 @@ Searcher {
 
             if (root.weDirLoaded) {
                 root.syncWeDir(isExternal);
+                if (root.committedWeDir === "") {
+                    const cleanWall = root.cleanPath(wall);
+                    if (!root.isVideo(cleanWall) && !cleanWall.toLowerCase().endsWith(".gif")) {
+                        root.lastStaticHoldPath = cleanWall;
+                    } else {
+                        root.lastStaticHoldPath = "";
+                    }
+                } else if (!wasPathLoaded) {
+                    root.lastStaticHoldPath = "";
+                } else if (isExternal && !prevWasWe && prevClean && !root.isVideo(prevClean) && !prevClean.toLowerCase().endsWith(".gif") && CUtils.fileExists(prevClean)) {
+                    root.lastStaticHoldPath = prevClean;
+                } else if (prevWasWe) {
+                    root.lastStaticHoldPath = "";
+                }
             }
         }
         onLoadFailed: {
@@ -534,6 +607,9 @@ Searcher {
             Quickshell.execDetached(["caelestia", "wallpaper", "-f", root.fallback, ...root.smartArg]);
             if (root.weDirLoaded) {
                 root.syncWeDir(false);
+            }
+            if (root.committedWeDir === "") {
+                root.lastStaticHoldPath = root.fallback;
             }
         }
     }
@@ -567,27 +643,67 @@ Searcher {
         root.list = arr;
     }
 
-    property alias weVolume: weAdapter.volume
-    property alias weSilent: weAdapter.silent
-    onWeVolumeChanged: weStore.writeAdapter()
-    onWeSilentChanged: weStore.writeAdapter()
-    
-    Component.onCompleted: CUtils.mkdirp(Paths.state + "/wallpaper")
+    property bool _syncingSkwd: false
+    property real weVolume: 0.15
+    property bool weSilent: false
+    property bool weMuteBehindWindows: false
+    property bool weMuteOnOtherAudio: false
+    property string weWorkshopDir: ""
 
-    FileView {
-        id: weStore
+    onWeVolumeChanged: {
+        if (!_syncingSkwd) Skwd.setVolume(weVolume);
+    }
+    onWeSilentChanged: {
+        if (!_syncingSkwd) Skwd.setSilent(weSilent);
+    }
+    onWeMuteBehindWindowsChanged: {
+        if (!_syncingSkwd) Skwd.setMuteBehindWindows(weMuteBehindWindows);
+    }
+    onWeMuteOnOtherAudioChanged: {
+        if (!_syncingSkwd) Skwd.setMuteOnOtherAudio(weMuteOnOtherAudio);
+    }
+    onWeWorkshopDirChanged: {
+        if (!_syncingSkwd) Skwd.setWorkshopDir(weWorkshopDir);
+    }
 
-        path: `${Paths.state}/wallpaper/wallpaper-engine.json`
-        printErrors: false
-        watchChanges: true
-        onFileChanged: reload()
+    function setWeVolume(v: real): void {
+        Skwd.setVolume(v);
+    }
+    function setWeSilent(b: bool): void {
+        Skwd.setSilent(b);
+    }
+    function setWeMuteBehindWindows(b: bool): void {
+        Skwd.setMuteBehindWindows(b);
+    }
+    function setWeMuteOnOtherAudio(b: bool): void {
+        Skwd.setMuteOnOtherAudio(b);
+    }
+    function setWeWorkshopDir(v: string): void {
+        Skwd.setWorkshopDir(v);
+    }
 
-        JsonAdapter {
-            id: weAdapter
+    function syncFromSkwd(): void {
+        _syncingSkwd = true;
+        weVolume = Skwd.volume;
+        weSilent = Skwd.silent;
+        weMuteBehindWindows = Skwd.muteBehindWindows;
+        weMuteOnOtherAudio = Skwd.muteOnOtherAudio;
+        weWorkshopDir = Skwd.workshopDir;
+        _syncingSkwd = false;
+    }
 
-            property real volume: 0.15
-            property bool silent: false
-        }
+    Connections {
+        target: Skwd
+        function onVolumeChanged(): void { root.syncFromSkwd(); }
+        function onSilentChanged(): void { root.syncFromSkwd(); }
+        function onMuteBehindWindowsChanged(): void { root.syncFromSkwd(); }
+        function onMuteOnOtherAudioChanged(): void { root.syncFromSkwd(); }
+        function onWorkshopDirChanged(): void { root.syncFromSkwd(); }
+    }
+
+    Component.onCompleted: {
+        CUtils.mkdirp(Paths.state + "/wallpaper");
+        syncFromSkwd();
     }
 
     FileSystemModel {
@@ -602,7 +718,7 @@ Searcher {
     FileSystemModel {
         id: weWallpapers
         recursive: true
-        path: Quickshell.env("HOME") + "/.local/share/Steam/steamapps/workshop/content/431960"
+        path: Skwd.workshopDir || Skwd.resolvedWorkshopDir || (Paths.home + "/.local/share/Steam/steamapps/workshop/content/431960")
         filter: FileSystemModel.Files
         nameFilters: ["project.json"]
         onEntriesChanged: root.updateCombinedList()

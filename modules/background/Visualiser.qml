@@ -15,26 +15,66 @@ Item {
     required property ShellScreen screen
     required property Item wallpaper
 
-    readonly property bool shouldBeActive: Config.background.visualiser.enabled && !(GameMode.enabled && GlobalConfig.utilities.gameMode.disableVisualizer) && (!Config.background.visualiser.autoHide || (Hypr.monitorFor(screen)?.activeWorkspace?.toplevels?.values.every(t => t.lastIpcObject?.floating) ?? true))
+    readonly property var vis: Config.background.visualiser
+    readonly property bool shouldBeActive: vis.enabled && !(GameMode.enabled && GlobalConfig.utilities.gameMode.disableVisualizer) && (!vis.autoHide || (Hypr.monitorFor(screen)?.activeWorkspace?.toplevels?.values.every(t => t.lastIpcObject?.floating) ?? true))
     property real offset: shouldBeActive ? 0 : screen.height * 0.2
 
     readonly property int barExclusiveZone: Visibilities.bars.get(root.screen.name)?.exclusiveZone ?? (Tokens.sizes.bar.innerWidth + Math.max(Tokens.padding.small, Config.border.thickness))
-    readonly property real visualiserSpacing: Tokens.spacing.small * Config.background.visualiser.spacing
-    readonly property real fallbackMargin: Tokens.padding.large + Tokens.spacing.small
+    readonly property real visualiserSpacing: Tokens.spacing.small * vis.spacing
 
-    readonly property bool rendererGpu: Config.background.visualiser.renderer !== "cpu"
+    readonly property bool useGpuPipeline: vis.renderer !== "cpu" || vis.style !== "bars"
+    readonly property bool weActive: !!(wallpaper?.item?.weSurfaceVisible || wallpaper?.item?.weRunning || wallpaper?.weSurfaceActive || wallpaper?.weSurfaceVisible)
+
+    property color primaryCol: Qt.alpha(resolveM3Color(vis.primaryColorRole), vis.opacity)
+    property color secondaryCol: Qt.alpha(resolveM3Color(vis.secondaryColorRole), vis.opacity)
+    property color accentCol: Qt.alpha(resolveM3Color(vis.accentColorRole), vis.opacity)
+
+    function resolveM3Color(role: string): color {
+        switch (role) {
+        case "secondary":
+            return Colours.palette.m3secondary;
+        case "tertiary":
+            return Colours.palette.m3tertiary;
+        case "inversePrimary":
+            return Colours.palette.m3inversePrimary;
+        case "onSurface":
+            return Colours.palette.m3onSurface;
+        case "primaryContainer":
+            return Colours.palette.m3primaryContainer;
+        case "secondaryContainer":
+            return Colours.palette.m3secondaryContainer;
+        case "tertiaryContainer":
+            return Colours.palette.m3tertiaryContainer;
+        case "inverseSurface":
+            return Colours.palette.m3inverseSurface;
+        default:
+            return Colours.palette.m3primary;
+        }
+    }
 
     opacity: shouldBeActive ? 1 : 0
+
+    Behavior on primaryCol {
+        CAnim {}
+    }
+    Behavior on secondaryCol {
+        CAnim {}
+    }
+    Behavior on accentCol {
+        CAnim {}
+    }
 
     Loader {
         asynchronous: true
         anchors.fill: parent
-        active: root.opacity > 0 && Config.background.visualiser.blur
+        active: root.opacity > 0 && root.vis.blur && !root.weActive
 
         sourceComponent: MultiEffect {
             source: root.wallpaper
             maskSource: wrapper
             maskEnabled: true
+            maskThresholdMin: 0.5
+            maskSpreadAtMin: 1.0
             blurEnabled: true
             blur: 1
             blurMax: 32
@@ -61,26 +101,36 @@ Item {
                     service: Audio.cava
                 }
 
-                VisualiserBars {
-                    id: bars
+                ServiceRef {
+                    service: root.vis.beatReactivity > 0.001 ? Audio.beatTracker : null
+                }
 
-                    readonly property real baseMargin: root.barExclusiveZone + root.visualiserSpacing
+                Binding {
+                    target: Audio.cava
+                    property: "monstercat"
+                    value: GlobalConfig.background.visualiser.monstercat
+                    when: root.opacity > 0
+                }
+
+                Connections {
+                    function onBeat(bpm: real): void {
+                        gpuView.triggerBeat(bpm);
+                    }
+
+                    target: Audio.beatTracker
+                    enabled: root.vis.beatReactivity > 0.001
+                }
+
+                Item {
+                    id: stageBounds
+
+                    readonly property real borderInset: GlobalConfig.appearance.islands ? 0 : Config.border.thickness
 
                     anchors.fill: parent
-                    anchors.margins: Config.border.thickness
-                    anchors.leftMargin: Config.bar.position === "left" ? (root.barExclusiveZone + root.fallbackMargin) : root.fallbackMargin
-                    anchors.rightMargin: Config.bar.position === "right" ? (root.barExclusiveZone + root.fallbackMargin) : root.fallbackMargin
-                    anchors.topMargin: Config.bar.position === "top" ? root.barExclusiveZone : Config.border.thickness
-                    anchors.bottomMargin: Config.bar.position === "bottom" ? root.barExclusiveZone : (GlobalConfig.appearance.islands ? 0 : Config.border.thickness)
-
-                    visible: Config.background.visualiser.renderer === "cpu"
-
-                    values: Audio.cava.values
-                    primaryColor: Qt.alpha(Colours.palette.m3primary, 0.7)
-                    secondaryColor: Qt.alpha(Colours.palette.m3inversePrimary, 0.7)
-                    rounding: Tokens.rounding.medium * Config.background.visualiser.rounding
-                    spacing: Tokens.spacing.extraSmall * Config.background.visualiser.spacing
-                    animationDuration: Tokens.anim.durations.expressiveDefaultEffects
+                    anchors.leftMargin: Config.bar.position === "left" ? root.barExclusiveZone : borderInset
+                    anchors.rightMargin: Config.bar.position === "right" ? root.barExclusiveZone : borderInset
+                    anchors.topMargin: Config.bar.position === "top" ? root.barExclusiveZone : borderInset
+                    anchors.bottomMargin: Config.bar.position === "bottom" ? root.barExclusiveZone : borderInset
 
                     Behavior on anchors.leftMargin {
                         Anim {}
@@ -94,68 +144,59 @@ Item {
                     Behavior on anchors.bottomMargin {
                         Anim {}
                     }
-                }
 
-                Canvas {
-                    id: dataCanvas
+                    VisualiserView {
+                        id: gpuView
 
-                    visible: false
-                    width: Math.max(1, bars.displayValues.length)
-                    height: 1
+                        anchors.fill: parent
+                        visible: root.useGpuPipeline
 
-                    renderTarget: Canvas.FramebufferObject
-                    renderStrategy: Canvas.Cooperative
-
-                    onPaint: {
-                        var ctx = getContext("2d");
-                        var vals = bars.displayValues;
-                        var n = vals.length;
-                        for (let i = 0; i < n; i++) {
-                            const b = vals[i];
-                            const q = b <= 0 ? 0 : b >= 1 ? 65025 : Math.round(b * 65025);
-                            ctx.fillStyle = Qt.rgba((q >> 8) / 255, (q & 255) / 255, 0, 1);
-                            ctx.fillRect(i, 0, 1, 1);
-                        }
-                        dataTexSource.scheduleUpdate();
+                        values: Audio.cava.values
+                        style: root.vis.style
+                        position: root.vis.position
+                        layout: root.vis.layout
+                        mirrored: root.vis.mirrored
+                        heightScale: root.vis.heightScale
+                        rounding: Tokens.rounding.medium * root.vis.rounding
+                        spacing: Tokens.spacing.extraSmall * root.vis.spacing
+                        gradientMode: root.vis.gradientMode
+                        primaryColor: root.primaryCol
+                        secondaryColor: root.secondaryCol
+                        accentColor: root.accentCol
+                        glow: root.vis.glow
+                        sensitivity: root.vis.sensitivity
+                        attackMs: root.vis.attackMs
+                        decayMs: root.vis.decayMs
+                        beatReactivity: root.vis.beatReactivity
+                        idleMode: root.vis.idleMode
+                        idleTimeout: root.vis.idleTimeout
+                        styleOptions: root.vis.options || ({})
                     }
 
-                    Component.onCompleted: requestPaint()
-                }
+                    VisualiserBars {
+                        id: legacyBars
 
-                ShaderEffectSource {
-                    id: dataTexSource
+                        anchors.fill: parent
+                        visible: !root.useGpuPipeline
 
-                    sourceItem: dataCanvas
-                    hideSource: true
-                    smooth: false
-                    live: false
-                }
-
-                ShaderEffect {
-                    id: gpuVisualiser
-
-                    visible: Config.background.visualiser.renderer !== "cpu"
-                    anchors.fill: bars
-
-                    property variant dataTex: dataTexSource
-                    property real itemWidth: width
-                    property real itemHeight: height
-                    property int barCount: bars.displayValues.length
-                    property real rounding: bars.rounding
-                    property real spacing: bars.spacing
-                    property color primaryColor: bars.primaryColor
-                    property color secondaryColor: bars.secondaryColor
-                    property real dpr: root.screen.devicePixelRatio
-
-                    fragmentShader: "qrc:/shaders/visualiser.frag.qsb"
+                        values: Audio.cava.values
+                        mirrored: root.vis.mirrored
+                        singleRow: root.vis.layout === "full"
+                        primaryColor: root.primaryCol
+                        secondaryColor: root.secondaryCol
+                        rounding: Tokens.rounding.medium * root.vis.rounding
+                        spacing: Tokens.spacing.extraSmall * root.vis.spacing
+                        animationDuration: Math.max(40, root.vis.decayMs)
+                    }
                 }
 
                 FrameAnimation {
-                    running: root.opacity > 0 && !bars.settled
+                    running: root.opacity > 0 && (root.useGpuPipeline ? !gpuView.settled : !legacyBars.settled)
                     onTriggered: {
-                        bars.advance(frameTime);
-                        if (!root.rendererGpu) {
-                            dataCanvas.requestPaint();
+                        if (root.useGpuPipeline) {
+                            gpuView.advance(frameTime);
+                        } else {
+                            legacyBars.advance(frameTime);
                         }
                     }
                 }

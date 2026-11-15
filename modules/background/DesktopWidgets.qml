@@ -1,75 +1,240 @@
 pragma ComponentBehavior: Bound
 
 import "../../utils/widgetgrid.js" as WidgetGrid
+import "components"
+import "widgets"
 import QtQuick
-import QtQuick.Layouts
 import Quickshell
 import Quickshell.Services.UPower
 import Caelestia.Config
-import Caelestia.I18n
 import Caelestia.Services
-import qs.components
-import qs.components.controls
 import qs.services
+import qs.modules.nexus
 
-// Glass widget cards laid out on a snapping grid that covers the desktop. Which cards show and the cell each one
-// sits in come from background.desktopWidgets; cards that haven't been placed by hand flow in from a corner.
 Item {
     id: root
 
     required property Item wallpaper
 
+    readonly property bool isWidgetCanvas: true
+    property bool dragging: false
+    property bool resizing: false
+    property bool centerXActive: false
+    property bool centerYActive: false
+
     readonly property var widgetConfig: Config.background.desktopWidgets
-    readonly property int gridCols: Math.floor(width / WidgetGrid.unit)
-    readonly property int gridRows: Math.floor(height / WidgetGrid.unit)
-    // Every node's enabled/col/row is read here so the layout is worked out again whenever one changes
+    readonly property bool weActive: wallpaper?.weSurfaceActive ?? wallpaper?.weSurfaceVisible ?? false
+    readonly property var hostCanvas: {
+        let p = root.parent;
+        while (p) {
+            if (p.isWidgetCanvas === true)
+                return p;
+            p = p.parent;
+        }
+        return null;
+    }
+
+    readonly property real safeLeft: hostCanvas?.safeLeft ?? 0
+    readonly property real safeTop: hostCanvas?.safeTop ?? 0
+    readonly property real safeRight: hostCanvas?.safeRight ?? width
+    readonly property real safeBottom: hostCanvas?.safeBottom ?? height
+    readonly property real safeWidth: Math.max(64, safeRight - safeLeft)
+    readonly property real safeHeight: Math.max(64, safeBottom - safeTop)
+    readonly property real workCenterX: hostCanvas?.workCenterX ?? Math.round((safeLeft + safeRight) / 2)
+    readonly property real workCenterY: hostCanvas?.workCenterY ?? Math.round((safeTop + safeBottom) / 2)
+
+    property string editingWidgetId: ""
+    property var editingCard: null
+
     readonly property var placements: {
         const entries = widgetConfig.entries.values;
+        const s = WidgetMetrics.scale;
         for (const e of entries)
-            void [e.enabled, e.col, e.row, e.right];
-        return WidgetGrid.place(entries, gridCols, gridRows, widgetConfig.columns, widgetConfig.position);
+            void [e.enabled, e.sizeMode, e.col, e.row, e.right, e.x, e.y];
+        return WidgetGrid.place(
+            entries,
+            safeWidth,
+            safeHeight,
+            widgetConfig.columns,
+            widgetConfig.position,
+            WidgetMetrics.gridStep,
+            Math.round(WidgetMetrics.baseCell * s),
+            WidgetMetrics.gap,
+            safeLeft,
+            safeTop
+        );
+    }
+
+    function setDragging(active: bool): void {
+        dragging = active;
+        if (hostCanvas?.setDragging)
+            hostCanvas.setDragging(active);
+    }
+
+    function setResizing(active: bool): void {
+        resizing = active;
+        if (hostCanvas?.setResizing)
+            hostCanvas.setResizing(active);
+    }
+
+    function setCenterActive(xA: bool, yA: bool): void {
+        centerXActive = xA;
+        centerYActive = yA;
+        if (hostCanvas?.setCenterActive)
+            hostCanvas.setCenterActive(xA, yA);
+    }
+
+    function setGuideLines(lines: var): void {
+        if (hostCanvas?.setGuideLines)
+            hostCanvas.setGuideLines(lines);
+    }
+
+    function registerItem(item: Item): void {
+        if (hostCanvas?.registerItem)
+            hostCanvas.registerItem(item);
+    }
+
+    function unregisterItem(item: Item): void {
+        if (hostCanvas?.unregisterItem)
+            hostCanvas.unregisterItem(item);
+    }
+
+    function siblingRects(excludeItem: Item): var {
+        return hostCanvas?.siblingRects ? hostCanvas.siblingRects(excludeItem) : [];
+    }
+
+    function targetScreenName(): string {
+        return Config.screenName || "";
+    }
+
+    function useScreenOverrideLayer(): bool {
+        const scr = targetScreenName();
+        return scr !== "" && Config.forScreen(scr).background.desktopWidgets.entries.isOverride("values");
+    }
+
+    function writableEntryFor(id: string): var {
+        const scr = targetScreenName();
+        const entries = useScreenOverrideLayer()
+            ? Config.forScreen(scr).background.desktopWidgets.entries.values
+            : GlobalConfig.background.desktopWidgets.entries.values;
+        for (let i = 0; i < entries.length; i++) {
+            if (entries[i].id === id)
+                return entries[i];
+        }
+        return null;
+    }
+
+    function saveConfig(): void {
+        if (useScreenOverrideLayer())
+            Config.forScreen(targetScreenName()).save();
+        else
+            GlobalConfig.save();
+    }
+
+    function resolveWidgetType(entry: var): string {
+        if (!entry)
+            return "";
+        const raw = (entry.type && entry.type !== "") ? entry.type : entry.id;
+        return WidgetMetrics.normalizeType(raw);
+    }
+
+    function entryFor(id: string): var {
+        const entries = widgetConfig.entries.values;
+        for (let i = 0; i < entries.length; i++) {
+            if (entries[i].id === id)
+                return entries[i];
+        }
+        return null;
     }
 
     function slotFor(id: string): var {
-        return placements.find(p => p.id === id) ?? ({
-                col: 0,
-                row: 0,
-                w: WidgetGrid.cardCells,
-                h: 5
-            });
+        return placements[id] ?? {
+            col: 0,
+            row: 0,
+            w: 1,
+            h: 1,
+            x: Math.round(safeLeft),
+            y: Math.round(safeTop)
+        };
     }
 
-    // Brings the list of cards in line with the widgets that are on: a card that is turned off is removed, one that
-    // is turned on is added, and the rest are left alone. Every card looks up its own cell in `placements`, so
-    // moving one never recreates any. (A list rebuilt from scratch on each change hands cards to the wrong widget
-    // when one in the middle disappears.)
-    function syncShown(): void {
-        const want = placements.filter(p => p.enabled).map(p => p.id);
-        for (let i = shownModel.count - 1; i >= 0; i--) {
-            if (!want.includes(shownModel.get(i).widgetId))
-                shownModel.remove(i);
+    function openQuickPopover(cardItem: var): void {
+        if (!cardItem)
+            return;
+        if (editingWidgetId === cardItem.widgetId && editingCard === cardItem) {
+            closeQuickPopover();
+            return;
         }
-        want.forEach((id, i) => {
-            if (i < shownModel.count && shownModel.get(i).widgetId === id)
-                return;
-            let from = -1;
-            for (let k = i + 1; k < shownModel.count; k++) {
-                if (shownModel.get(k).widgetId === id) {
-                    from = k;
+        editingCard = cardItem;
+        editingWidgetId = cardItem.widgetId;
+    }
+
+    function closeQuickPopover(): void {
+        editingWidgetId = "";
+        editingCard = null;
+    }
+
+    function syncShown(): void {
+        const entries = widgetConfig.entries.values;
+        const want = [];
+        for (let i = 0; i < entries.length; i++) {
+            const e = entries[i];
+            if (e.enabled) {
+                want.push({
+                    id: e.id,
+                    type: resolveWidgetType(e)
+                });
+            }
+        }
+        for (let i = shownModel.count - 1; i >= 0; i--) {
+            const row = shownModel.get(i);
+            const match = want.find(w => w.id === row.widgetId && w.type === row.widgetType);
+            if (!match) {
+                if (editingWidgetId === row.widgetId)
+                    closeQuickPopover();
+                shownModel.remove(i);
+            }
+        }
+        for (let i = 0; i < want.length; i++) {
+            const w = want[i];
+            let found = -1;
+            for (let j = i; j < shownModel.count; j++) {
+                const row = shownModel.get(j);
+                if (row.widgetId === w.id && row.widgetType === w.type) {
+                    found = j;
                     break;
                 }
             }
-            if (from >= 0)
-                shownModel.move(from, i, 1);
-            else
+            if (found >= 0) {
+                if (found !== i)
+                    shownModel.move(found, i, 1);
+            } else {
                 shownModel.insert(i, {
-                    widgetId: id
+                    widgetId: w.id,
+                    widgetType: w.type
                 });
-        });
+            }
+        }
     }
 
+    implicitWidth: Math.max(0, hostCanvas?.width ?? parent?.width ?? 1920)
+    implicitHeight: Math.max(0, hostCanvas?.height ?? parent?.height ?? 1080)
     onPlacementsChanged: syncShown()
     Component.onCompleted: syncShown()
+    Component.onDestruction: {
+        if (dragging && hostCanvas?.setDragging)
+            hostCanvas.setDragging(false);
+        if (resizing && hostCanvas?.setResizing)
+            hostCanvas.setResizing(false);
+    }
+
+    Connections {
+        target: Visibilities
+        function onDesktopWidgetsUnlockedChanged(): void {
+            if (!Visibilities.desktopWidgetsUnlocked)
+                root.closeQuickPopover();
+        }
+    }
 
     ListModel {
         id: shownModel
@@ -78,590 +243,478 @@ Item {
     Repeater {
         model: shownModel
 
-        DelegateChooser {
-            role: "widgetId"
+        delegate: DelegateChooser {
+            role: "widgetType"
 
+            DelegateChoice {
+                roleValue: "atAGlance"
+                delegate: AtAGlanceCard {}
+            }
             DelegateChoice {
                 roleValue: "calendar"
                 delegate: CalendarCard {}
             }
             DelegateChoice {
                 roleValue: "weather"
-                delegate: WeatherCard {}
+                delegate: WeatherWidgetCard {}
             }
             DelegateChoice {
-                roleValue: "pomodoro"
-                delegate: FocusCard {}
+                roleValue: "weatherPill"
+                delegate: WeatherPillCard {}
+            }
+            DelegateChoice {
+                roleValue: "timers"
+                delegate: TimersCard {}
             }
             DelegateChoice {
                 roleValue: "resources"
-                delegate: SystemCard {}
+                delegate: ResourcesCard {}
             }
             DelegateChoice {
                 roleValue: "media"
                 delegate: MediaCard {}
             }
             DelegateChoice {
+                roleValue: "todo"
+                delegate: TodoCard {}
+            }
+            DelegateChoice {
+                roleValue: "notes"
+                delegate: NotesCard {}
+            }
+            DelegateChoice {
+                roleValue: "usercard"
+                delegate: UserProfileCard {}
+            }
+            DelegateChoice {
                 roleValue: "battery"
                 delegate: BatteryCard {}
             }
+            DelegateChoice {
+                roleValue: "customImage"
+                delegate: CustomImageCard {}
+            }
+            DelegateChoice {
+                roleValue: "sticker"
+                delegate: StickerCard {}
+            }
+            DelegateChoice {
+                roleValue: "customText"
+                delegate: CustomTextCard {}
+            }
         }
     }
 
-    // Shared placement of every card on the grid; a card fills its footprint, or grows past it if its content needs to
-    component GridCard: DesktopCard {
-        // Handed to every delegate by the Repeater/DelegateChooser
+    WidgetQuickPopover {
+        id: quickPopover
+
+        open: root.editingCard !== null && Visibilities.desktopWidgetsUnlocked
+        widgetId: root.editingCard?.widgetId ?? ""
+        widgetType: root.editingCard?.widgetType ?? ""
+        sizeMode: root.editingCard?.resolvedSizeMode ?? "1x1"
+        supportedSizes: root.editingCard?.supportedSizes ?? []
+        surfaceStyle: root.editingCard?.entry?.style ?? ""
+        glassBlurEnabled: root.widgetConfig.blur
+        widgetOptions: root.editingCard?.entryOptions ?? ({})
+        anchorX: root.editingCard?.x ?? 0
+        anchorY: root.editingCard?.y ?? 0
+        anchorWidth: root.editingCard?.width ?? 164
+        anchorHeight: root.editingCard?.height ?? 164
+        safeLeft: root.safeLeft
+        safeTop: root.safeTop
+        safeRight: root.safeRight
+        safeBottom: root.safeBottom
+
+        onClosed: root.closeQuickPopover()
+        onSizeModeSelected: mode => root.editingCard?.commitSizeMode(mode)
+        onSurfaceStyleSelected: style => root.editingCard?.commitSurfaceStyle(style)
+        onToggleGlassBlur: {
+            const scr = root.targetScreenName();
+            const scrCfg = scr !== "" ? Config.forScreen(scr) : null;
+            const hasScrOverride = scrCfg && scrCfg.background.desktopWidgets.isOverride("blur");
+            const target = hasScrOverride ? scrCfg : GlobalConfig;
+            target.background.desktopWidgets.blur = !root.widgetConfig.blur;
+            target.save();
+        }
+        onOptionPatched: patch => root.editingCard?.mergeOptions(patch, true)
+        onActionTriggered: actionName => {
+            const target = root.editingCard?.widgetContent;
+            if (!target)
+                return;
+            if (actionName === "pickFile" && target.openPicker)
+                target.openPicker();
+            else if (actionName === "jumpToday" && target.jumpToToday)
+                target.jumpToToday();
+            else if (actionName === "refreshWeather" && target.refresh)
+                target.refresh();
+        }
+        onDuplicateRequested: {
+            const card = root.editingCard;
+            if (!card)
+                return;
+            const scr = root.targetScreenName();
+            const entries = root.useScreenOverrideLayer()
+                ? Config.forScreen(scr).background.desktopWidgets.entries
+                : GlobalConfig.background.desktopWidgets.entries;
+            const wType = WidgetMetrics.normalizeType(card.widgetType);
+            if (!WidgetMetrics.isMultiInstance(wType))
+                return;
+            let suffix = Date.now();
+            while (entries.values.some(e => e.id === `${wType}-${suffix}`))
+                suffix++;
+            const step = Math.round(24 * WidgetMetrics.scale);
+            const nextX = Math.round(Math.max(root.safeLeft, Math.min(Math.max(root.safeLeft, root.safeRight - card.width), card.x + step)));
+            const nextY = Math.round(Math.max(root.safeTop, Math.min(Math.max(root.safeTop, root.safeBottom - card.height), card.y + step)));
+            entries.insert({
+                id: `${wType}-${suffix}`,
+                type: wType,
+                enabled: true,
+                sizeMode: card.resolvedSizeMode,
+                style: card.entry?.style ?? "",
+                options: Object.assign({}, card.entryOptions || ({})),
+                x: nextX,
+                y: nextY
+            });
+            root.saveConfig();
+        }
+        onHideWidgetRequested: {
+            const id = root.editingCard?.widgetId ?? "";
+            const target = root.writableEntryFor(id);
+            if (target) {
+                target.enabled = false;
+                root.saveConfig();
+            }
+        }
+        onOpenNexusRequested: WindowFactory.create()
+    }
+
+    component WidgetCard: WidgetWrapper {
+        id: card
+
         required property string widgetId
+        required property string widgetType
         required property int index
 
+        property Item widgetContent: null
+
+        readonly property var entry: root.entryFor(widgetId)
         readonly property var slot: root.slotFor(widgetId)
+        readonly property bool hasCustomPos: entry !== null && entry.x >= 0 && entry.y >= 0
+        readonly property string resolvedSurfaceStyle: (entry && entry.style && entry.style !== "")
+            ? entry.style
+            : (root.widgetConfig.surfaceStyle || "glass")
+        readonly property string resolvedSizeMode: {
+            const allowed = WidgetMetrics.supportedSizesFor(widgetType);
+            const raw = (entry && entry.sizeMode && entry.sizeMode !== "") ? entry.sizeMode : WidgetMetrics.defaultSizeFor(widgetType);
+            if (allowed && allowed.length > 0 && allowed.indexOf(raw) < 0)
+                return WidgetMetrics.defaultSizeFor(widgetType);
+            return raw;
+        }
+        readonly property var entryOptions: (entry && entry.options) ? entry.options : ({})
 
-        wallpaper: root.wallpaper
-        x: slot.col * WidgetGrid.unit
-        y: slot.row * WidgetGrid.unit
-        width: slot.w * WidgetGrid.unit - WidgetGrid.gap
-        height: Math.max(implicitHeight, slot.h * WidgetGrid.unit - WidgetGrid.gap)
+        function mergeOptions(patch: var, save: bool): void {
+            const target = root.writableEntryFor(widgetId);
+            if (!target || !patch)
+                return;
+            target.options = Object.assign({}, target.options || ({}), patch);
+            if (save)
+                root.saveConfig();
+        }
+
+        function commitSizeMode(nextMode: string): void {
+            const target = root.writableEntryFor(widgetId);
+            if (!target || !nextMode)
+                return;
+            if (target.sizeMode !== nextMode) {
+                target.sizeMode = nextMode;
+                root.saveConfig();
+            }
+        }
+
+        function commitSurfaceStyle(style: string): void {
+            const target = root.writableEntryFor(widgetId);
+            if (!target)
+                return;
+            if ((target.style ?? "") !== style) {
+                target.style = style;
+                root.saveConfig();
+            }
+        }
+
+        canvas: root
+        widgetScale: WidgetMetrics.scale
+        initialX: hasCustomPos ? entry.x : slot.x
+        initialY: hasCustomPos ? entry.y : slot.y
+        sizeMode: card.resolvedSizeMode
+        supportedSizes: WidgetMetrics.supportedSizesFor(card.widgetType)
+        resizeMode: WidgetMetrics.isAspectResizable(card.widgetType) ? "diagonal" : "discrete"
+        resizable: WidgetMetrics.isAspectResizable(card.widgetType) || (supportedSizes?.length ?? 0) > 1
+        showSettingsHandle: true
+        settingsActive: root.editingWidgetId === card.widgetId
+        outlineShape: WidgetMetrics.resolveShapeEnum(WidgetMetrics.effectiveShapeKey(card.widgetType, card.resolvedSizeMode, card.entryOptions?.outerShape ?? ""), "Rounded")
+        minWidth: WidgetMetrics.isAspectResizable(card.widgetType) ? Math.round(96 * WidgetMetrics.scale) : WidgetMetrics.widthFor("1x1", WidgetMetrics.scale)
+        minHeight: WidgetMetrics.isAspectResizable(card.widgetType) ? Math.round(48 * WidgetMetrics.scale) : WidgetMetrics.heightFor("1x1", card.widgetType, WidgetMetrics.scale)
+        implicitWidth: widgetContent ? widgetContent.implicitWidth : WidgetMetrics.widthFor(card.resolvedSizeMode, WidgetMetrics.scale)
+        implicitHeight: widgetContent ? widgetContent.implicitHeight : WidgetMetrics.heightFor(card.resolvedSizeMode, card.widgetType, WidgetMetrics.scale)
+        width: implicitWidth
+        height: implicitHeight
+
+        onPositionCommitted: (newX, newY) => {
+            const target = root.writableEntryFor(card.widgetId);
+            if (!target)
+                return;
+            target.x = newX;
+            target.y = newY;
+            root.saveConfig();
+        }
+
+        onSizeModeCommitted: newMode => card.commitSizeMode(newMode)
+        onSettingsRequested: root.openQuickPopover(card)
     }
 
-    // --- Calendar: month grid ---
-    component CalendarCard: GridCard {
-        id: cal
+    component AtAGlanceCard: WidgetCard {
+        id: glanceCard
 
-        readonly property date now: Time.date
-        readonly property var cells: {
-            const first = new Date(now.getFullYear(), now.getMonth(), 1);
-            const offset = (first.getDay() + 6) % 7; // Monday first
-            return Array.from({
-                length: 42
-            }, (_, i) => {
-                const d = new Date(first.getFullYear(), first.getMonth(), 1 - offset + i);
-                return {
-                    day: d.getDate(),
-                    inMonth: d.getMonth() === first.getMonth(),
-                    today: d.toDateString() === now.toDateString()
-                };
-            });
-        }
-
-        title: Time.format("MMMM yyyy")
-        icon: "calendar_month"
-
-        GridLayout {
-            Layout.fillWidth: true
-            columns: 7
-            rowSpacing: 2
-            columnSpacing: 0
-
-            Repeater {
-                model: [1, 2, 3, 4, 5, 6, 0]
-
-                StyledText {
-                    required property int modelData
-
-                    Layout.fillWidth: true
-                    horizontalAlignment: Text.AlignHCenter
-                    text: Qt.locale().dayName(modelData, Locale.NarrowFormat)
-                    color: Colours.palette.m3primary
-                    font: Tokens.font.label.small
-                }
-            }
-
-            Repeater {
-                model: cal.cells
-
-                Item {
-                    id: cell
-
-                    required property var modelData
-
-                    Layout.fillWidth: true
-                    implicitHeight: 30
-
-                    StyledRect {
-                        anchors.centerIn: parent
-                        implicitWidth: 28
-                        implicitHeight: 28
-                        radius: Tokens.rounding.full
-                        color: cell.modelData.today ? Colours.palette.m3primary : "transparent"
-                    }
-
-                    StyledText {
-                        anchors.centerIn: parent
-                        text: cell.modelData.day
-                        font: Tokens.font.label.medium
-                        color: cell.modelData.today ? Colours.palette.m3onPrimary : Colours.palette.m3onSurface
-                        opacity: cell.modelData.inMonth ? 1 : 0.3
-                    }
-                }
-            }
-        }
-    }
-
-    // --- Weather ---
-    component WeatherCard: GridCard {
-        title: Weather.city || Tr.tr("Weather")
-        icon: "location_on"
-        // The card is created again each time the desktop is uncovered, so only fetch when there is nothing to show
-        Component.onCompleted: {
-            if (!Weather.cc)
-                Weather.reload();
-        }
-
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: Tokens.spacing.medium
-
-            MaterialIcon {
-                text: Weather.icon
-                color: Colours.palette.m3secondary
-                fontStyle: Tokens.font.icon.builders.extraLarge.scale(1.4).build()
-            }
-
-            ColumnLayout {
-                Layout.fillWidth: true
-                Layout.minimumWidth: 0
-                spacing: 0
-
-                StyledText {
-                    Layout.fillWidth: true
-                    elide: Text.ElideRight
-                    text: Weather.temp
-                    color: Colours.palette.m3onSurface
-                    font: Tokens.font.headline.builders.medium.weight(Font.DemiBold).build()
-                }
-
-                StyledText {
-                    Layout.fillWidth: true
-                    elide: Text.ElideRight
-                    text: Weather.description
-                    color: Colours.palette.m3onSurfaceVariant
-                    font: Tokens.font.label.medium
-                }
-            }
-
-            ColumnLayout {
-                spacing: Tokens.spacing.extraSmall
-
-                Stat {
-                    icon: "humidity_percentage"
-                    text: `${Weather.humidity}%`
-                }
-
-                Stat {
-                    icon: "air"
-                    text: `${Math.round(Weather.windSpeed)} km/h`
-                }
-            }
-        }
-
-        StyledRect {
-            Layout.fillWidth: true
-            implicitHeight: forecastRow.implicitHeight + Tokens.padding.small * 2
-            radius: Tokens.rounding.large
-            color: Colours.palette.m3surfaceContainerHigh
-            opacity: 0.85
-
-            RowLayout {
-                id: forecastRow
-
-                anchors.fill: parent
-                anchors.margins: Tokens.padding.small
-                spacing: 0
-                // Equal-width columns however wide each day's text is
-                uniformCellSizes: true
-
-                Repeater {
-                    model: Weather.forecast.slice(0, 5)
-
-                    ColumnLayout {
-                        id: fc
-
-                        required property var modelData
-                        required property int index
-
-                        Layout.fillWidth: true
-                        Layout.preferredWidth: 1
-                        Layout.minimumWidth: 0
-                        Layout.maximumWidth: Number.POSITIVE_INFINITY
-                        spacing: 2
-
-                        StyledText {
-                            Layout.alignment: Qt.AlignHCenter
-                            text: fc.index === 0 ? Tr.tr("Today") : Qt.locale().dayName(new Date(fc.modelData.date).getDay(), Locale.ShortFormat)
-                            color: Colours.palette.m3onSurfaceVariant
-                            font: Tokens.font.label.small
-                        }
-
-                        MaterialIcon {
-                            Layout.alignment: Qt.AlignHCenter
-                            text: fc.modelData.icon
-                            color: Colours.palette.m3secondary
-                        }
-
-                        StyledText {
-                            Layout.alignment: Qt.AlignHCenter
-                            text: Weather.formatTemp(fc.modelData.maxTempC, true)
-                            color: Colours.palette.m3onSurface
-                            font: Tokens.font.label.small
-                        }
-
-                        StyledText {
-                            Layout.alignment: Qt.AlignHCenter
-                            text: Weather.formatTemp(fc.modelData.minTempC, true)
-                            color: Colours.palette.m3outline
-                            font: Tokens.font.label.small
-                        }
-                    }
-                }
-            }
+        widgetContent: glanceW
+        AtAGlanceWidget {
+            id: glanceW
+            anchors.fill: parent
+            wallpaper: root.wallpaper
+            weActive: root.weActive
+            locked: glanceCard.locked
+            sizeMode: glanceCard.resolvedSizeMode
+            surfaceStyle: glanceCard.resolvedSurfaceStyle
+            widgetOptions: glanceCard.entryOptions
         }
     }
 
-    // --- Focus timer ---
-    component FocusCard: GridCard {
-        title: Tr.tr("Focus")
-        icon: "timer"
+    component CalendarCard: WidgetCard {
+        id: calCard
 
-        Pomodoro {
-            Layout.fillWidth: true
+        widgetContent: calW
+        CalendarWidget {
+            id: calW
+            anchors.fill: parent
+            wallpaper: root.wallpaper
+            weActive: root.weActive
+            locked: calCard.locked
+            sizeMode: calCard.resolvedSizeMode
+            surfaceStyle: calCard.resolvedSurfaceStyle
+            widgetOptions: calCard.entryOptions
         }
     }
 
-    // --- System resources ---
-    component SystemCard: GridCard {
-        id: sys
+    component WeatherWidgetCard: WidgetCard {
+        id: weatherCard
 
-        title: Tr.tr("System")
-        icon: "monitoring"
-
-        ServiceRef {
-            service: Cpu
-        }
-
-        ServiceRef {
-            service: Memory
-        }
-
-        ServiceRef {
-            service: Storage
-        }
-
-        property real cpu: 0
-        property real memory: 0
-        property real disk: 0
-
-        Timer {
-            interval: 3000
-            running: true
-            repeat: true
-            triggeredOnStart: true
-            onTriggered: {
-                sys.cpu = Cpu.percentage;
-                sys.memory = Memory.percentage;
-                sys.disk = Storage.percentage;
-            }
-        }
-
-        RowLayout {
-            Layout.fillWidth: true
-            Layout.maximumWidth: Number.POSITIVE_INFINITY
-            spacing: 0
-            uniformCellSizes: true
-
-            Meter {
-                label: "CPU"
-                icon: "memory"
-                value: sys.cpu
-                colour: Colours.palette.m3primary
-            }
-
-            Meter {
-                label: "RAM"
-                icon: "memory_alt"
-                value: sys.memory
-                colour: Colours.palette.m3tertiary
-            }
-
-            Meter {
-                label: Tr.tr("Disk")
-                icon: "hard_disk"
-                value: sys.disk
-                colour: Colours.palette.m3secondary
-            }
+        widgetContent: weatherW
+        WeatherCard {
+            id: weatherW
+            anchors.fill: parent
+            wallpaper: root.wallpaper
+            weActive: root.weActive
+            locked: weatherCard.locked
+            sizeMode: weatherCard.resolvedSizeMode
+            surfaceStyle: weatherCard.resolvedSurfaceStyle
+            widgetOptions: weatherCard.entryOptions
         }
     }
 
-    // --- Now playing ---
-    component MediaCard: GridCard {
-        id: media
+    component WeatherPillCard: WidgetCard {
+        id: pillCard
 
-        readonly property var player: Players.recentPlayer
-
-        visible: player !== null
-        title: Tr.tr("Now playing")
-        icon: "music_note"
-
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: Tokens.spacing.medium
-
-            ClipRect {
-                implicitWidth: 76
-                implicitHeight: 76
-                radius: Tokens.rounding.large
-                color: Colours.palette.m3surfaceContainerHigh
-
-                MaterialIcon {
-                    anchors.centerIn: parent
-                    text: "album"
-                    color: Colours.palette.m3outline
-                    fontStyle: Tokens.font.icon.large
-                }
-
-                Image {
-                    anchors.fill: parent
-                    asynchronous: true
-                    fillMode: Image.PreserveAspectCrop
-                    source: Players.getArtUrl(media.player)
-                }
-            }
-
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 2
-
-                StyledText {
-                    Layout.fillWidth: true
-                    elide: Text.ElideRight
-                    text: media.player?.trackTitle || Tr.tr("Unknown title")
-                    color: Colours.palette.m3onSurface
-                    font: Tokens.font.body.builders.medium.weight(Font.DemiBold).build()
-                }
-
-                StyledText {
-                    Layout.fillWidth: true
-                    elide: Text.ElideRight
-                    text: media.player?.trackArtist || Tr.tr("Unknown artist")
-                    color: Colours.palette.m3onSurfaceVariant
-                    font: Tokens.font.label.medium
-                }
-
-                RowLayout {
-                    spacing: Tokens.spacing.extraSmall
-
-                    IconButton {
-                        icon: "skip_previous"
-                        type: IconButton.Text
-                        disabled: !(media.player?.canGoPrevious ?? false)
-                        onClicked: media.player?.previous()
-                    }
-
-                    IconButton {
-                        icon: (media.player?.isPlaying ?? false) ? "pause" : "play_arrow"
-                        type: IconButton.Filled
-                        onClicked: media.player?.togglePlaying()
-                    }
-
-                    IconButton {
-                        icon: "skip_next"
-                        type: IconButton.Text
-                        disabled: !(media.player?.canGoNext ?? false)
-                        onClicked: media.player?.next()
-                    }
-                }
-            }
+        widgetContent: pillW
+        WeatherPill {
+            id: pillW
+            anchors.fill: parent
+            wallpaper: root.wallpaper
+            weActive: root.weActive
+            locked: pillCard.locked
+            sizeMode: pillCard.resolvedSizeMode
+            surfaceStyle: pillCard.resolvedSurfaceStyle
+            widgetOptions: pillCard.entryOptions
         }
     }
 
-    // --- Battery: charge, state, rate and time remaining on a laptop; the GPU's power draw on a desktop ---
-    component BatteryCard: GridCard {
-        id: bat
+    component TimersCard: WidgetCard {
+        id: timersCard
 
-        readonly property var dev: UPower.displayDevice
-        readonly property bool laptop: dev.isLaptopBattery
-        readonly property real pct: dev.percentage
-        readonly property bool full: dev.state === UPowerDeviceState.FullyCharged
-        readonly property bool charging: dev.state === UPowerDeviceState.Charging || full
-        readonly property real rate: Math.abs(dev.changeRate)
-        readonly property real seconds: charging ? dev.timeToFull : dev.timeToEmpty
-        readonly property bool low: pct < 0.2 && !charging
-
-        function duration(secs: real): string {
-            if (secs <= 0)
-                return "";
-            const h = Math.floor(secs / 3600);
-            const m = Math.round((secs % 3600) / 60);
-            return h > 0 ? Tr.tr("%1 h %2 min").arg(h).arg(m) : Tr.tr("%1 min").arg(m);
-        }
-
-        visible: laptop || Gpu.power > 0
-        title: laptop ? Tr.tr("Battery") : Tr.tr("Power draw")
-        icon: !laptop ? "bolt" : charging ? "battery_charging_full" : "battery_full"
-
-        ServiceRef {
-            service: Gpu
-        }
-
-        RowLayout {
-            Layout.fillWidth: true
-            visible: !bat.laptop
-            spacing: Tokens.spacing.medium
-
-            StyledText {
-                text: `${Math.round(Gpu.power)} W`
-                color: Colours.palette.m3onSurface
-                font: Tokens.font.headline.builders.medium.weight(Font.DemiBold).build()
-            }
-
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 0
-
-                StyledText {
-                    Layout.fillWidth: true
-                    elide: Text.ElideRight
-                    text: Tr.tr("Graphics card")
-                    color: Colours.palette.m3onSurfaceVariant
-                    font: Tokens.font.label.medium
-                }
-
-                StyledText {
-                    Layout.fillWidth: true
-                    elide: Text.ElideRight
-                    text: Gpu.name
-                    color: Colours.palette.m3outline
-                    font: Tokens.font.label.small
-                }
-            }
-        }
-
-        RowLayout {
-            Layout.fillWidth: true
-            visible: bat.laptop
-            spacing: Tokens.spacing.medium
-
-            StyledText {
-                text: `${Math.round(bat.pct * 100)}%`
-                color: bat.low ? Colours.palette.m3error : Colours.palette.m3onSurface
-                font: Tokens.font.headline.builders.medium.weight(Font.DemiBold).build()
-            }
-
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: Tokens.spacing.extraSmall
-
-                StyledText {
-                    text: bat.full ? Tr.tr("Fully charged") : bat.charging ? Tr.tr("Charging") : Tr.tr("On battery")
-                    color: Colours.palette.m3onSurfaceVariant
-                    font: Tokens.font.label.medium
-                }
-
-                StyledRect {
-                    Layout.fillWidth: true
-                    implicitHeight: 8
-                    radius: Tokens.rounding.full
-                    color: Colours.palette.m3surfaceContainerHighest
-
-                    StyledRect {
-                        width: parent.width * Math.max(0, Math.min(1, bat.pct))
-                        height: parent.height
-                        radius: Tokens.rounding.full
-                        color: bat.low ? Colours.palette.m3error : bat.charging ? Colours.palette.m3tertiary : Colours.palette.m3primary
-                    }
-                }
-            }
-        }
-
-        RowLayout {
-            Layout.fillWidth: true
-            visible: bat.laptop && ((bat.rate > 0 && !bat.full) || bat.seconds >= 60)
-            spacing: Tokens.spacing.small
-
-            MaterialIcon {
-                visible: bat.rate > 0 && !bat.full
-                text: bat.charging ? "bolt" : "trending_down"
-                color: bat.charging ? Colours.palette.m3tertiary : Colours.palette.m3primary
-                fontStyle: Tokens.font.icon.small
-            }
-
-            StyledText {
-                visible: bat.rate > 0 && !bat.full
-                text: `${bat.charging ? "+" : "−"}${bat.rate.toFixed(1)} W`
-                color: Colours.palette.m3onSurface
-                font: Tokens.font.label.medium
-            }
-
-            Item {
-                Layout.fillWidth: true
-            }
-
-            StyledText {
-                visible: bat.seconds >= 60 && !bat.full
-                text: bat.charging ? Tr.tr("Full in %1").arg(bat.duration(bat.seconds)) : Tr.tr("%1 left").arg(bat.duration(bat.seconds))
-                color: Colours.palette.m3onSurfaceVariant
-                font: Tokens.font.label.medium
-            }
+        widgetContent: timersW
+        TimersWidget {
+            id: timersW
+            anchors.fill: parent
+            wallpaper: root.wallpaper
+            weActive: root.weActive
+            locked: timersCard.locked
+            sizeMode: timersCard.resolvedSizeMode
+            surfaceStyle: timersCard.resolvedSurfaceStyle
+            widgetOptions: timersCard.entryOptions
         }
     }
 
-    component Stat: RowLayout {
-        property string icon
-        property string text
+    component ResourcesCard: WidgetCard {
+        id: resCard
 
-        spacing: Tokens.spacing.extraSmall
-
-        MaterialIcon {
-            text: parent.icon
-            color: Colours.palette.m3outline
-            fontStyle: Tokens.font.icon.small
-        }
-
-        StyledText {
-            text: parent.text
-            color: Colours.palette.m3onSurfaceVariant
-            font: Tokens.font.label.small
+        widgetContent: resW
+        ResourcesWidget {
+            id: resW
+            anchors.fill: parent
+            wallpaper: root.wallpaper
+            weActive: root.weActive
+            locked: resCard.locked
+            sizeMode: resCard.resolvedSizeMode
+            surfaceStyle: resCard.resolvedSurfaceStyle
+            widgetOptions: resCard.entryOptions
         }
     }
 
-    component Meter: ColumnLayout {
-        id: meter
+    component MediaCard: WidgetCard {
+        id: mediaCard
 
-        property string label
-        property string icon
-        property real value
-        property color colour
-
-        Layout.fillWidth: true
-        Layout.maximumWidth: Number.POSITIVE_INFINITY
-        spacing: Tokens.spacing.extraSmall
-
-        CircularProgress {
-            Layout.alignment: Qt.AlignHCenter
-            implicitSize: 64
-            strokeWidth: 6
-            value: meter.value
-            fgColour: meter.colour
-            bgColour: Colours.palette.m3surfaceContainerHighest
-
-            Behavior on clampedVal {
-                Anim {
-                    type: Anim.FastEffects
-                }
-            }
-
-            MaterialIcon {
-                anchors.centerIn: parent
-                text: meter.icon
-                color: meter.colour
-                fontStyle: Tokens.font.icon.medium
-            }
+        widgetContent: mediaW
+        MediaWidget {
+            id: mediaW
+            anchors.fill: parent
+            wallpaper: root.wallpaper
+            weActive: root.weActive
+            locked: mediaCard.locked
+            sizeMode: mediaCard.resolvedSizeMode
+            surfaceStyle: mediaCard.resolvedSurfaceStyle
+            widgetOptions: mediaCard.entryOptions
         }
+    }
 
-        StyledText {
-            Layout.alignment: Qt.AlignHCenter
-            text: `${meter.label} ${Math.round(meter.value * 100)}%`
-            color: Colours.palette.m3onSurfaceVariant
-            font: Tokens.font.label.small
+    component TodoCard: WidgetCard {
+        id: todoCard
+
+        widgetContent: todoW
+        TodoWidget {
+            id: todoW
+            anchors.fill: parent
+            wallpaper: root.wallpaper
+            weActive: root.weActive
+            locked: todoCard.locked
+            sizeMode: todoCard.resolvedSizeMode
+            surfaceStyle: todoCard.resolvedSurfaceStyle
+            widgetOptions: todoCard.entryOptions
+        }
+    }
+
+    component NotesCard: WidgetCard {
+        id: notesCard
+
+        widgetContent: notesW
+        NotesWidget {
+            id: notesW
+            anchors.fill: parent
+            wallpaper: root.wallpaper
+            weActive: root.weActive
+            locked: notesCard.locked
+            sizeMode: notesCard.resolvedSizeMode
+            surfaceStyle: notesCard.resolvedSurfaceStyle
+            widgetOptions: notesCard.entryOptions
+            onOptionsUpdated: patch => notesCard.mergeOptions(patch, true)
+        }
+    }
+
+    component UserProfileCard: WidgetCard {
+        id: userCard
+
+        widgetContent: userW
+        UserCardWidget {
+            id: userW
+            anchors.fill: parent
+            wallpaper: root.wallpaper
+            weActive: root.weActive
+            locked: userCard.locked
+            sizeMode: userCard.resolvedSizeMode
+            surfaceStyle: userCard.resolvedSurfaceStyle
+            widgetOptions: userCard.entryOptions
+        }
+    }
+
+    component BatteryCard: WidgetCard {
+        id: batCard
+
+        visible: UPower.displayDevice.isLaptopBattery || (Hardware.isSupported && Hardware.gpuPower > 0) || !batCard.locked
+        widgetContent: batW
+        BatteryWidget {
+            id: batW
+            anchors.fill: parent
+            wallpaper: root.wallpaper
+            weActive: root.weActive
+            locked: batCard.locked
+            sizeMode: batCard.resolvedSizeMode
+            surfaceStyle: batCard.resolvedSurfaceStyle
+            widgetOptions: batCard.entryOptions
+        }
+    }
+
+    component CustomImageCard: WidgetCard {
+        id: imageCard
+
+        widgetContent: imageW
+        resizeMode: "diagonal"
+        onUnlockedTapped: imageW.openPicker()
+        onResizeFinished: finalWidth => imageCard.mergeOptions({
+            size: Math.max(96, Math.round(finalWidth / WidgetMetrics.scale))
+        }, true)
+
+        CustomImageWidget {
+            id: imageW
+            anchors.fill: parent
+            wallpaper: root.wallpaper
+            weActive: root.weActive
+            locked: imageCard.locked
+            sizeMode: imageCard.resolvedSizeMode
+            surfaceStyle: imageCard.resolvedSurfaceStyle
+            widgetOptions: imageCard.entryOptions
+            onOptionsUpdated: patch => imageCard.mergeOptions(patch, true)
+        }
+    }
+
+    component StickerCard: WidgetCard {
+        id: stickerCard
+
+        widgetContent: stickerW
+        resizeMode: "diagonal"
+        onUnlockedTapped: stickerW.openPicker()
+        onResizeFinished: finalWidth => stickerCard.mergeOptions({
+            size: Math.max(88, Math.round(finalWidth / WidgetMetrics.scale))
+        }, true)
+
+        StickerWidget {
+            id: stickerW
+            anchors.fill: parent
+            wallpaper: root.wallpaper
+            weActive: root.weActive
+            locked: stickerCard.locked
+            sizeMode: stickerCard.resolvedSizeMode
+            surfaceStyle: stickerCard.resolvedSurfaceStyle
+            widgetOptions: stickerCard.entryOptions
+            onOptionsUpdated: patch => stickerCard.mergeOptions(patch, true)
+        }
+    }
+
+    component CustomTextCard: WidgetCard {
+        id: textCard
+
+        widgetContent: textW
+        resizeMode: "horizontal"
+        onResizeFinished: finalWidth => textCard.mergeOptions({
+            maxWidth: Math.max(140, Math.round(finalWidth / WidgetMetrics.scale))
+        }, true)
+
+        CustomTextWidget {
+            id: textW
+            anchors.fill: parent
+            wallpaper: root.wallpaper
+            weActive: root.weActive
+            locked: textCard.locked
+            sizeMode: textCard.resolvedSizeMode
+            surfaceStyle: textCard.resolvedSurfaceStyle
+            widgetOptions: textCard.entryOptions
+            onOptionsUpdated: patch => textCard.mergeOptions(patch, true)
         }
     }
 }

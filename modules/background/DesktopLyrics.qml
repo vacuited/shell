@@ -11,6 +11,7 @@ import qs.components
 import qs.components.controls
 import qs.components.effects
 import qs.services
+import "components"
 
 Item {
     id: root
@@ -21,6 +22,7 @@ Item {
     required property real absY
 
     property real lyricsScale: Config.background.desktopLyrics.scale
+    readonly property bool weActive: wallpaper?.weSurfaceActive ?? wallpaper?.weSurfaceVisible ?? false
     readonly property bool bgEnabled: Config.background.desktopLyrics.background.enabled
     readonly property bool blurEnabled: bgEnabled && Config.background.desktopLyrics.background.blur && !GameMode.enabled
     readonly property bool invertColors: Config.background.desktopLyrics.invertColors
@@ -218,45 +220,33 @@ Item {
         anchors.fill: parent
         // Removed clip: true from here so the shadow doesn't get cut off
 
-        layer.enabled: Config.background.desktopLyrics.shadow.enabled
+        // When bgEnabled is true, WidgetSurface handles the backdrop plate and its shadow.
+        // Only apply container shadow for unboxed floating lyrics text.
+        layer.enabled: !root.bgEnabled && Config.background.desktopLyrics.shadow.enabled && !GameMode.enabled
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Colours.palette.m3shadow
-            shadowOpacity: Config.background.desktopLyrics.shadow.opacity
+            shadowOpacity: root.weActive ? Math.min(Config.background.desktopLyrics.shadow.opacity, 0.16) : Config.background.desktopLyrics.shadow.opacity
             shadowBlur: Config.background.desktopLyrics.shadow.blur
         }
 
-        Loader {
-            id: blurLoader
-
-            asynchronous: true
-            anchors.fill: parent
-            active: root.blurEnabled && root.wallpaper !== null
-
-            sourceComponent: MultiEffect {
-                source: ShaderEffectSource {
-                    sourceItem: root.wallpaper
-                    sourceRect: Qt.rect(root.absX, root.absY, root.width, root.height)
-                }
-                maskSource: backgroundPlate
-                maskEnabled: true
-                blurEnabled: true
-                blur: 1
-                blurMax: 64
-                autoPaddingEnabled: false
-            }
-        }
-
-        StyledRect {
+        WidgetSurface {
             id: backgroundPlate
 
             visible: root.bgEnabled
             anchors.fill: parent
+            wallpaper: root.wallpaper
+            weActive: root.weActive
+            surfaceStyle: "glass"
+            blur: root.blurEnabled
+            plateOpacity: Config.background.desktopLyrics.background.opacity
             radius: Tokens.rounding.large * root.lyricsScale
-            opacity: Config.background.desktopLyrics.background.opacity
-            color: Colours.palette.m3surface
-
-            layer.enabled: root.blurEnabled
+            absX: root.absX
+            absY: root.absY
+            shadowEnabled: Config.background.desktopLyrics.shadow.enabled
+            shadowOpacity: Config.background.desktopLyrics.shadow.opacity
+            shadowBlur: Config.background.desktopLyrics.shadow.blur
+            shadowVerticalOffset: 0
         }
 
         Loader {

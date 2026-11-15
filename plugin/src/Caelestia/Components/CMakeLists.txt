@@ -9,6 +9,7 @@ qml_module(caelestia-components
         linearindicatormanager.cpp
         sparklineitem.cpp
         visualiserbars.cpp
+        visualiserview.cpp
         roundedmask.cpp
     LIBRARIES
         Qt::Gui
@@ -23,7 +24,12 @@ qt_add_shaders(caelestia-components "components_shaders"
     GLSL "300es,330"
     PREFIX "/"
     FILES
-        shaders/visualiser.frag
+        shaders/visualiser.vert
+        shaders/visualiser_aurora.frag
+        shaders/visualiser_bars.frag
+        shaders/visualiser_wave.frag
+        shaders/visualiser_dots.frag
+        shaders/visualiser_glow.frag
         shaders/roundedmask.frag
         shaders/roundedmask.vert
 )

@@ -40,22 +40,28 @@ void CavaProcessor::process() {
     // Process in data via cava
     cava_execute(m_in, count, m_out, m_plan);
 
-    // Apply monstercat filter
+    // Apply optional monstercat spatial filter
     QVector<double> values(m_bars);
 
-    // Left to right pass
-    const double inv = 1.0 / 1.5;
-    double carry = 0.0;
-    for (int i = 0; i < m_bars; ++i) {
-        carry = std::max(m_out[i], carry * inv);
-        values[i] = carry;
-    }
+    if (m_monstercat.load(std::memory_order_relaxed)) {
+        // Left to right pass
+        const double inv = 1.0 / 1.5;
+        double carry = 0.0;
+        for (int i = 0; i < m_bars; ++i) {
+            carry = std::max(m_out[i], carry * inv);
+            values[i] = carry;
+        }
 
-    // Right to left pass and combine
-    carry = 0.0;
-    for (int i = m_bars - 1; i >= 0; --i) {
-        carry = std::max(m_out[i], carry * inv);
-        values[i] = std::max(values[i], carry);
+        // Right to left pass and combine
+        carry = 0.0;
+        for (int i = m_bars - 1; i >= 0; --i) {
+            carry = std::max(m_out[i], carry * inv);
+            values[i] = std::max(values[i], carry);
+        }
+    } else {
+        for (int i = 0; i < m_bars; ++i) {
+            values[i] = m_out[i];
+        }
     }
 
     // Update values
@@ -75,6 +81,10 @@ void CavaProcessor::setBars(int bars) {
         m_bars = bars;
         reload();
     }
+}
+
+void CavaProcessor::setMonstercat(bool monstercat) {
+    m_monstercat.store(monstercat, std::memory_order_relaxed);
 }
 
 void CavaProcessor::reload() {
@@ -99,7 +109,7 @@ void CavaProcessor::initCava() {
         return;
     }
 
-    m_plan = cava_init(m_bars, ac::k_sampleRate, 1, 1, 0.85, 50, 10000);
+    m_plan = cava_init(m_bars, ac::k_sampleRate, 1, 1, 0.78, 50, 10000);
     m_out = new double[static_cast<size_t>(m_bars)];
 }
 
@@ -134,6 +144,21 @@ void CavaProvider::setBars(int bars) {
 
     QMetaObject::invokeMethod(
         static_cast<CavaProcessor*>(m_processor), &CavaProcessor::setBars, Qt::QueuedConnection, bars);
+}
+
+bool CavaProvider::monstercat() const {
+    return m_monstercat;
+}
+
+void CavaProvider::setMonstercat(bool monstercat) {
+    if (m_monstercat == monstercat) {
+        return;
+    }
+
+    m_monstercat = monstercat;
+    emit monstercatChanged();
+
+    static_cast<CavaProcessor*>(m_processor)->setMonstercat(monstercat);
 }
 
 QVector<double> CavaProvider::values() const {

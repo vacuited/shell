@@ -107,6 +107,30 @@ Singleton {
         return stream.properties["application.name"] || stream.description || stream.name || Tr.trCtx("Unknown application", "unknown application audio stream");
     }
 
+    function isHiddenStream(stream: PwNode): bool {
+        if (!stream)
+            return true;
+
+        const name = getStreamName(stream).toLowerCase();
+        const appName = (stream.properties?.["application.name"] ?? "").toLowerCase();
+        const nodeName = (stream.name ?? "").toLowerCase();
+        const binary = (stream.properties?.["application.process.binary"] ?? "").toLowerCase();
+        const mediaName = (stream.properties?.["media.name"] ?? "").toLowerCase();
+
+        const isInternal = name.includes("quickshell") || name.includes("caelestia")
+            || appName.includes("quickshell") || appName.includes("caelestia")
+            || nodeName.includes("quickshell") || nodeName.includes("caelestia")
+            || binary.includes("quickshell") || binary.includes("caelestia");
+
+        const isWallpaper = name.includes("wallpaper") || appName.includes("wallpaper")
+            || nodeName.includes("wallpaper") || binary.includes("wallpaper")
+            || name.includes("skwd") || appName.includes("skwd")
+            || nodeName.includes("skwd") || binary.includes("skwd")
+            || mediaName.includes(" - mpv") || (nodeName === "mpv" && binary !== "mpv");
+
+        return isInternal || isWallpaper;
+    }
+
     function playSound(sfx: SoundEffect, setting: bool): void {
         if (!GlobalConfig.audio.sounds.enabled || !setting)
             return;
@@ -174,7 +198,7 @@ Singleton {
                     newSinks.push(node);
                 else if (node.audio)
                     newSources.push(node);
-            } else if (node.audio) {
+            } else if (node.audio && !isHiddenStream(node)) {
                 newStreams.push(node);
             }
         }

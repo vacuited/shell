@@ -1,143 +1,150 @@
 .pragma library
 
-// Geometry shared by the desktop widgets and the settings editor that arranges them: a square grid of `unit` px
-// cells, and widgets that snap to it. Sizes are in cells.
+var baseCell = 164;
+var baseGap = 12;
+var unit = baseCell + baseGap;
+var cardCells = 1;
 
-const unit = 40;
-// Space left between a card and the edge of its footprint, so neighbours never touch
-const gap = 8;
-// Every card is the same width; the height depends on what it shows
-const cardCells = 8;
-// Distance from the screen edge, and between the default columns, in cells
-const margin = 2;
-
-const heights = {
-    calendar: 8,
-    weather: 7,
-    pomodoro: 5,
-    resources: 5,
-    media: 5,
-    battery: 4
-};
-
-function heightOf(id) {
-    return heights[id] ?? 5;
+function canonicalType(entry) {
+    if (!entry)
+        return "";
+    var raw = (entry.type && entry.type !== "") ? entry.type : entry.id;
+    return raw === "pomodoro" ? "timers" : (raw || "");
 }
 
-// Where each widget sits, parallel to `entries` ([{ id, enabled, col, row, right }]); `col` counts from the right edge
-// when `right` is set, so the result is in the screen's own columns whatever its width. Widgets that have been placed keep
-// their cell (kept on screen). Any other widget, and any placed one whose cell another has taken since (say it was
-// turned off, something moved in, and it was turned back on), flows into the first free space in `columns` columns
-// from the `position` corner, so no two widgets ever overlap.
-function place(entries, gridCols, gridRows, columns, position) {
-    const out = entries.map(e => {
-        const placed = e.col >= 0 && e.row >= 0;
-        const h = heightOf(e.id);
-        const col = e.right ? gridCols - cardCells - e.col : e.col;
-        return {
-            id: e.id,
-            enabled: e.enabled,
-            placed: placed,
-            w: cardCells,
-            h: h,
-            col: placed ? Math.max(0, Math.min(col, gridCols - cardCells)) : 0,
-            row: placed ? Math.max(0, Math.min(e.row, gridRows - h)) : 0
+function defaultSizeMode(type) {
+    switch (type) {
+    case "atAGlance":
+    case "media":
+    case "usercard":
+        return "1x2";
+    case "resources":
+    case "todo":
+    case "notes":
+        return "2x1";
+    default:
+        return "1x1";
+    }
+}
+
+function colsFor(type, sizeMode) {
+    var m = (sizeMode && sizeMode !== "") ? sizeMode : defaultSizeMode(type);
+    var parts = m.split("x");
+    var c = parseInt(parts[1], 10);
+    if (isNaN(c) || c < 1)
+        return 1;
+    return Math.min(3, c);
+}
+
+function rowsFor(type, sizeMode) {
+    var m = (sizeMode && sizeMode !== "") ? sizeMode : defaultSizeMode(type);
+    var parts = m.split("x");
+    var r = parseInt(parts[0], 10);
+    if (isNaN(r) || r < 1)
+        return 1;
+    return Math.min(2, r);
+}
+
+function hits(occ, col, row, w, h, totalCols) {
+    if (col < 0 || row < 0 || col + w > totalCols)
+        return true;
+    for (var i = 0; i < occ.length; i++) {
+        var b = occ[i];
+        if (col < b.col + b.w && col + w > b.col && row < b.row + b.h && row + h > b.row)
+            return true;
+    }
+    return false;
+}
+
+function findSlot(occ, w, h, colLimit, totalCols, totalRows, anchorCorner) {
+    var rightAnchor = anchorCorner === "top-right" || anchorCorner === "bottom-right";
+    var bottomAnchor = anchorCorner === "bottom-left" || anchorCorner === "bottom-right";
+
+    var maxCol = Math.min(totalCols, Math.max(w, colLimit));
+    var startCol = rightAnchor ? Math.max(0, totalCols - maxCol) : 0;
+    var endCol = Math.min(totalCols - w, startCol + maxCol - w);
+    var maxRow = Math.max(1, totalRows - h + 1);
+
+    for (var rStep = 0; rStep < maxRow; rStep++) {
+        var row = bottomAnchor ? Math.max(0, totalRows - h - rStep) : rStep;
+        for (var cStep = 0; cStep <= endCol - startCol; cStep++) {
+            var col = rightAnchor ? (endCol - cStep) : (startCol + cStep);
+            if (!hits(occ, col, row, w, h, totalCols))
+                return { col: col, row: row };
+        }
+    }
+
+    // Fallback scan across full workspace if constrained column limit was full.
+    for (var r = 0; r < Math.max(1, totalRows - h + 1); r++) {
+        for (var c = 0; c <= Math.max(0, totalCols - w); c++) {
+            if (!hits(occ, c, r, w, h, totalCols))
+                return { col: c, row: r };
+        }
+    }
+    return { col: rightAnchor ? Math.max(0, totalCols - w) : 0, row: 0 };
+}
+
+function place(entries, workWidth, workHeight, columnsSetting, anchorCorner, stepPx, cellPx, gapPx, originX, originY) {
+    var step = stepPx > 0 ? stepPx : unit;
+    var cell = cellPx > 0 ? cellPx : baseCell;
+    var gap = gapPx >= 0 ? gapPx : baseGap;
+    var ox = originX || 0;
+    var oy = originY || 0;
+
+    var totalCols = Math.max(1, Math.floor((Math.max(cell, workWidth) + gap) / step));
+    var totalRows = Math.max(1, Math.floor((Math.max(cell, workHeight) + gap) / step));
+    var colLimit = Math.max(1, Math.min(totalCols, columnsSetting || 2));
+
+    var occ = [];
+    var slots = {};
+    var i;
+
+    // Reserve cells already occupied by custom-positioned widgets.
+    for (i = 0; i < entries.length; i++) {
+        var entry = entries[i];
+        if (!entry || entry.enabled === false)
+            continue;
+        var wType = canonicalType(entry);
+        var mode = (entry.sizeMode && entry.sizeMode !== "") ? entry.sizeMode : defaultSizeMode(wType);
+        var w = colsFor(wType, mode);
+        var h = rowsFor(wType, mode);
+        if (entry.x !== undefined && entry.x >= 0 && entry.y !== undefined && entry.y >= 0) {
+            var relX = entry.x - ox;
+            var relY = entry.y - oy;
+            var c = Math.max(0, Math.min(totalCols - w, Math.round(relX / step)));
+            var r = Math.max(0, Math.min(totalRows - h, Math.round(relY / step)));
+            occ.push({ col: c, row: r, w: w, h: h });
+            slots[entry.id] = {
+                col: c,
+                row: r,
+                w: w,
+                h: h,
+                x: Math.round(entry.x),
+                y: Math.round(entry.y)
+            };
+        }
+    }
+
+    // Auto-flow remaining unplaced entries into nearest open slots.
+    for (i = 0; i < entries.length; i++) {
+        var e = entries[i];
+        if (!e || e.enabled === false || slots[e.id])
+            continue;
+        var t = canonicalType(e);
+        var sz = (e.sizeMode && e.sizeMode !== "") ? e.sizeMode : defaultSizeMode(t);
+        var cw = colsFor(t, sz);
+        var ch = rowsFor(t, sz);
+        var pos = findSlot(occ, cw, ch, colLimit, totalCols, totalRows, anchorCorner || "top-right");
+        occ.push({ col: pos.col, row: pos.row, w: cw, h: ch });
+        slots[e.id] = {
+            col: pos.col,
+            row: pos.row,
+            w: cw,
+            h: ch,
+            x: Math.round(ox + pos.col * step),
+            y: Math.round(oy + pos.row * step)
         };
-    });
-
-    // Widgets that are off take no space
-    const taken = [];
-    for (const p of out) {
-        if (!p.enabled || !p.placed)
-            continue;
-        if (hits(taken, p.col, p.row, p.w, p.h))
-            p.placed = false;
-        else
-            taken.push(p);
     }
 
-    const flow = out.filter(p => p.enabled && !p.placed);
-    if (flow.length === 0)
-        return out;
-
-    const ncols = Math.max(1, columns);
-    const right = position.endsWith("right");
-    const bottom = position.startsWith("bottom");
-    const x0 = right ? gridCols - margin - ncols * cardCells : margin;
-    const spill = Math.floor(gridCols / cardCells);
-
-    flow.forEach((p, k) => {
-        // The column this card would take in turn, then the others, then columns further in from the corner
-        const order = [];
-        for (let i = 0; i < ncols; i++)
-            order.push((k + i) % ncols);
-        for (let i = 1; i <= spill; i++)
-            order.push(right ? -i : ncols - 1 + i);
-
-        for (const c of order) {
-            const col = x0 + c * cardCells;
-            if (col < 0 || col + p.w > gridCols)
-                continue;
-            const row = freeRow(taken, col, p.w, p.h, gridRows, bottom);
-            if (row >= 0) {
-                p.col = col;
-                p.row = row;
-                taken.push(p);
-                return;
-            }
-        }
-
-        // The screen is full; the corner is as good as anywhere
-        p.col = Math.max(0, Math.min(x0, gridCols - p.w));
-        p.row = bottom ? Math.max(0, gridRows - margin - p.h) : margin;
-        taken.push(p);
-    });
-    return out;
-}
-
-// Is any of `rects` overlapped by a w x h widget at (col, row)?
-function hits(rects, col, row, w, h) {
-    for (const r of rects) {
-        if (col < r.col + r.w && col + w > r.col && row < r.row + r.h && row + h > r.row)
-            return true;
-    }
-    return false;
-}
-
-// The first row, working in from the top (or the bottom) edge, where a w x h widget fits in column `col`; -1 if none
-function freeRow(rects, col, w, h, gridRows, fromBottom) {
-    if (fromBottom) {
-        for (let row = gridRows - margin - h; row >= 0; row--) {
-            if (!hits(rects, col, row, w, h))
-                return row;
-        }
-    } else {
-        for (let row = margin; row + h <= gridRows; row++) {
-            if (!hits(rects, col, row, w, h))
-                return row;
-        }
-    }
-    return -1;
-}
-
-// What to store for a widget that ended up at column `col`: counted from whichever edge it is nearer, so it keeps to
-// that side on screens of other widths
-function anchor(col, w, gridCols) {
-    const right = col + w / 2 > gridCols / 2;
-    return {
-        right: right,
-        col: right ? gridCols - w - col : col
-    };
-}
-
-// Does a w x h widget at (col, row) overlap any enabled widget other than the one at `skip`?
-function collides(placements, skip, col, row, w, h) {
-    for (let i = 0; i < placements.length; i++) {
-        const p = placements[i];
-        if (i === skip || !p.enabled)
-            continue;
-        if (col < p.col + p.w && col + w > p.col && row < p.row + p.h && row + h > p.row)
-            return true;
-    }
-    return false;
+    return slots;
 }

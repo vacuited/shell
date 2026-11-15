@@ -3,33 +3,99 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
-import Quickshell.Io
 import Caelestia.Config
 import qs.components
 import qs.components.containers
 import qs.services
 import qs.utils
+import "components"
 
 Variants {
     model: Screens.screens.filter(s => GlobalConfig.forScreen(s.name).background.enabled)
 
-    StyledWindow {
-        id: win
+    Scope {
+        id: scope
 
         required property ShellScreen modelData
-        readonly property alias wallpaperLoader: wallpaper
+        readonly property bool weRunning: !!(win.wallpaperLoader.item && win.wallpaperLoader.item.weRunning)
+        property bool winBottomDeferred: false
 
-        screen: modelData
-        name: "background"
-        WlrLayershell.exclusionMode: ExclusionMode.Ignore
-        WlrLayershell.layer: (contentItem.Config.background.wallpaperEnabled && !(wallpaper.item && wallpaper.item.weRunning)) ? WlrLayer.Background : WlrLayer.Bottom
-        color: contentItem.Config.background.wallpaperEnabled && !(wallpaper.item && wallpaper.item.weRunning) ? "black" : "transparent"
-        surfaceFormat.opaque: false
+        function syncBottomOrder(): void {
+            if (weRunning) {
+                if (!winBottomDeferred)
+                    bottomLayerTimer.restart();
+            } else {
+                bottomLayerTimer.stop();
+                winBottomDeferred = false;
+            }
+        }
 
-        anchors.top: true
-        anchors.bottom: true
-        anchors.left: true
-        anchors.right: true
+        onWeRunningChanged: syncBottomOrder()
+        Component.onCompleted: syncBottomOrder()
+
+        Timer {
+            id: bottomLayerTimer
+
+            interval: 40
+            onTriggered: scope.winBottomDeferred = scope.weRunning
+        }
+
+        // Dedicated non-blurred bottom surface for Visualiser during Wallpaper Engine
+        // playback so caelestia-background's Hyprland blur rule does not carve wavy
+        // ignore_alpha cutouts into live Wallpaper Engine scenes.
+        StyledWindow {
+            id: visWin
+
+            screen: scope.modelData
+            name: "visualiser"
+            visible: scope.weRunning
+            WlrLayershell.exclusionMode: ExclusionMode.Ignore
+            WlrLayershell.layer: WlrLayer.Bottom
+            WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+            mask: Region {}
+            color: "transparent"
+            surfaceFormat.opaque: false
+
+            anchors.top: true
+            anchors.bottom: true
+            anchors.left: true
+            anchors.right: true
+
+            Loader {
+                anchors.fill: parent
+                active: scope.weRunning
+
+                sourceComponent: Visualiser {
+                    screen: scope.modelData
+                    wallpaper: win.wallpaperLoader
+                }
+            }
+        }
+
+        StyledWindow {
+            id: win
+
+            readonly property ShellScreen modelData: scope.modelData
+            readonly property alias wallpaperLoader: wallpaper
+
+            screen: modelData
+            name: "background"
+            WlrLayershell.exclusionMode: ExclusionMode.Ignore
+            WlrLayershell.layer: (contentItem.Config.background.wallpaperEnabled && !scope.winBottomDeferred) ? WlrLayer.Background : WlrLayer.Bottom
+            WlrLayershell.keyboardFocus: (Visibilities.desktopWidgetsUnlocked || Visibilities.desktopWidgetEditing) ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+            color: contentItem.Config.background.wallpaperEnabled && !scope.weRunning ? "black" : "transparent"
+            surfaceFormat.opaque: false
+
+            anchors.top: true
+            anchors.bottom: true
+            anchors.left: true
+            anchors.right: true
+
+        Shortcut {
+            sequence: "Escape"
+            enabled: Visibilities.desktopWidgetsUnlocked
+            onActivated: Visibilities.desktopWidgetsUnlocked = false
+        }
 
         ShellState.ComponentRef {
             screen: win.screen
@@ -37,28 +103,10 @@ Variants {
             component: win
         }
 
-        property bool cleanupDone: false
-
-        Process {
-            id: cleanupProc
-            command: [
-                "sh", "-c",
-                'PIDFILE="$1/engine_$2.pid"; if [ -f "$PIDFILE" ]; then OLD_PID=$(cat "$PIDFILE" 2>/dev/null); rm -f "$PIDFILE"; if [ -n "$OLD_PID" ] && kill -0 "$OLD_PID" 2>/dev/null; then CMD=$(tr "\\0" " " < "/proc/$OLD_PID/cmdline" 2>/dev/null || true); if echo "$CMD" | grep -q "linux-wallpaperengine" && echo "$CMD" | grep -q -- "--layer" && echo "$CMD" | grep -q -- "$2"; then kill "$OLD_PID" 2>/dev/null || true; fi; fi; fi',
-                "sh",
-                Paths.state + "/wallpaper",
-                win.modelData.name
-            ]
-            running: true
-            onRunningChanged: {
-                if (!running) cleanupDone = true;
-            }
-            onExited: {
-                cleanupDone = true;
-            }
-        }
-
         Item {
             id: behindClock
+
+            readonly property bool weSurfaceActive: wallpaper.item?.weSurfaceVisible ?? false
 
             anchors.fill: parent
 
@@ -69,326 +117,203 @@ Variants {
 
                 anchors.fill: parent
                 active: Config.background.wallpaperEnabled
-                opacity: (item && item.weSurfaceVisible) ? 0 : 1
+                opacity: (item && item.weSurfaceVisible && item.weRevealOpacity <= 0.001) ? 0 : 1
 
                 sourceComponent: Wallpaper {
                     screen: win.modelData
-                    weEngineReady: weProc.engineReady
-                    weFailed: weProc.weFailed
+                    weEngineReady: Skwd.surfaceReady
+                    weFailed: Skwd.engineFailed
                 }
             }
 
-            Timer {
-                id: engineReadyTimer
-                interval: weProc.engineReadyDelayMs
-                repeat: false
-                onTriggered: {
-                    if (weProc.alive) {
-                        weProc.engineReady = true;
-                    }
-                }
-            }
+            Loader {
+                id: visualiserLoader
 
-            Timer {
-                id: watchdogTimer
-                interval: 2000
-                repeat: false
-                onTriggered: {
-                    if (weProc.stopping && weProc.alive) {
-                        console.warn("linux-wallpaperengine stop timed out, sending SIGKILL");
-                        weProc.signal(9);
-                    }
-                }
-            }
-
-            Process {
-                id: weProc
-                property string weDir: Wallpapers.committedWeDir
-                property bool weRunning: wallpaper.item ? wallpaper.item.weRunning : false
-                property bool weFailed: false
-                property bool stopping: false
-                property bool alive: false
-                property bool gotExit: false
-                property bool engineReady: false
-                property int engineReadyDelayMs: 1200
-                property int lastPid: 0
-                property bool isProcessPaused: false
-
-                function updatePauseState(): void {
-                    if (!alive || lastPid <= 0 || stopping || !engineReady)
-                        return;
-
-                    let shouldPause = WallpaperPauser.paused && !weFailed;
-                    if (shouldPause && !isProcessPaused) {
-                        isProcessPaused = true;
-                        Quickshell.execDetached(["kill", "-STOP", lastPid.toString()]);
-                    } else if (!shouldPause && isProcessPaused) {
-                        isProcessPaused = false;
-                        Quickshell.execDetached(["kill", "-CONT", lastPid.toString()]);
-                    }
-                }
-
-                onEngineReadyChanged: {
-                    if (engineReady) {
-                        updatePauseState();
-                    }
-                }
-
-                onStoppingChanged: {
-                    if (stopping && isProcessPaused && lastPid > 0) {
-                        isProcessPaused = false;
-                        Quickshell.execDetached(["kill", "-CONT", lastPid.toString()]);
-                    }
-                }
-
-                readonly property bool desiredRun: cleanupDone && weRunning && weDir !== "" && contentItem.Config.background.wallpaperEnabled && !weFailed
-                readonly property bool shouldRun: desiredRun && !stopping
-
-                onShouldRunChanged: {
-                    if (shouldRun) {
-                        gotExit = false;
-                    }
-                }
-
-                onDesiredRunChanged: {
-                    if (!desiredRun && (weProc.running || alive)) {
-                        stopping = true;
-                        watchdogTimer.restart();
-                    }
-                }
-
-                command: {
-                    let bin = Quickshell.env("CAELESTIA_WE_BIN") || "linux-wallpaperengine";
-                    let cmd = [bin, "--screen-root", win.modelData.name, "--layer", "background"];
-                    if (Wallpapers.weSilent) {
-                        cmd.push("--silent");
-                    } else {
-                        cmd.push("--volume", Math.round(Wallpapers.weVolume * 100).toString());
-                    }
-                    cmd.push(weDir);
-                    return cmd;
-                }
-
-                running: shouldRun
-
-                property int lastNonce: Wallpapers.selectNonce
-                onLastNonceChanged: {
-                    weFailed = false;
-                }
-
-                onWeFailedChanged: {
-                    if (weFailed && isProcessPaused && lastPid > 0) {
-                        isProcessPaused = false;
-                        Quickshell.execDetached(["kill", "-CONT", lastPid.toString()]);
-                    }
-                }
-
-                onWeDirChanged: {
-                    weFailed = false;
-                    engineReady = false;
-                    engineReadyTimer.stop();
-                    if (weProc.running || alive) {
-                        stopping = true;
-                        watchdogTimer.restart();
-                    }
-                }
-
-                onStarted: {
-                    alive = true;
-                    gotExit = false;
-                    engineReady = false;
-                    engineReadyTimer.restart();
-                    if (processId) {
-                        lastPid = processId;
-                        Quickshell.execDetached(["sh", "-c", 'mkdir -p "$1" && printf "%s\\n" "$2" > "$1/engine_$3.pid"', "sh", Paths.state + "/wallpaper", lastPid.toString(), win.modelData.name]);
-                    }
-                }
-
-                onProcessIdChanged: {
-                    if (processId && running && lastPid !== processId) {
-                        lastPid = processId;
-                        Quickshell.execDetached(["sh", "-c", 'mkdir -p "$1" && printf "%s\\n" "$2" > "$1/engine_$3.pid"', "sh", Paths.state + "/wallpaper", lastPid.toString(), win.modelData.name]);
-                    }
-                }
-
-                onRunningChanged: {
-                    if (!running) {
-                        engineReadyTimer.stop();
-                        engineReady = false;
-                        if (!gotExit) {
-                            console.warn("linux-wallpaperengine failed to start");
-                            weFailed = true;
-                            stopping = false;
-                        }
-                    }
-                }
-
-                onExited: (exitCode, exitStatus) => {
-                    isProcessPaused = false;
-                    alive = false;
-                    gotExit = true;
-                    watchdogTimer.stop();
-                    engineReadyTimer.stop();
-                    engineReady = false;
-                    const exitedPid = lastPid;
-                    lastPid = 0;
-
-                    if (stopping) {
-                        Qt.callLater(() => {
-                            stopping = false;
-                        });
-                    } else if (weRunning && contentItem.Config.background.wallpaperEnabled) {
-                        console.warn("linux-wallpaperengine exited unexpectedly. Code:", exitCode, "Status:", exitStatus);
-                        weFailed = true;
-                    }
-
-                    if (exitedPid > 0 && (!desiredRun || !weRunning || weFailed)) {
-                        Quickshell.execDetached(["sh", "-c", 'PIDFILE="$1/engine_$2.pid"; if [ -f "$PIDFILE" ] && [ "$(cat "$PIDFILE" 2>/dev/null)" = "$3" ]; then rm -f "$PIDFILE"; fi', "sh", Paths.state + "/wallpaper", win.modelData.name, exitedPid.toString()]);
-                    }
-                }
-
-            }
-
-            Connections {
-                target: WallpaperPauser
-                function onPausedChanged() {
-                    weProc.updatePauseState();
-                }
-            }
-
-
-            Visualiser {
                 anchors.fill: parent
-                screen: win.modelData
-                wallpaper: wallpaper
+                active: !scope.weRunning
                 z: 2
+
+                sourceComponent: Visualiser {
+                    screen: win.modelData
+                    wallpaper: wallpaper
+                }
             }
         }
 
-        Loader {
-            id: clockLoader
+        Item {
+            id: desktopCanvas
 
-            readonly property int clockBarZone: Visibilities.bars.get(win.modelData.name)?.exclusiveZone ?? (Tokens.sizes.bar.innerWidth + Math.max(Tokens.padding.small, Config.border.thickness))
-            readonly property int clockBaseMargin: Tokens.padding.extraLargeIncreased
+            readonly property bool isWidgetCanvas: true
+            readonly property int barExclusiveZone: Visibilities.bars.get(win.modelData.name)?.exclusiveZone ?? (Tokens.sizes.bar.innerWidth + Math.max(Tokens.padding.small, Config.border.thickness))
+            readonly property int edgeBorderInset: GlobalConfig.appearance.islands ? 0 : Config.border.thickness
+            readonly property int safeGap: Tokens.spacing.medium
+            readonly property real safeLeft: Math.round((Config.bar.position === "left" ? barExclusiveZone : edgeBorderInset) + safeGap)
+            readonly property real safeTop: Math.round((Config.bar.position === "top" ? barExclusiveZone : edgeBorderInset) + safeGap)
+            readonly property real safeRight: Math.max(safeLeft + 64, Math.round(width - (Config.bar.position === "right" ? barExclusiveZone : edgeBorderInset) - safeGap))
+            readonly property real safeBottom: Math.max(safeTop + 64, Math.round(height - (Config.bar.position === "bottom" ? barExclusiveZone : edgeBorderInset) - safeGap))
+            readonly property real safeWidth: Math.max(64, safeRight - safeLeft)
+            readonly property real safeHeight: Math.max(64, safeBottom - safeTop)
+            readonly property real workCenterX: Math.round((safeLeft + safeRight) / 2)
+            readonly property real workCenterY: Math.round((safeTop + safeBottom) / 2)
+            property bool dragging: false
+            property bool resizing: false
+            property bool centerXActive: false
+            property bool centerYActive: false
+            property var guideLines: []
+            property var registeredItems: []
 
-            asynchronous: true
-            active: Config.background.desktopClock.enabled
-
-            anchors.margins: clockBaseMargin
-            anchors.leftMargin: Config.bar.position === "left" ? clockBaseMargin + clockBarZone : clockBaseMargin
-            anchors.rightMargin: Config.bar.position === "right" ? clockBaseMargin + clockBarZone : clockBaseMargin
-            anchors.topMargin: Config.bar.position === "top" ? clockBaseMargin + clockBarZone : clockBaseMargin
-            anchors.bottomMargin: Config.bar.position === "bottom" ? clockBaseMargin + clockBarZone : clockBaseMargin
-
-            anchors.horizontalCenterOffset: {
-                if (Config.bar.position === "left") return clockBarZone / 2;
-                if (Config.bar.position === "right") return -clockBarZone / 2;
-                return 0;
+            function setDragging(active: bool): void {
+                dragging = active;
+                if (!active && !resizing)
+                    guideLines = [];
             }
-            anchors.verticalCenterOffset: {
-                if (Config.bar.position === "top") return clockBarZone / 2;
-                if (Config.bar.position === "bottom") return -clockBarZone / 2;
-                return 0;
+
+            function setResizing(active: bool): void {
+                resizing = active;
+                if (!active && !dragging)
+                    guideLines = [];
             }
 
-            state: Config.background.desktopClock.position
-            states: [
-                State {
-                    name: "top-left"
+            function setCenterActive(xActive: bool, yActive: bool): void {
+                centerXActive = xActive;
+                centerYActive = yActive;
+            }
 
-                    AnchorChanges {
-                        target: clockLoader
-                        anchors.top: parent.top
-                        anchors.left: parent.left
-                    }
-                },
-                State {
-                    name: "top-center"
+            function setGuideLines(lines: var): void {
+                guideLines = lines ?? [];
+            }
 
-                    AnchorChanges {
-                        target: clockLoader
-                        anchors.top: parent.top
-                        anchors.horizontalCenter: parent.horizontalCenter
-                    }
-                },
-                State {
-                    name: "top-right"
+            function registerItem(item: Item): void {
+                if (!item || registeredItems.indexOf(item) >= 0)
+                    return;
+                const next = registeredItems.slice();
+                next.push(item);
+                registeredItems = next;
+            }
 
-                    AnchorChanges {
-                        target: clockLoader
-                        anchors.top: parent.top
-                        anchors.right: parent.right
-                    }
-                },
-                State {
-                    name: "middle-left"
+            function unregisterItem(item: Item): void {
+                const idx = registeredItems.indexOf(item);
+                if (idx < 0)
+                    return;
+                const next = registeredItems.slice();
+                next.splice(idx, 1);
+                registeredItems = next;
+            }
 
-                    AnchorChanges {
-                        target: clockLoader
-                        anchors.verticalCenter: parent.verticalCenter
-                        anchors.left: parent.left
-                    }
-                },
-                State {
-                    name: "middle-center"
+            function siblingRects(excludeItem: Item): var {
+                const out = [];
+                for (let i = 0; i < registeredItems.length; i++) {
+                    const it = registeredItems[i];
+                    if (!it || it === excludeItem || !it.visible || it.width <= 0 || it.height <= 0)
+                        continue;
+                    const pt = it.mapToItem(desktopCanvas, 0, 0);
+                    out.push({
+                        x: pt.x,
+                        y: pt.y,
+                        width: it.width,
+                        height: it.height
+                    });
+                }
+                return out;
+            }
 
-                    AnchorChanges {
-                        target: clockLoader
-                        anchors.verticalCenter: parent.verticalCenter
-                        anchors.horizontalCenter: parent.horizontalCenter
-                    }
-                },
-                State {
-                    name: "middle-right"
+            anchors.fill: parent
 
-                    AnchorChanges {
-                        target: clockLoader
-                        anchors.verticalCenter: parent.verticalCenter
-                        anchors.right: parent.right
-                    }
-                },
-                State {
-                    name: "bottom-left"
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.RightButton
+                onClicked: Visibilities.desktopWidgetsUnlocked = !Visibilities.desktopWidgetsUnlocked
+            }
 
-                    AnchorChanges {
-                        target: clockLoader
-                        anchors.bottom: parent.bottom
-                        anchors.left: parent.left
-                    }
-                },
-                State {
-                    name: "bottom-center"
+            Loader {
+                id: gridLinesLoader
 
-                    AnchorChanges {
-                        target: clockLoader
-                        anchors.bottom: parent.bottom
-                        anchors.horizontalCenter: parent.horizontalCenter
-                    }
-                },
-                State {
-                    name: "bottom-right"
+                anchors.fill: parent
+                z: 50
+                active: Visibilities.desktopWidgetsUnlocked && (desktopCanvas.dragging || desktopCanvas.resizing)
 
-                    AnchorChanges {
-                        target: clockLoader
-                        anchors.bottom: parent.bottom
-                        anchors.right: parent.right
+                sourceComponent: WidgetGridLines {
+                    safeLeft: desktopCanvas.safeLeft
+                    safeTop: desktopCanvas.safeTop
+                    safeRight: desktopCanvas.safeRight
+                    safeBottom: desktopCanvas.safeBottom
+                    workCenterX: desktopCanvas.workCenterX
+                    workCenterY: desktopCanvas.workCenterY
+                    centerXActive: desktopCanvas.centerXActive
+                    centerYActive: desktopCanvas.centerYActive
+                    guideLines: desktopCanvas.guideLines
+                }
+            }
+
+            WidgetWrapper {
+                id: clockWrapper
+
+                readonly property int clockBarZone: Visibilities.bars.get(win.modelData.name)?.exclusiveZone ?? (Tokens.sizes.bar.innerWidth + Math.max(Tokens.padding.small, Config.border.thickness))
+                readonly property int clockBaseMargin: Tokens.padding.extraLargeIncreased
+                readonly property int leftMargin: Config.bar.position === "left" ? clockBaseMargin + clockBarZone : clockBaseMargin
+                readonly property int rightMargin: Config.bar.position === "right" ? clockBaseMargin + clockBarZone : clockBaseMargin
+                readonly property int topMargin: Config.bar.position === "top" ? clockBaseMargin + clockBarZone : clockBaseMargin
+                readonly property int bottomMargin: Config.bar.position === "bottom" ? clockBaseMargin + clockBarZone : clockBaseMargin
+                readonly property bool hasCustomPos: Config.background.desktopClock.x >= 0 && Config.background.desktopClock.y >= 0
+
+                readonly property int anchorX: {
+                    const pos = Config.background.desktopClock.position;
+                    if (pos.endsWith("-left"))
+                        return leftMargin;
+                    if (pos.endsWith("-right"))
+                        return Math.round(desktopCanvas.width - rightMargin - width);
+                    const barOff = Config.bar.position === "left" ? clockBarZone / 2 : (Config.bar.position === "right" ? -clockBarZone / 2 : 0);
+                    return Math.round((desktopCanvas.width - width) / 2 + barOff);
+                }
+
+                readonly property int anchorY: {
+                    const pos = Config.background.desktopClock.position;
+                    if (pos.startsWith("top-"))
+                        return topMargin;
+                    if (pos.startsWith("bottom-"))
+                        return Math.round(desktopCanvas.height - bottomMargin - height);
+                    const barOff = Config.bar.position === "top" ? clockBarZone / 2 : (Config.bar.position === "bottom" ? -clockBarZone / 2 : 0);
+                    return Math.round((desktopCanvas.height - height) / 2 + barOff);
+                }
+
+                canvas: desktopCanvas
+                visible: Config.background.desktopClock.enabled
+                outlineShape: Config.background.desktopClock.style === "cookie"
+                    ? WidgetMetrics.resolveShapeEnum(String(Config.background.desktopClock.options?.shape ?? "Cookie9Sided"), "Cookie9Sided")
+                    : -1
+                implicitWidth: clockLoader.implicitWidth
+                implicitHeight: clockLoader.implicitHeight
+                width: implicitWidth
+                height: implicitHeight
+                initialX: hasCustomPos ? Config.background.desktopClock.x : anchorX
+                initialY: hasCustomPos ? Config.background.desktopClock.y : anchorY
+                onPositionCommitted: (newX, newY) => {
+                    const scr = Config.forScreen(win.modelData.name);
+                    const hasScreenOverride = scr.background.isOverride("desktopClock")
+                        || scr.background.desktopClock.isOverride("x")
+                        || scr.background.desktopClock.isOverride("y");
+                    const target = hasScreenOverride ? scr : GlobalConfig;
+                    target.background.desktopClock.x = Math.round(newX);
+                    target.background.desktopClock.y = Math.round(newY);
+                    target.save();
+                }
+
+                Loader {
+                    id: clockLoader
+
+                    asynchronous: true
+                    active: Config.background.desktopClock.enabled
+
+                    sourceComponent: DesktopClock {
+                        wallpaper: behindClock
+                        absX: clockWrapper.x
+                        absY: clockWrapper.y
                     }
                 }
-            ]
-
-            transitions: Transition {
-                AnchorAnim {}
             }
 
-            sourceComponent: DesktopClock {
-                wallpaper: behindClock
-                absX: clockLoader.x
-                absY: clockLoader.y
-            }
-        }
-
-        Loader {
-            id: lyricsLoader
+            Loader {
+                id: lyricsLoader
 
             readonly property int lyricsBarZone: Visibilities.bars.get(win.modelData.name)?.exclusiveZone ?? (Tokens.sizes.bar.innerWidth + Math.max(Tokens.padding.small, Config.border.thickness))
             readonly property int lyricsBaseMargin: Tokens.padding.large * 2
@@ -518,6 +443,8 @@ Variants {
             property real occupiedProg: occupied ? 1 : 0
             readonly property real reveal: Config.background.desktopWidgets.hideWithWindows ? 1 - occupiedProg : 1
 
+            z: (widgetsLoader.item?.editingWidgetId ?? "") !== "" ? 70 : 1
+
             Behavior on occupiedProg {
                 Anim {
                     type: Anim.DefaultEffects
@@ -538,5 +465,7 @@ Variants {
                 wallpaper: behindClock
             }
         }
+        }
+    }
     }
 }

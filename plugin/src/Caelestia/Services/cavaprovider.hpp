@@ -2,6 +2,8 @@
 
 #include <qqmlintegration.h>
 
+#include <atomic>
+
 #include <cava/cavacore.h>
 
 #include "audioprovider.hpp"
@@ -16,6 +18,7 @@ public:
     ~CavaProcessor() override;
 
     void setBars(int bars);
+    void setMonstercat(bool monstercat);
 
 signals:
     void valuesChanged(QVector<double> values);
@@ -29,6 +32,7 @@ private:
     double* m_out;
 
     int m_bars;
+    std::atomic<bool> m_monstercat{ true };
     QVector<double> m_values;
 
     void reload();
@@ -41,6 +45,7 @@ class CavaProvider : public AudioProvider {
     QML_ELEMENT
 
     Q_PROPERTY(int bars READ bars WRITE setBars NOTIFY barsChanged)
+    Q_PROPERTY(bool monstercat READ monstercat WRITE setMonstercat NOTIFY monstercatChanged)
 
     Q_PROPERTY(QVector<double> values READ values NOTIFY valuesChanged)
 
@@ -50,14 +55,19 @@ public:
     [[nodiscard]] int bars() const;
     void setBars(int bars);
 
+    [[nodiscard]] bool monstercat() const;
+    void setMonstercat(bool monstercat);
+
     [[nodiscard]] QVector<double> values() const;
 
 signals:
     void barsChanged();
+    void monstercatChanged();
     void valuesChanged();
 
 private:
     int m_bars;
+    bool m_monstercat = true;
     QVector<double> m_values;
 
     void updateValues(const QVector<double>& values);

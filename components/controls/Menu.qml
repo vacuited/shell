@@ -1,7 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls as QQC
 import QtQuick.Layouts
 import Quickshell
 import Caelestia
@@ -23,10 +23,10 @@ MouseArea {
     }
 
     required property Item attachTo
-    property int attachSideX: Menu.Right
-    property int attachSideY: Menu.Bottom
-    property int thisSideX: Menu.Right
-    property int thisSideY: Menu.Top
+    property int attachSideX: Menu.Side.Right
+    property int attachSideY: Menu.Side.Bottom
+    property int thisSideX: Menu.Side.Right
+    property int thisSideY: Menu.Side.Top
     property real marginX
     property real marginY
 
@@ -82,16 +82,23 @@ MouseArea {
         x: {
             CUtils.dependency(watcher.transform); // mapToItem is not reactive so this forces updates
             const item = root.attachTo;
-            let off = root.attachSideX === Menu.Left ? 0 : item.width;
-            if (root.thisSideX === Menu.Right)
+            let off = (root.attachSideX === Menu.Side.Left || root.attachSideX === Menu.Left) ? 0 : item.width;
+            if (root.thisSideX === Menu.Side.Right || root.thisSideX === Menu.Right)
                 off -= width;
-            return item.mapToItem(root.parent, off, 0).x + root.marginX;
+            let posX = item.mapToItem(root.parent, off, 0).x + root.marginX;
+            if (root.parent && root.parent.width > 0) {
+                const maxAllowedX = root.parent.width - width - Tokens.padding.small;
+                const minAllowedX = Tokens.padding.small;
+                if (maxAllowedX >= minAllowedX)
+                    posX = Math.max(minAllowedX, Math.min(posX, maxAllowedX));
+            }
+            return posX;
         }
         y: {
             CUtils.dependency(watcher.transform); // mapToItem is not reactive so this forces updates
             const item = root.attachTo;
-            let off = root.attachSideY === Menu.Top ? 0 : item.height;
-            if (root.thisSideY === Menu.Bottom)
+            let off = (root.attachSideY === Menu.Side.Top || root.attachSideY === Menu.Top) ? 0 : item.height;
+            if (root.thisSideY === Menu.Side.Bottom || root.thisSideY === Menu.Bottom)
                 off -= height;
             return item.mapToItem(root.parent, 0, off).y + root.marginY;
         }
@@ -104,7 +111,7 @@ MouseArea {
 
         transform: Scale {
             yScale: root.expanded ? 1 : 0.1
-            origin.y: root.thisSideY === Menu.Bottom ? menu.height : 0
+            origin.y: (root.thisSideY === Menu.Side.Bottom || root.thisSideY === Menu.Bottom) ? menu.height : 0
 
             Behavior on yScale {
                 Anim {}
@@ -133,7 +140,7 @@ MouseArea {
 
                 interactive: contentHeight > height
 
-                ScrollBar.vertical: StyledScrollBar {
+                QQC.ScrollBar.vertical: StyledScrollBar {
                     flickable: flickable
                 }
 

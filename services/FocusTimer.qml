@@ -358,6 +358,7 @@ Singleton {
     }
 
     Component.onCompleted: {
+        CUtils.mkdirp(Paths.state);
         phaseTotal = baseSecs;
         remaining = baseSecs;
     }

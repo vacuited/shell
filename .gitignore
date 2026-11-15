@@ -6,3 +6,5 @@ build/
 logs
 docs/
 *.bak
+__pycache__/
+*.pyc

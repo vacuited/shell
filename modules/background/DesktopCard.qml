@@ -1,11 +1,11 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
-import QtQuick.Effects
 import QtQuick.Layouts
 import Caelestia.Config
 import qs.components
 import qs.services
+import "components"
 
 Item {
     id: root
@@ -13,6 +13,9 @@ Item {
     required property Item wallpaper
     property string title
     property string icon
+    property string surfaceStyle: Config.background.desktopWidgets.surfaceStyle || "glass"
+    property color materialColor: Colours.palette.m3surfaceContainer
+    property bool weActive: wallpaper?.weSurfaceActive ?? wallpaper?.weSurfaceVisible ?? false
     property real plateOpacity: Config.background.desktopWidgets.opacity
     property bool blur: Config.background.desktopWidgets.blur && !GameMode.enabled
     property real radius: Tokens.rounding.extraLarge
@@ -36,49 +39,21 @@ Item {
     onParentChanged: updateOrigin()
     Component.onCompleted: updateOrigin()
 
-    layer.enabled: !GameMode.enabled
-    layer.effect: MultiEffect {
+    WidgetSurface {
+        id: surface
+
+        anchors.fill: parent
+        wallpaper: root.wallpaper
+        weActive: root.weActive
+        surfaceStyle: root.surfaceStyle
+        blur: root.blur
+        plateOpacity: root.plateOpacity
+        radius: root.radius
+        materialColor: root.materialColor
         shadowEnabled: true
-        shadowColor: Colours.palette.m3shadow
         shadowOpacity: 0.35
         shadowBlur: 0.6
         shadowVerticalOffset: 4
-    }
-
-    Loader {
-        anchors.fill: parent
-        active: root.blur && !(root.wallpaper?.weSurfaceVisible ?? false)
-
-        sourceComponent: MultiEffect {
-            source: ShaderEffectSource {
-                sourceItem: root.wallpaper
-                sourceRect: Qt.rect(root.origin.x, root.origin.y, root.width, root.height)
-            }
-            maskSource: plate
-            maskEnabled: true
-            blurEnabled: true
-            blur: 1
-            blurMax: 64
-            autoPaddingEnabled: false
-        }
-    }
-
-    StyledRect {
-        id: plate
-
-        anchors.fill: parent
-        radius: root.radius
-        color: Colours.palette.m3surface
-        opacity: root.plateOpacity
-        layer.enabled: root.blur
-    }
-
-    StyledRect {
-        anchors.fill: parent
-        radius: root.radius
-        color: Qt.alpha(Colours.palette.m3primary, 0.04)
-        border.width: 1
-        border.color: Qt.alpha(Colours.palette.m3outlineVariant, 0.5)
     }
 
     ColumnLayout {

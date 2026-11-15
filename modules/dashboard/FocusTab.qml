@@ -28,6 +28,14 @@ Item {
         Colours.palette.m3outline
     ]
 
+    readonly property list<int> subjectShapes: [
+        MaterialShape.Sunny,
+        MaterialShape.Cookie6Sided,
+        MaterialShape.Gem,
+        MaterialShape.SoftBurst,
+        MaterialShape.Cookie4Sided
+    ]
+
     readonly property list<string> dayInitials: [
         Tr.tr("M"),
         Tr.tr("T"),
@@ -37,6 +45,99 @@ Item {
         Tr.tr("S"),
         Tr.tr("S")
     ]
+
+    // ==========================================
+    // Focus Breakdown Chart State & Helpers
+    // ==========================================
+    readonly property int focusTopN: 5
+    readonly property int focusMaxScopeOffset: 7 // 0 = This Week, 1 = Today, 2..7 = past 6 days
+    property int focusScopeOffset: 0
+    property bool focusBarsReady: true
+    property bool focusAllowAppear: false
+    property int focusAnimGen: 0
+    property int focusTotalSeconds: 0
+    property int focusMaxSeconds: 1
+
+    readonly property string focusScopeTitle: {
+        if (focusScopeOffset <= 0) return Tr.tr("This Week");
+        if (focusScopeOffset === 1) return Tr.tr("Today");
+        if (focusScopeOffset === 2) return Tr.tr("Yesterday");
+        return Qt.formatDate(dateForOffset(focusScopeOffset - 1), "dddd, MMMM d");
+    }
+    readonly property bool focusIsEmpty: focusSubjectsModel.count === 0 || focusTotalSeconds <= 0
+
+    ListModel {
+        id: focusSubjectsModel
+    }
+
+    function fetchFocusSubjects(scopeOffset: int): var {
+        return FocusLedger.subjectBreakdownForScope(scopeOffset, root.focusTopN);
+    }
+
+    function focusTotalsFrom(list: var, scopeOffset: int): void {
+        let sum = FocusLedger.scopeTotalSecs(scopeOffset);
+        if (sum <= 0) {
+            for (let i = 0; i < list.length; i++)
+                sum += list[i].seconds;
+        }
+        focusTotalSeconds = sum;
+        focusMaxSeconds = list.length > 0 ? Math.max(1, list[0].seconds) : 1;
+    }
+
+    function sameSubjectSet(list: var): bool {
+        if (list.length !== focusSubjectsModel.count)
+            return false;
+        for (let i = 0; i < list.length; i++) {
+            if (focusSubjectsModel.get(i).subject !== list[i].subject)
+                return false;
+        }
+        return true;
+    }
+
+    function replaceFocusModel(list: var, animate: bool): void {
+        focusAllowAppear = animate;
+        focusSubjectsModel.clear();
+        for (let i = 0; i < list.length; i++)
+            focusSubjectsModel.append(list[i]);
+        focusTotalsFrom(list, focusScopeOffset);
+
+        if (animate) {
+            focusBarsReady = false;
+            focusAnimGen++;
+            Qt.callLater(() => {
+                focusBarsReady = true;
+            });
+        } else {
+            focusBarsReady = true;
+        }
+    }
+
+    function syncFocusSeconds(list: var): void {
+        for (let i = 0; i < list.length; i++)
+            focusSubjectsModel.setProperty(i, "seconds", list[i].seconds);
+        focusTotalsFrom(list, focusScopeOffset);
+        focusBarsReady = true;
+    }
+
+    function loadFocusSubjects(animate: bool): void {
+        const list = fetchFocusSubjects(focusScopeOffset);
+        if (animate) {
+            replaceFocusModel(list, true);
+            return;
+        }
+        if (sameSubjectSet(list))
+            syncFocusSeconds(list);
+        else
+            replaceFocusModel(list, false);
+    }
+
+    function switchFocusScope(nextOffset: int): void {
+        const clamped = Math.max(0, Math.min(nextOffset, focusMaxScopeOffset));
+        if (clamped === focusScopeOffset)
+            return;
+        focusScopeOffset = clamped;
+        replaceFocusModel(fetchFocusSubjects(clamped), true);
+    }
 
     // ==========================================
     // Screen Time State & Helpers
@@ -178,7 +279,9 @@ Item {
 
     onRightViewChanged: {
         if (rightView === 1) {
-            root.loadApps(true);
+            root.loadApps(false);
+        } else {
+            root.loadFocusSubjects(false);
         }
     }
 
@@ -198,11 +301,19 @@ Item {
         }
     }
 
-    implicitWidth: 840
+    Connections {
+        target: FocusLedger
+        function onRevisionChanged(): void {
+            root.loadFocusSubjects(false);
+        }
+    }
+
+    implicitWidth: 1180
     implicitHeight: 480
 
     Component.onCompleted: {
-        root.loadApps(true);
+        root.loadFocusSubjects(false);
+        root.loadApps(false);
         Qt.callLater(() => {
             root.initialized = true;
         });
@@ -392,7 +503,7 @@ Item {
                     readonly property var phases: [
                         { label: Tr.tr("Study"), phase: "focus", icon: "menu_book" },
                         { label: Tr.tr("Short Break"), phase: "shortBreak", icon: "coffee" },
-                        { label: Tr.tr("Long Break"), phase: "longBreak", icon: "weekend" }
+                        { label: Tr.tr("Big Break"), phase: "longBreak", icon: "weekend" }
                     ]
                     readonly property int activeIndex: {
                         if (FocusTimer.phase === "shortBreak") return 1;
@@ -823,557 +934,48 @@ Item {
         }
 
         // ==========================================
-        // 2. RIGHT BENTO AREA: Free-Floating Caelestia Cards (542px, zero wrapper box!)
+        // 2. MIDDLE COLUMN: Persistent Streak + Daily Goal Stack (328px)
         // ==========================================
-        Item {
-            Layout.preferredWidth: 542
-            Layout.fillWidth: true
+        ColumnLayout {
+            Layout.preferredWidth: 328
+            Layout.minimumWidth: 328
+            Layout.maximumWidth: 328
             Layout.fillHeight: true
+            spacing: Tokens.spacing.medium
 
-            // ----------------------------------------------------
-            // VIEW 0: Free-Floating Focus Overview Bento Grid
-            // (Just like Performance.qml & Dash.qml!)
-            // ----------------------------------------------------
-            ColumnLayout {
-                id: focusOverviewView
-
-                anchors.fill: parent
-                spacing: Tokens.spacing.medium
-                opacity: root.rightView === 0 ? 1 : 0
-                visible: opacity > 0
-
-                Behavior on opacity {
-                    enabled: root.initialized
-                    Anim {
-                        type: Anim.EmphasizedLarge
-                    }
-                }
-
-                // ROW 1: Streak & 7-Day Hero Card (Left) + Daily Goal Card (Right, exact MemoryCard.qml twin)
-                RowLayout {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 234
-                    Layout.maximumHeight: 234
-                    spacing: Tokens.spacing.medium
-
-                    // 1A. Streak & 7-Day Card (HeroCard.qml + Calendar.qml aesthetic)
-                    StyledRect {
-                        id: streakCard
-
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        radius: Tokens.rounding.extraLarge
-                        color: Colours.tPalette.m3surfaceContainer
-
-                        HoverHandler {
-                            id: streakCardHover
-                        }
-
-                        ColumnLayout {
-                            anchors.fill: parent
-                            anchors.margins: Tokens.padding.large
-                            spacing: Tokens.spacing.small
-
-                            // Top Row: Title + Notes Streak Pill (only when streak > 0) + Rest Day Toggle + View Switcher
-                            RowLayout {
-                                Layout.fillWidth: true
-                                spacing: Tokens.spacing.small
-
-                                MaterialIcon {
-                                    text: "local_fire_department"
-                                    fill: 1
-                                    color: Colours.palette.m3primary
-                                    fontStyle: Tokens.font.icon.medium
-                                }
-
-                                StyledText {
-                                    text: Tr.tr("Streak")
-                                    font: Tokens.font.title.medium
-                                    color: Colours.palette.m3onSurface
-                                }
-
-                                // Exact Notes-style StreakFlame Pill Badge (only when streak > 0)
-                                StyledRect {
-                                    visible: (FocusLedger.streak || 0) > 0
-                                    Layout.alignment: Qt.AlignVCenter
-                                    radius: Tokens.rounding.full
-                                    implicitHeight: 20
-                                    implicitWidth: streakPillRow.implicitWidth + 12
-                                    color: Colours.palette.m3tertiaryContainer
-
-                                    HoverHandler {
-                                        id: streakPillHover
-                                    }
-
-                                    RowLayout {
-                                        id: streakPillRow
-
-                                        anchors.centerIn: parent
-                                        spacing: 3
-
-                                        StreakFlame {
-                                            Layout.alignment: Qt.AlignVCenter
-                                            implicitWidth: 16
-                                            implicitHeight: 16
-                                            outerColor: Colours.palette.m3onTertiaryContainer
-                                            innerColor: Colours.palette.m3tertiaryContainer
-                                            autoplay: streakPillHover.hovered || streakCardHover.hovered || FocusLedger.streak > 0
-                                        }
-
-                                        StyledText {
-                                            text: String(FocusLedger.streak || 0)
-                                            font: Tokens.font.label.small
-                                            color: Colours.palette.m3onTertiaryContainer
-                                        }
-                                    }
-                                }
-
-                                Item {
-                                    Layout.fillWidth: true
-                                }
-
-                                // Rest Day Toggle Pill
-                                StyledRect {
-                                    implicitHeight: 26
-                                    implicitWidth: restRow.implicitWidth + Tokens.padding.small * 2
-                                    radius: Tokens.rounding.full
-                                    color: FocusLedger.todayRest ? Colours.palette.m3tertiaryContainer : Colours.tPalette.m3surfaceContainerHigh
-
-                                    Behavior on color {
-                                        enabled: root.initialized
-                                        CAnim {}
-                                    }
-
-                                    StateLayer {
-                                        radius: Tokens.rounding.full
-                                        color: FocusLedger.todayRest ? Colours.palette.m3onTertiaryContainer : Colours.palette.m3onSurface
-                                        onClicked: FocusLedger.setRestDay(FocusLedger.todayKey, !FocusLedger.todayRest)
-                                    }
-
-                                    RowLayout {
-                                        id: restRow
-
-                                        anchors.centerIn: parent
-                                        spacing: 4
-
-                                        MaterialIcon {
-                                            text: "bedtime"
-                                            fontStyle: Tokens.font.icon.small
-                                            color: FocusLedger.todayRest ? Colours.palette.m3onTertiaryContainer : Colours.palette.m3onSurfaceVariant
-                                        }
-
-                                        StyledText {
-                                            text: Tr.tr("Rest")
-                                            font: Tokens.font.label.small
-                                            color: FocusLedger.todayRest ? Colours.palette.m3onTertiaryContainer : Colours.palette.m3onSurfaceVariant
-                                        }
-                                    }
-                                }
-                            }
-
-                            // Middle Row: Sub-label + HeroCard-style MaterialShape Badge on the right
-                            RowLayout {
-                                Layout.fillWidth: true
-                                Layout.fillHeight: true
-                                spacing: Tokens.spacing.medium
-
-                                ColumnLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 2
-
-                                    StyledText {
-                                        text: FocusLedger.streak > 0
-                                            ? Tr.tr("%1 days in a row").arg(FocusLedger.streak)
-                                            : Tr.tr("Start a streak today")
-                                        font: Tokens.font.body.medium
-                                        color: FocusLedger.streak > 0 ? Colours.palette.m3primary : Colours.palette.m3onSurface
-                                    }
-
-                                    StyledText {
-                                        text: Tr.tr("%1 sessions completed today").arg(FocusLedger.todaySessions)
-                                        font: Tokens.font.body.small
-                                        color: Colours.palette.m3onSurfaceVariant
-                                    }
-                                }
-
-                                // Signature Caelestia HeroCard MaterialShape Badge
-                                MaterialShape {
-                                    implicitSize: 54
-                                    color: Colours.palette.m3secondaryContainer
-                                    shape: {
-                                        if (FocusLedger.streak >= 7)
-                                            return MaterialShape.SoftBurst;
-                                        if (FocusLedger.streak >= 3)
-                                            return MaterialShape.Sunny;
-                                        return MaterialShape.Cookie4Sided;
-                                    }
-
-                                    animationEasing: Tokens.anim.expressiveDefaultSpatial
-                                    animationDuration: Tokens.anim.durations.expressiveDefaultSpatial * Tokens.anim.durations.scale
-
-                                    Behavior on color {
-                                        CAnim {}
-                                    }
-
-                                    StyledText {
-                                        anchors.centerIn: parent
-                                        text: `${FocusLedger.streak}d`
-                                        color: Colours.palette.m3primary
-                                        font: Tokens.font.headline.builders.small.width(50).build()
-                                    }
-                                }
-                            }
-
-                            // Bottom 7-Day Row with Calendar.qml MaterialShape.Sunny for Today + StreakFlame for Done days
-                            RowLayout {
-                                Layout.fillWidth: true
-                                spacing: 4
-
-                                Repeater {
-                                    model: FocusLedger.weekKeys()
-
-                                    ColumnLayout {
-                                        id: dayCol
-
-                                        required property string modelData
-                                        required property int index
-                                        readonly property string dayState: FocusLedger.dayState(modelData)
-                                        readonly property bool isToday: modelData === FocusLedger.todayKey
-
-                                        Layout.fillWidth: true
-                                        spacing: 4
-
-                                        Item {
-                                            Layout.alignment: Qt.AlignHCenter
-                                            implicitWidth: 30
-                                            implicitHeight: 30
-
-                                            HoverHandler {
-                                                id: dayCircleHover
-                                            }
-
-                                            // MaterialShape indicator (Sunny for Today like Calendar.qml, Cookie6Sided for Done, Pill/Circle for others)
-                                            MaterialShape {
-                                                anchors.centerIn: parent
-                                                implicitSize: dayCol.isToday ? 30 : 26
-                                                shape: dayCol.dayState === "done"
-                                                    ? MaterialShape.Cookie6Sided
-                                                    : (dayCol.isToday ? MaterialShape.Sunny : MaterialShape.Oval)
-                                                color: dayCol.dayState === "done"
-                                                    ? Colours.palette.m3tertiaryContainer
-                                                    : (dayCol.dayState === "rest"
-                                                        ? Colours.palette.m3secondaryContainer
-                                                        : (dayCol.isToday ? Colours.palette.m3primaryContainer : Colours.tPalette.m3surfaceContainerHigh))
-
-                                                animationEasing: Tokens.anim.expressiveDefaultSpatial
-                                                animationDuration: Tokens.anim.durations.expressiveDefaultSpatial * Tokens.anim.durations.scale
-
-                                                Behavior on color {
-                                                    CAnim {}
-                                                }
-                                            }
-
-                                            // Animated StreakFlame ONLY on days where streak/goal is completed!
-                                            StreakFlame {
-                                                anchors.centerIn: parent
-                                                visible: dayCol.dayState === "done"
-                                                implicitWidth: 17
-                                                implicitHeight: 17
-                                                outerColor: Colours.palette.m3onTertiaryContainer
-                                                innerColor: Colours.palette.m3tertiaryContainer
-                                                autoplay: dayCol.dayState === "done" && (dayCol.isToday || dayCircleHover.hovered || streakCardHover.hovered)
-                                            }
-
-                                            MaterialIcon {
-                                                anchors.centerIn: parent
-                                                visible: dayCol.dayState === "rest"
-                                                text: "bedtime"
-                                                color: Colours.palette.m3onSecondaryContainer
-                                                fontStyle: Tokens.font.icon.small
-                                            }
-                                        }
-
-                                        StyledText {
-                                            Layout.alignment: Qt.AlignHCenter
-                                            text: root.dayInitials[dayCol.index] || ""
-                                            font: Tokens.font.body.builders.small.weight(dayCol.isToday ? Font.Bold : Font.Medium).build()
-                                            color: dayCol.isToday
-                                                ? Colours.palette.m3primary
-                                                : ((dayCol.index === 5 || dayCol.index === 6) ? Colours.palette.m3tertiary : Colours.palette.m3onSurfaceVariant)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // 1B. Daily Goal Card (1:1 Exact Twin of MemoryCard.qml!)
-                    StyledRect {
-                        readonly property color accent: Colours.palette.m3tertiary
-                        readonly property real percentage: Math.max(0, Math.min(1, FocusLedger.todaySecs / Math.max(1, GlobalConfig.focus.dailyGoalMins * 60)))
-
-                        Layout.preferredWidth: 182
-                        Layout.minimumWidth: 182
-                        Layout.maximumWidth: 182
-                        Layout.fillHeight: true
-                        color: Colours.tPalette.m3surfaceContainer
-                        radius: Tokens.rounding.extraLarge
-
-                        ColumnLayout {
-                            id: goalLayout
-
-                            anchors.centerIn: parent
-                            spacing: Tokens.spacing.extraSmall
-
-                            RowLayout {
-                                Layout.leftMargin: -Tokens.padding.extraSmall
-                                spacing: Tokens.spacing.small
-
-                                MaterialIcon {
-                                    text: "track_changes"
-                                    fill: 1
-                                    color: Colours.palette.m3tertiary
-                                    fontStyle: Tokens.font.icon.builders.medium.weight(Font.DemiBold).build()
-                                }
-
-                                StyledText {
-                                    text: Tr.tr("Daily Goal")
-                                    font: Tokens.font.title.medium
-                                }
-                            }
-
-                            CircularProgress {
-                                Layout.topMargin: Tokens.spacing.medium
-                                Layout.alignment: Qt.AlignHCenter
-                                implicitSize: usageColumn.implicitHeight + thickness + Tokens.padding.largeIncreased * 2
-                                startAngle: -225
-                                sweepAngle: 270
-
-                                fgColour: Colours.palette.m3tertiary
-                                value: Math.max(0, Math.min(1, FocusLedger.todaySecs / Math.max(1, GlobalConfig.focus.dailyGoalMins * 60)))
-
-                                Behavior on clampedVal {
-                                    enabled: root.initialized
-                                    Anim {}
-                                }
-
-                                ColumnLayout {
-                                    id: usageColumn
-
-                                    anchors.centerIn: parent
-                                    anchors.verticalCenterOffset: Tokens.padding.extraSmall
-                                    spacing: 0
-
-                                    StyledText {
-                                        Layout.alignment: Qt.AlignHCenter
-                                        text: Strings.percentOne(Math.max(0, Math.min(1, FocusLedger.todaySecs / Math.max(1, GlobalConfig.focus.dailyGoalMins * 60))))
-                                        font: Tokens.font.title.builders.large.width(90).build()
-                                        color: Colours.palette.m3tertiary
-                                    }
-
-                                    StyledText {
-                                        Layout.alignment: Qt.AlignHCenter
-                                        text: Tr.tr("Goal")
-                                        font: Tokens.font.body.small
-                                        color: Colours.palette.m3onSurfaceVariant
-                                    }
-                                }
-                            }
-
-                            StyledText {
-                                Layout.alignment: Qt.AlignHCenter
-                                text: `${FocusLedger.fmt(FocusLedger.todaySecs)} / ${FocusLedger.fmt(GlobalConfig.focus.dailyGoalMins * 60)}`
-                                font: Tokens.font.body.medium
-                            }
-                        }
-                    }
-                }
-
-                // ROW 2: This Week Card (NetworkCard.qml aesthetic + Notification-Style Wellbeing Switcher)
-                StyledRect {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    radius: Tokens.rounding.extraLarge
-                    color: Colours.tPalette.m3surfaceContainer
-
-                    ColumnLayout {
-                        anchors.fill: parent
-                        anchors.margins: Tokens.padding.large
-                        anchors.bottomMargin: Tokens.padding.medium
-                        spacing: Tokens.spacing.small
-
-                        // Header Row: Icon + "This Week" + Total + Expanding Pill Switcher [ 🔥 Focus | 📊 ]
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: Tokens.spacing.small
-
-                            MaterialIcon {
-                                text: "swap_vert"
-                                color: Colours.palette.m3primary
-                                fontStyle: Tokens.font.icon.medium
-                            }
-
-                            StyledText {
-                                text: Tr.tr("This Week")
-                                font: Tokens.font.title.medium
-                            }
-
-                            StyledRect {
-                                radius: Tokens.rounding.full
-                                color: Colours.tPalette.m3surfaceContainerHigh
-                                implicitHeight: 22
-                                implicitWidth: weekTotalText.implicitWidth + 12
-
-                                StyledText {
-                                    id: weekTotalText
-
-                                    anchors.centerIn: parent
-                                    text: FocusLedger.fmt(FocusLedger.weekSecs)
-                                    font: Tokens.font.label.small
-                                    color: Colours.palette.m3primary
-                                }
-                            }
-
-                            Item {
-                                Layout.fillWidth: true
-                            }
-
-                            // Notification-Panel Style Expanding Pill [ 🔥 Focus | 📊 ]
-                            ViewSwitcherPill {}
-                        }
-
-                        // Stacked Horizontal Progress Bar (with default secondaryContainer track like HeroCard)
-                        Item {
-                            id: barContainer
-
-                            Layout.fillWidth: true
-                            implicitHeight: Tokens.padding.small
-                            clip: true
-
-                            StyledRect {
-                                anchors.fill: parent
-                                radius: Tokens.rounding.full
-                                color: Colours.palette.m3secondaryContainer
-                            }
-
-                            Row {
-                                anchors.fill: parent
-
-                                Repeater {
-                                    model: FocusLedger.weekNames
-
-                                    StyledRect {
-                                        required property string modelData
-                                        required property int index
-
-                                        height: parent.height
-                                        width: (FocusLedger.weekSecs > 0) ? Math.round((FocusLedger.weekSecsFor(modelData) / FocusLedger.weekSecs) * barContainer.width) : 0
-                                        color: root.subjectColors[index % root.subjectColors.length]
-
-                                        Behavior on width {
-                                            enabled: root.initialized
-                                            Anim {}
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        // Subject Rows (NetworkCard.qml metric row style)
-                        Item {
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
-
-                            StyledText {
-                                anchors.centerIn: parent
-                                visible: FocusLedger.weekSecs === 0
-                                text: Tr.tr("No study logged this week")
-                                font: Tokens.font.body.small
-                                color: Colours.palette.m3outline
-                            }
-
-                            GridLayout {
-                                anchors.fill: parent
-                                visible: FocusLedger.weekSecs > 0
-                                columns: 2
-                                columnSpacing: Tokens.spacing.large * 1.5
-                                rowSpacing: 2
-
-                                Repeater {
-                                    model: FocusLedger.weekNames.slice(0, 6)
-
-                                    RowLayout {
-                                        required property string modelData
-                                        required property int index
-
-                                        Layout.fillWidth: true
-                                        spacing: Tokens.spacing.small
-
-                                        MaterialShape {
-                                            implicitSize: 12
-                                            shape: index === 0 ? MaterialShape.Sunny : (index === 1 ? MaterialShape.Cookie4Sided : MaterialShape.Oval)
-                                            color: root.subjectColors[index % root.subjectColors.length]
-                                        }
-
-                                        StyledText {
-                                            text: modelData === "__none__" ? Tr.tr("Untagged") : modelData
-                                            font: Tokens.font.body.small
-                                            color: Colours.palette.m3onSurfaceVariant
-                                            elide: Text.ElideRight
-                                            Layout.fillWidth: true
-                                        }
-
-                                        StyledText {
-                                            text: FocusLedger.fmt(FocusLedger.weekSecsFor(modelData))
-                                            font: Tokens.font.body.builders.medium.weight(Font.Medium).build()
-                                            color: root.subjectColors[index % root.subjectColors.length]
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // ----------------------------------------------------
-            // VIEW 1: Digital Wellbeing / Screen Time Card (GulTion Port)
-            // ----------------------------------------------------
+            // 2A. Streak & 7-Day Card
             StyledRect {
-                id: screenTimeCard
+                id: streakCard
 
-                anchors.fill: parent
+                Layout.fillWidth: true
+                Layout.preferredHeight: 234
+                Layout.maximumHeight: 234
                 radius: Tokens.rounding.extraLarge
                 color: Colours.tPalette.m3surfaceContainer
-                clip: true
-                opacity: root.rightView === 1 ? 1 : 0
-                visible: opacity > 0
 
-                Behavior on opacity {
-                    enabled: root.initialized
-                    Anim {
-                        type: Anim.EmphasizedLarge
-                    }
+                HoverHandler {
+                    id: streakCardHover
                 }
 
                 ColumnLayout {
                     anchors.fill: parent
                     anchors.margins: Tokens.padding.large
-                    spacing: Tokens.spacing.medium
+                    spacing: Tokens.spacing.small
 
-                    // Top Header Row
+                    // Top Row: Title + Rest Day Toggle
                     RowLayout {
                         Layout.fillWidth: true
                         spacing: Tokens.spacing.small
 
                         MaterialIcon {
-                            text: "monitoring"
+                            text: "local_fire_department"
+                            fill: 1
                             color: Colours.palette.m3primary
                             fontStyle: Tokens.font.icon.medium
                         }
 
                         StyledText {
-                            text: Tr.tr("Screen Time")
+                            text: Tr.tr("Streak")
                             font: Tokens.font.title.medium
                             color: Colours.palette.m3onSurface
                         }
@@ -1382,261 +984,972 @@ Item {
                             Layout.fillWidth: true
                         }
 
-                        ViewSwitcherPill {}
-                    }
+                        // Rest Day Toggle Pill
+                        StyledRect {
+                            implicitHeight: 26
+                            implicitWidth: restRow.implicitWidth + Tokens.padding.small * 2
+                            radius: Tokens.rounding.full
+                            color: FocusLedger.todayRest ? Colours.palette.m3tertiaryContainer : Colours.tPalette.m3surfaceContainerHigh
 
-                    // Date Switcher Row
-                    Item {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: Math.max(prevDayBtn.implicitHeight, dayCenter.implicitHeight)
-
-                        IconButton {
-                            id: prevDayBtn
-
-                            anchors.left: parent.left
-                            anchors.verticalCenter: parent.verticalCenter
-                            type: IconButton.Tonal
-                            icon: "chevron_left"
-                            isRound: true
-                            shapeMorph: true
-                            disabled: root.stDayOffset >= root.stMaxDayOffset
-                            onClicked: root.switchStDay(root.stDayOffset + 1)
-                        }
-
-                        Column {
-                            id: dayCenter
-
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            anchors.verticalCenter: parent.verticalCenter
-                            spacing: Tokens.spacing.extraSmall
-
-                            StyledText {
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                text: root.stDayTitle
-                                font: Tokens.font.label.small
-                                color: Colours.palette.m3onSurfaceVariant
-                                horizontalAlignment: Text.AlignHCenter
+                            Behavior on color {
+                                enabled: root.initialized
+                                CAnim {}
                             }
 
-                            StyledText {
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                text: root.stIsEmpty ? "00h 00m" : root.prettyTotal(root.stDayTotalSeconds)
-                                font: Tokens.font.body.builders.large.size(32).weight(Font.Bold).build()
-                                color: Colours.palette.m3primary
-                                horizontalAlignment: Text.AlignHCenter
+                            StateLayer {
+                                radius: Tokens.rounding.full
+                                color: FocusLedger.todayRest ? Colours.palette.m3onTertiaryContainer : Colours.palette.m3onSurface
+                                onClicked: FocusLedger.setRestDay(FocusLedger.todayKey, !FocusLedger.todayRest)
                             }
-                        }
 
-                        IconButton {
-                            anchors.right: parent.right
-                            anchors.verticalCenter: parent.verticalCenter
-                            type: IconButton.Tonal
-                            icon: "chevron_right"
-                            isRound: true
-                            shapeMorph: true
-                            disabled: root.stDayOffset <= 0
-                            onClicked: root.switchStDay(root.stDayOffset - 1)
+                            RowLayout {
+                                id: restRow
+
+                                anchors.centerIn: parent
+                                spacing: 4
+
+                                MaterialIcon {
+                                    text: "bedtime"
+                                    fontStyle: Tokens.font.icon.small
+                                    color: FocusLedger.todayRest ? Colours.palette.m3onTertiaryContainer : Colours.palette.m3onSurfaceVariant
+                                }
+
+                                StyledText {
+                                    text: Tr.tr("Rest")
+                                    font: Tokens.font.label.small
+                                    color: FocusLedger.todayRest ? Colours.palette.m3onTertiaryContainer : Colours.palette.m3onSurfaceVariant
+                                }
+                            }
                         }
                     }
 
-                    // Chart Area
-                    Item {
+                    // Middle Row: Sub-label + HeroCard-style MaterialShape Badge
+                    RowLayout {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        clip: true
+                        spacing: Tokens.spacing.medium
 
-                        // Empty State
-                        Column {
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 2
+
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: FocusLedger.streak > 0
+                                    ? Tr.tr("%1 days in a row").arg(FocusLedger.streak)
+                                    : Tr.tr("Start a streak today")
+                                font: Tokens.font.body.medium
+                                color: FocusLedger.streak > 0 ? Colours.palette.m3primary : Colours.palette.m3onSurface
+                                elide: Text.ElideRight
+                            }
+
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: Tr.tr("%1 sessions completed today").arg(FocusLedger.todaySessions)
+                                font: Tokens.font.body.small
+                                color: Colours.palette.m3onSurfaceVariant
+                                elide: Text.ElideRight
+                            }
+                        }
+
+                        // Signature Caelestia HeroCard MaterialShape Badge
+                        MaterialShape {
+                            implicitSize: 54
+                            color: Colours.palette.m3secondaryContainer
+                            shape: {
+                                if (FocusLedger.streak >= 7)
+                                    return MaterialShape.SoftBurst;
+                                if (FocusLedger.streak >= 3)
+                                    return MaterialShape.Sunny;
+                                return MaterialShape.Cookie4Sided;
+                            }
+
+                            animationEasing: Tokens.anim.expressiveDefaultSpatial
+                            animationDuration: Tokens.anim.durations.expressiveDefaultSpatial * Tokens.anim.durations.scale
+
+                            Behavior on color {
+                                CAnim {}
+                            }
+
+                            StyledText {
+                                anchors.centerIn: parent
+                                text: `${FocusLedger.streak}d`
+                                color: Colours.palette.m3primary
+                                font: Tokens.font.headline.builders.small.width(50).build()
+                            }
+                        }
+                    }
+
+                    // Bottom 7-Day Row with clean Circle / Sunny / Cookie6Sided shapes
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 4
+
+                        Repeater {
+                            model: FocusLedger.weekKeys()
+
+                            ColumnLayout {
+                                id: dayCol
+
+                                required property string modelData
+                                required property int index
+                                readonly property string dayState: FocusLedger.dayState(modelData)
+                                readonly property bool isToday: modelData === FocusLedger.todayKey
+
+                                Layout.fillWidth: true
+                                spacing: 4
+
+                                Item {
+                                    Layout.alignment: Qt.AlignHCenter
+                                    implicitWidth: 30
+                                    implicitHeight: 30
+
+                                    HoverHandler {
+                                        id: dayCircleHover
+                                    }
+
+                                    MaterialShape {
+                                        anchors.centerIn: parent
+                                        implicitSize: dayCol.isToday ? 30 : 26
+                                        shape: dayCol.dayState === "done"
+                                            ? MaterialShape.Cookie6Sided
+                                            : (dayCol.isToday ? MaterialShape.Sunny : MaterialShape.Circle)
+                                        color: dayCol.dayState === "done"
+                                            ? Colours.palette.m3tertiaryContainer
+                                            : (dayCol.dayState === "rest"
+                                                ? Colours.palette.m3secondaryContainer
+                                                : (dayCol.isToday ? Colours.palette.m3primaryContainer : Colours.tPalette.m3surfaceContainerHigh))
+
+                                        animationEasing: Tokens.anim.expressiveDefaultSpatial
+                                        animationDuration: Tokens.anim.durations.expressiveDefaultSpatial * Tokens.anim.durations.scale
+
+                                        Behavior on color {
+                                            CAnim {}
+                                        }
+                                    }
+
+                                    StreakFlame {
+                                        anchors.centerIn: parent
+                                        visible: dayCol.dayState === "done"
+                                        implicitWidth: 17
+                                        implicitHeight: 17
+                                        outerColor: Colours.palette.m3onTertiaryContainer
+                                        innerColor: Colours.palette.m3tertiaryContainer
+                                        autoplay: dayCol.dayState === "done" && (dayCol.isToday || dayCircleHover.hovered || streakCardHover.hovered)
+                                    }
+
+                                    MaterialIcon {
+                                        anchors.centerIn: parent
+                                        visible: dayCol.dayState === "rest"
+                                        text: "bedtime"
+                                        color: Colours.palette.m3onSecondaryContainer
+                                        fontStyle: Tokens.font.icon.small
+                                    }
+                                }
+
+                                StyledText {
+                                    Layout.alignment: Qt.AlignHCenter
+                                    text: root.dayInitials[dayCol.index] || ""
+                                    font: Tokens.font.body.builders.small.weight(dayCol.isToday ? Font.Bold : Font.Medium).build()
+                                    color: dayCol.isToday
+                                        ? Colours.palette.m3primary
+                                        : ((dayCol.index === 5 || dayCol.index === 6) ? Colours.palette.m3tertiary : Colours.palette.m3onSurfaceVariant)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 2B. Daily Goal Card (StorageCard.qml-style Horizontal Layout)
+            StyledRect {
+                id: dailyGoalCard
+
+                readonly property color accent: Colours.palette.m3tertiary
+                readonly property int goalSecs: Math.max(60, GlobalConfig.focus.dailyGoalMins * 60)
+                readonly property real percentage: Math.max(0, Math.min(1, FocusLedger.todaySecs / goalSecs))
+                readonly property int remainingSecs: Math.max(0, goalSecs - FocusLedger.todaySecs)
+
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                color: Colours.tPalette.m3surfaceContainer
+                radius: Tokens.rounding.extraLarge
+
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.margins: Tokens.padding.large
+                    spacing: Tokens.spacing.large
+
+                    CircularProgress {
+                        Layout.alignment: Qt.AlignVCenter
+                        implicitSize: 132
+                        strokeWidth: 7
+                        startAngle: -225
+                        sweepAngle: 270
+                        fgColour: dailyGoalCard.accent
+                        value: dailyGoalCard.percentage
+
+                        Behavior on clampedVal {
+                            enabled: root.initialized
+                            Anim {}
+                        }
+
+                        ColumnLayout {
                             anchors.centerIn: parent
-                            spacing: Tokens.spacing.small
-                            visible: root.stIsEmpty
+                            spacing: 0
 
                             MaterialIcon {
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                text: "hourglass_empty"
-                                fontStyle: Tokens.font.icon.builders.extraLarge.scale(1.6).build()
-                                color: Colours.palette.m3onSurfaceVariant
+                                Layout.alignment: Qt.AlignHCenter
+                                text: "track_changes"
+                                fill: 1
+                                color: dailyGoalCard.accent
+                                fontStyle: Tokens.font.icon.medium
                             }
 
                             StyledText {
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                text: Tr.tr("No activity yet")
-                                font: Tokens.font.title.medium
-                                color: Colours.palette.m3onSurface
+                                Layout.alignment: Qt.AlignHCenter
+                                text: Strings.percentOne(dailyGoalCard.percentage)
+                                font: Tokens.font.title.builders.large.width(90).build()
+                                color: dailyGoalCard.accent
                             }
 
                             StyledText {
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                width: 280
-                                wrapMode: Text.Wrap
-                                horizontalAlignment: Text.AlignHCenter
-                                text: Tr.tr("Screen Time will show your top apps here once you use the desktop for a bit.")
+                                Layout.alignment: Qt.AlignHCenter
+                                text: Tr.tr("Goal")
                                 font: Tokens.font.body.small
                                 color: Colours.palette.m3onSurfaceVariant
                             }
                         }
+                    }
 
-                        // Top 5 Apps Vertical Gradient Columns
-                        Row {
-                            id: chartRow
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        Layout.alignment: Qt.AlignVCenter
+                        spacing: Tokens.spacing.small
 
-                            readonly property real footSlot: 60
-                            readonly property real timeReserve: 36
-                            readonly property real barSlot: Math.max(80, height - footSlot - timeReserve)
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: Tr.tr("Daily Goal")
+                            font: Tokens.font.title.medium
+                            color: Colours.palette.m3onSurface
+                            elide: Text.ElideRight
+                        }
 
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            anchors.top: parent.top
-                            anchors.bottom: parent.bottom
-                            spacing: Tokens.spacing.medium
-                            visible: !root.stIsEmpty
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: `${FocusLedger.fmt(FocusLedger.todaySecs)} / ${FocusLedger.fmt(dailyGoalCard.goalSecs)}`
+                            font: Tokens.font.body.builders.large.weight(Font.DemiBold).build()
+                            color: dailyGoalCard.accent
+                            elide: Text.ElideRight
+                        }
 
-                            Repeater {
-                                model: stAppsModel
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 4
 
-                                delegate: Item {
-                                    id: col
+                            MaterialIcon {
+                                text: "task_alt"
+                                fontStyle: Tokens.font.icon.small
+                                color: Colours.palette.m3onSurfaceVariant
+                            }
 
-                                    required property string appClass
-                                    required property int seconds
-                                    required property int index
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: Tr.tr("%1 sessions today").arg(FocusLedger.todaySessions)
+                                font: Tokens.font.body.small
+                                color: Colours.palette.m3onSurfaceVariant
+                                elide: Text.ElideRight
+                            }
+                        }
 
-                                    readonly property string displayName: DesktopEntries.heuristicLookup(appClass)?.name || ScreenTime.appName(appClass)
-                                    readonly property real ratio: seconds / Math.max(root.stMaxSeconds, 1)
-                                    readonly property real intensity: root.intensityFor(index, stAppsModel.count, ratio)
-                                    readonly property bool isHero: index === 0
-                                    readonly property bool isShort: ratio < 0.22
-                                    readonly property int sharePct: Math.round((seconds / Math.max(root.stDayTotalSeconds, 1)) * 100)
-                                    readonly property real targetBarH: root.stBarsReady ? Math.max(ratio * chartRow.barSlot, 28) : 0
-                                    readonly property int timeHourSize: Math.round(10 + ratio * (isHero ? 12 : 9))
-                                    readonly property int timeMinSize: Math.round(9 + ratio * (isHero ? 10 : 7))
-                                    readonly property color barTop: root.mixColor(Colours.palette.m3primary, Qt.rgba(1, 1, 1, 1), 0.35 - intensity * 0.2)
-                                    readonly property color barBottom: root.mixColor(Colours.palette.m3primary, Colours.palette.m3primaryContainer, 0.55 - intensity * 0.35)
-                                    readonly property int gen: root.stAnimGen
+                        StyledRect {
+                            radius: Tokens.rounding.full
+                            color: Colours.tPalette.m3surfaceContainerHigh
+                            implicitHeight: 24
+                            implicitWidth: Math.min(parent.width, goalRemRow.implicitWidth + Tokens.padding.small * 2)
 
-                                    width: isHero ? 88 : 68
-                                    height: parent.height
-                                    opacity: root.stAllowAppear ? 0 : 1
+                            RowLayout {
+                                id: goalRemRow
 
-                                    onGenChanged: {
-                                        if (!root.stAllowAppear)
-                                            return;
-                                        opacity = 0;
-                                        appear.restart();
-                                    }
+                                anchors.centerIn: parent
+                                spacing: 4
 
-                                    Component.onCompleted: {
-                                        if (root.stAllowAppear)
-                                            appear.start();
-                                        else
-                                            opacity = 1;
-                                    }
+                                MaterialIcon {
+                                    text: dailyGoalCard.remainingSecs <= 0 ? "check_circle" : "schedule"
+                                    fontStyle: Tokens.font.icon.small
+                                    color: dailyGoalCard.remainingSecs <= 0 ? Colours.palette.m3primary : Colours.palette.m3onSurfaceVariant
+                                }
 
-                                    SequentialAnimation {
-                                        id: appear
+                                StyledText {
+                                    text: dailyGoalCard.remainingSecs <= 0
+                                        ? Tr.tr("Goal reached!")
+                                        : Tr.tr("%1 left").arg(FocusLedger.fmt(dailyGoalCard.remainingSecs))
+                                    font: Tokens.font.label.small
+                                    color: dailyGoalCard.remainingSecs <= 0 ? Colours.palette.m3primary : Colours.palette.m3onSurfaceVariant
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
-                                        PauseAnimation {
-                                            duration: Math.max(0, col.index * 40)
+        // ==========================================
+        // 3. RIGHT COLUMN: Unified Full-Height Analytics Card (542px)
+        // ==========================================
+        StyledRect {
+            id: analyticsCard
+
+            Layout.preferredWidth: 542
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            radius: Tokens.rounding.extraLarge
+            color: Colours.tPalette.m3surfaceContainer
+            clip: true
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: Tokens.padding.large
+                spacing: Tokens.spacing.medium
+
+                // Stationary Header Row
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Tokens.spacing.small
+
+                    MaterialIcon {
+                        text: root.rightView === 0 ? "school" : "monitoring"
+                        color: Colours.palette.m3primary
+                        fontStyle: Tokens.font.icon.medium
+                    }
+
+                    StyledText {
+                        text: root.rightView === 0 ? Tr.tr("Study Breakdown") : Tr.tr("Screen Time")
+                        font: Tokens.font.title.medium
+                        color: Colours.palette.m3onSurface
+                    }
+
+                    Item {
+                        Layout.fillWidth: true
+                    }
+
+                    ViewSwitcherPill {}
+                }
+
+                // View Stack
+                Item {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+
+                    // ----------------------------------------------------
+                    // VIEW 0: Focus Study Breakdown (Matches Wellbeing 1:1)
+                    // ----------------------------------------------------
+                    ColumnLayout {
+                        id: focusBreakdownPane
+
+                        anchors.fill: parent
+                        spacing: Tokens.spacing.small
+                        opacity: root.rightView === 0 ? 1 : 0
+                        visible: opacity > 0
+
+                        Behavior on opacity {
+                            enabled: root.initialized
+                            Anim {
+                                type: Anim.EmphasizedLarge
+                            }
+                        }
+
+                        // Scope Switcher + Big Total Row
+                        Item {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: Math.max(prevFocusBtn.implicitHeight, focusCenter.implicitHeight)
+
+                            IconButton {
+                                id: prevFocusBtn
+
+                                anchors.left: parent.left
+                                anchors.verticalCenter: parent.verticalCenter
+                                type: IconButton.Tonal
+                                icon: "chevron_left"
+                                isRound: true
+                                shapeMorph: true
+                                disabled: root.focusScopeOffset >= root.focusMaxScopeOffset
+                                onClicked: root.switchFocusScope(root.focusScopeOffset + 1)
+                            }
+
+                            Column {
+                                id: focusCenter
+
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                anchors.verticalCenter: parent.verticalCenter
+                                spacing: Tokens.spacing.extraSmall
+
+                                StyledText {
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    text: root.focusScopeTitle
+                                    font: Tokens.font.label.small
+                                    color: Colours.palette.m3onSurfaceVariant
+                                    horizontalAlignment: Text.AlignHCenter
+                                }
+
+                                StyledText {
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    text: root.focusIsEmpty ? "00h 00m" : root.prettyTotal(root.focusTotalSeconds)
+                                    font: Tokens.font.body.builders.large.size(32).weight(Font.Bold).build()
+                                    color: Colours.palette.m3primary
+                                    horizontalAlignment: Text.AlignHCenter
+                                }
+                            }
+
+                            IconButton {
+                                anchors.right: parent.right
+                                anchors.verticalCenter: parent.verticalCenter
+                                type: IconButton.Tonal
+                                icon: "chevron_right"
+                                isRound: true
+                                shapeMorph: true
+                                disabled: root.focusScopeOffset <= 0
+                                onClicked: root.switchFocusScope(root.focusScopeOffset - 1)
+                            }
+                        }
+
+                        // 3 Overview Metric Pills
+                        RowLayout {
+                            Layout.alignment: Qt.AlignHCenter
+                            spacing: Tokens.spacing.small
+
+                            MetricPill {
+                                icon: "schedule"
+                                text: Tr.tr("Avg %1/d").arg(FocusLedger.fmt(FocusLedger.weekDailyAvgSecs))
+                                accent: Colours.palette.m3primary
+                            }
+
+                            MetricPill {
+                                icon: "date_range"
+                                text: Tr.tr("Week %1").arg(FocusLedger.fmt(FocusLedger.weekSecs))
+                            }
+
+                            MetricPill {
+                                icon: "task_alt"
+                                text: Tr.tr("%1 sessions").arg(FocusLedger.weekSessions)
+                            }
+                        }
+
+                        // Chart Area
+                        Item {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            clip: true
+
+                            // Empty State
+                            Column {
+                                anchors.centerIn: parent
+                                spacing: Tokens.spacing.small
+                                visible: root.focusIsEmpty
+
+                                MaterialIcon {
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    text: "menu_book"
+                                    fontStyle: Tokens.font.icon.builders.extraLarge.scale(1.6).build()
+                                    color: Colours.palette.m3onSurfaceVariant
+                                }
+
+                                StyledText {
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    text: Tr.tr("No study logged yet")
+                                    font: Tokens.font.title.medium
+                                    color: Colours.palette.m3onSurface
+                                }
+
+                                StyledText {
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    width: 280
+                                    wrapMode: Text.Wrap
+                                    horizontalAlignment: Text.AlignHCenter
+                                    text: Tr.tr("Start a focus session to see your subject balance here.")
+                                    font: Tokens.font.body.small
+                                    color: Colours.palette.m3onSurfaceVariant
+                                }
+                            }
+
+                            // Top 5 Subjects Vertical Gradient Columns
+                            Row {
+                                id: focusChartRow
+
+                                readonly property real footSlot: 60
+                                readonly property real timeReserve: 36
+                                readonly property real barSlot: Math.max(72, height - footSlot - timeReserve)
+
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                anchors.top: parent.top
+                                anchors.bottom: parent.bottom
+                                spacing: Tokens.spacing.medium
+                                visible: !root.focusIsEmpty
+
+                                Repeater {
+                                    model: focusSubjectsModel
+
+                                    delegate: Item {
+                                        id: subjCol
+
+                                        required property string subject
+                                        required property int seconds
+                                        required property int index
+
+                                        readonly property string displayName: subject === "__none__" ? Tr.tr("Untagged") : subject
+                                        readonly property real ratio: seconds / Math.max(root.focusMaxSeconds, 1)
+                                        readonly property real intensity: root.intensityFor(index, focusSubjectsModel.count, ratio)
+                                        readonly property bool isHero: index === 0
+                                        readonly property int sharePct: Math.round((seconds / Math.max(root.focusTotalSeconds, 1)) * 100)
+                                        readonly property real targetBarH: root.focusBarsReady ? Math.max(ratio * focusChartRow.barSlot, 28) : 0
+                                        readonly property int timeHourSize: Math.round(10 + ratio * (isHero ? 12 : 9))
+                                        readonly property int timeMinSize: Math.round(9 + ratio * (isHero ? 10 : 7))
+                                        readonly property color baseColor: root.subjectColors[index % root.subjectColors.length]
+                                        readonly property color barTop: root.mixColor(baseColor, Qt.rgba(1, 1, 1, 1), 0.35 - intensity * 0.2)
+                                        readonly property color barBottom: root.mixColor(baseColor, Colours.palette.m3primaryContainer, 0.55 - intensity * 0.35)
+                                        readonly property int gen: root.focusAnimGen
+
+                                        width: isHero ? 88 : 68
+                                        height: parent.height
+                                        opacity: root.focusAllowAppear ? 0 : 1
+
+                                        onGenChanged: {
+                                            if (!root.focusAllowAppear)
+                                                return;
+                                            opacity = 0;
+                                            subjAppear.restart();
                                         }
-                                        NumberAnimation {
-                                            target: col
-                                            property: "opacity"
-                                            from: 0
-                                            to: 1
-                                            duration: 320
-                                            easing.type: Easing.OutCubic
-                                        }
-                                    }
 
-                                    Column {
-                                        anchors.horizontalCenter: parent.horizontalCenter
-                                        anchors.bottom: parent.bottom
-                                        spacing: Tokens.spacing.extraSmall
+                                        Component.onCompleted: {
+                                            if (root.focusAllowAppear)
+                                                subjAppear.start();
+                                            else
+                                                opacity = 1;
+                                        }
+
+                                        SequentialAnimation {
+                                            id: subjAppear
+
+                                            PauseAnimation {
+                                                duration: Math.max(0, subjCol.index * 40)
+                                            }
+                                            NumberAnimation {
+                                                target: subjCol
+                                                property: "opacity"
+                                                from: 0
+                                                to: 1
+                                                duration: 320
+                                                easing.type: Easing.OutCubic
+                                            }
+                                        }
 
                                         Column {
                                             anchors.horizontalCenter: parent.horizontalCenter
-                                            spacing: 0
-
-                                            StyledText {
-                                                anchors.horizontalCenter: parent.horizontalCenter
-                                                text: `${col.sharePct}%`
-                                                font: Tokens.font.body.builders.medium.size(col.isHero ? 17 : 14).weight(Font.Bold).build()
-                                                color: col.isHero ? Colours.palette.m3primary : Colours.palette.m3secondary
-                                            }
-                                        }
-
-                                        Rectangle {
-                                            anchors.horizontalCenter: parent.horizontalCenter
-                                            width: col.width
-                                            height: col.targetBarH
-                                            radius: Tokens.rounding.large
-
-                                            gradient: Gradient {
-                                                GradientStop {
-                                                    position: 0
-                                                    color: col.isHero ? Qt.lighter(Colours.palette.m3primary, 1.15) : col.barTop
-                                                }
-                                                GradientStop {
-                                                    position: 1
-                                                    color: col.isHero ? Colours.palette.m3primary : col.barBottom
-                                                }
-                                            }
-
-                                            Behavior on height {
-                                                enabled: root.stBarsReady
-                                                NumberAnimation {
-                                                    duration: 520
-                                                    easing.type: Easing.OutCubic
-                                                }
-                                            }
+                                            anchors.bottom: parent.bottom
+                                            spacing: Tokens.spacing.extraSmall
 
                                             Column {
-                                                anchors.centerIn: parent
+                                                anchors.horizontalCenter: parent.horizontalCenter
                                                 spacing: 0
 
                                                 StyledText {
                                                     anchors.horizontalCenter: parent.horizontalCenter
-                                                    visible: root.hourLabel(col.seconds).length > 0
-                                                    text: root.hourLabel(col.seconds)
-                                                    font: Tokens.font.body.builders.medium.size(col.timeHourSize).weight(Font.Bold).build()
-                                                    color: Colours.palette.m3onPrimary
+                                                    text: `${subjCol.sharePct}%`
+                                                    font: Tokens.font.body.builders.medium.size(subjCol.isHero ? 17 : 14).weight(Font.Bold).build()
+                                                    color: subjCol.isHero ? Colours.palette.m3primary : Colours.palette.m3secondary
+                                                }
+                                            }
+
+                                            Rectangle {
+                                                anchors.horizontalCenter: parent.horizontalCenter
+                                                width: subjCol.width
+                                                height: subjCol.targetBarH
+                                                radius: Tokens.rounding.large
+
+                                                gradient: Gradient {
+                                                    GradientStop {
+                                                        position: 0
+                                                        color: subjCol.isHero ? Qt.lighter(subjCol.baseColor, 1.15) : subjCol.barTop
+                                                    }
+                                                    GradientStop {
+                                                        position: 1
+                                                        color: subjCol.isHero ? subjCol.baseColor : subjCol.barBottom
+                                                    }
                                                 }
 
-                                                StyledText {
+                                                Behavior on height {
+                                                    enabled: root.focusBarsReady
+                                                    NumberAnimation {
+                                                        duration: 520
+                                                        easing.type: Easing.OutCubic
+                                                    }
+                                                }
+
+                                                Column {
+                                                    anchors.centerIn: parent
+                                                    spacing: 0
+
+                                                    StyledText {
+                                                        anchors.horizontalCenter: parent.horizontalCenter
+                                                        visible: root.hourLabel(subjCol.seconds).length > 0
+                                                        text: root.hourLabel(subjCol.seconds)
+                                                        font: Tokens.font.body.builders.medium.size(subjCol.timeHourSize).weight(Font.Bold).build()
+                                                        color: Colours.palette.m3onPrimary
+                                                    }
+
+                                                    StyledText {
+                                                        anchors.horizontalCenter: parent.horizontalCenter
+                                                        text: root.minuteLabel(subjCol.seconds)
+                                                        font: Tokens.font.body.builders.medium.size(subjCol.timeMinSize).weight(Font.DemiBold).build()
+                                                        color: Colours.palette.m3onPrimary
+                                                    }
+                                                }
+                                            }
+
+                                            Item {
+                                                width: subjCol.width
+                                                height: focusChartRow.footSlot
+
+                                                Column {
                                                     anchors.horizontalCenter: parent.horizontalCenter
-                                                    text: root.minuteLabel(col.seconds)
-                                                    font: Tokens.font.body.builders.medium.size(col.timeMinSize).weight(Font.DemiBold).build()
-                                                    color: Colours.palette.m3onPrimary
+                                                    anchors.top: parent.top
+                                                    anchors.topMargin: Tokens.spacing.small
+                                                    width: parent.width
+                                                    spacing: Tokens.spacing.extraSmall
+
+                                                    Item {
+                                                        anchors.horizontalCenter: parent.horizontalCenter
+                                                        implicitWidth: 28
+                                                        implicitHeight: 28
+
+                                                        MaterialShape {
+                                                            anchors.centerIn: parent
+                                                            implicitSize: 28
+                                                            shape: root.subjectShapes[subjCol.index % root.subjectShapes.length]
+                                                            color: Colours.palette.m3secondaryContainer
+                                                        }
+
+                                                        MaterialIcon {
+                                                            anchors.centerIn: parent
+                                                            text: subjCol.subject === "__none__" ? "timer" : "menu_book"
+                                                            fontStyle: Tokens.font.icon.small
+                                                            color: Colours.palette.m3onSecondaryContainer
+                                                        }
+                                                    }
+
+                                                    StyledText {
+                                                        width: parent.width
+                                                        horizontalAlignment: Text.AlignHCenter
+                                                        text: subjCol.displayName
+                                                        font: Tokens.font.label.small
+                                                        color: subjCol.isHero ? Colours.palette.m3primary : Colours.palette.m3onSurfaceVariant
+                                                        elide: Text.ElideRight
+                                                        maximumLineCount: 2
+                                                        wrapMode: Text.Wrap
+                                                    }
                                                 }
                                             }
                                         }
+                                    }
+                                }
+                            }
+                        }
+                    }
 
-                                        Item {
-                                            width: col.width
-                                            height: chartRow.footSlot
+                    // ----------------------------------------------------
+                    // VIEW 1: Digital Wellbeing / Screen Time
+                    // ----------------------------------------------------
+                    ColumnLayout {
+                        id: wellbeingPane
+
+                        anchors.fill: parent
+                        spacing: Tokens.spacing.small
+                        opacity: root.rightView === 1 ? 1 : 0
+                        visible: opacity > 0
+
+                        Behavior on opacity {
+                            enabled: root.initialized
+                            Anim {
+                                type: Anim.EmphasizedLarge
+                            }
+                        }
+
+                        // Date Switcher Row
+                        Item {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: Math.max(prevDayBtn.implicitHeight, dayCenter.implicitHeight)
+
+                            IconButton {
+                                id: prevDayBtn
+
+                                anchors.left: parent.left
+                                anchors.verticalCenter: parent.verticalCenter
+                                type: IconButton.Tonal
+                                icon: "chevron_left"
+                                isRound: true
+                                shapeMorph: true
+                                disabled: root.stDayOffset >= root.stMaxDayOffset
+                                onClicked: root.switchStDay(root.stDayOffset + 1)
+                            }
+
+                            Column {
+                                id: dayCenter
+
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                anchors.verticalCenter: parent.verticalCenter
+                                spacing: Tokens.spacing.extraSmall
+
+                                StyledText {
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    text: root.stDayTitle
+                                    font: Tokens.font.label.small
+                                    color: Colours.palette.m3onSurfaceVariant
+                                    horizontalAlignment: Text.AlignHCenter
+                                }
+
+                                StyledText {
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    text: root.stIsEmpty ? "00h 00m" : root.prettyTotal(root.stDayTotalSeconds)
+                                    font: Tokens.font.body.builders.large.size(32).weight(Font.Bold).build()
+                                    color: Colours.palette.m3primary
+                                    horizontalAlignment: Text.AlignHCenter
+                                }
+                            }
+
+                            IconButton {
+                                anchors.right: parent.right
+                                anchors.verticalCenter: parent.verticalCenter
+                                type: IconButton.Tonal
+                                icon: "chevron_right"
+                                isRound: true
+                                shapeMorph: true
+                                disabled: root.stDayOffset <= 0
+                                onClicked: root.switchStDay(root.stDayOffset - 1)
+                            }
+                        }
+
+                        // 3 Overview Metric Pills
+                        RowLayout {
+                            Layout.alignment: Qt.AlignHCenter
+                            spacing: Tokens.spacing.small
+
+                            MetricPill {
+                                icon: "schedule"
+                                text: Tr.tr("Avg %1/d").arg(ScreenTime.fmtShort(ScreenTime.dailyAvgSecs))
+                                accent: Colours.palette.m3primary
+                            }
+
+                            MetricPill {
+                                icon: "date_range"
+                                text: Tr.tr("Week %1").arg(ScreenTime.fmtShort(ScreenTime.weekTotalSecs))
+                            }
+
+                            MetricPill {
+                                icon: ScreenTime.strictShield ? "gpp_good" : "shield"
+                                text: ScreenTime.strictShield ? Tr.tr("Strict Shield") : Tr.tr("%1 shielded").arg(ScreenTime.distractions.length)
+                                accent: ScreenTime.strictShield ? Colours.palette.m3tertiary : Colours.palette.m3onSurfaceVariant
+                            }
+                        }
+
+                        // Chart Area
+                        Item {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            clip: true
+
+                            // Empty State
+                            Column {
+                                anchors.centerIn: parent
+                                spacing: Tokens.spacing.small
+                                visible: root.stIsEmpty
+
+                                MaterialIcon {
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    text: "hourglass_empty"
+                                    fontStyle: Tokens.font.icon.builders.extraLarge.scale(1.6).build()
+                                    color: Colours.palette.m3onSurfaceVariant
+                                }
+
+                                StyledText {
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    text: Tr.tr("No activity yet")
+                                    font: Tokens.font.title.medium
+                                    color: Colours.palette.m3onSurface
+                                }
+
+                                StyledText {
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    width: 280
+                                    wrapMode: Text.Wrap
+                                    horizontalAlignment: Text.AlignHCenter
+                                    text: Tr.tr("Screen Time will show your top apps here once you use the desktop for a bit.")
+                                    font: Tokens.font.body.small
+                                    color: Colours.palette.m3onSurfaceVariant
+                                }
+                            }
+
+                            // Top 5 Apps Vertical Gradient Columns
+                            Row {
+                                id: chartRow
+
+                                readonly property real footSlot: 60
+                                readonly property real timeReserve: 36
+                                readonly property real barSlot: Math.max(72, height - footSlot - timeReserve)
+
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                anchors.top: parent.top
+                                anchors.bottom: parent.bottom
+                                spacing: Tokens.spacing.medium
+                                visible: !root.stIsEmpty
+
+                                Repeater {
+                                    model: stAppsModel
+
+                                    delegate: Item {
+                                        id: col
+
+                                        required property string appClass
+                                        required property int seconds
+                                        required property int index
+
+                                        readonly property string displayName: DesktopEntries.heuristicLookup(appClass)?.name || ScreenTime.appName(appClass)
+                                        readonly property real ratio: seconds / Math.max(root.stMaxSeconds, 1)
+                                        readonly property real intensity: root.intensityFor(index, stAppsModel.count, ratio)
+                                        readonly property bool isHero: index === 0
+                                        readonly property bool isShort: ratio < 0.22
+                                        readonly property int sharePct: Math.round((seconds / Math.max(root.stDayTotalSeconds, 1)) * 100)
+                                        readonly property real targetBarH: root.stBarsReady ? Math.max(ratio * chartRow.barSlot, 28) : 0
+                                        readonly property int timeHourSize: Math.round(10 + ratio * (isHero ? 12 : 9))
+                                        readonly property int timeMinSize: Math.round(9 + ratio * (isHero ? 10 : 7))
+                                        readonly property color barTop: root.mixColor(Colours.palette.m3primary, Qt.rgba(1, 1, 1, 1), 0.35 - intensity * 0.2)
+                                        readonly property color barBottom: root.mixColor(Colours.palette.m3primary, Colours.palette.m3primaryContainer, 0.55 - intensity * 0.35)
+                                        readonly property int gen: root.stAnimGen
+
+                                        width: isHero ? 88 : 68
+                                        height: parent.height
+                                        opacity: root.stAllowAppear ? 0 : 1
+
+                                        onGenChanged: {
+                                            if (!root.stAllowAppear)
+                                                return;
+                                            opacity = 0;
+                                            appear.restart();
+                                        }
+
+                                        Component.onCompleted: {
+                                            if (root.stAllowAppear)
+                                                appear.start();
+                                            else
+                                                opacity = 1;
+                                        }
+
+                                        SequentialAnimation {
+                                            id: appear
+
+                                            PauseAnimation {
+                                                duration: Math.max(0, col.index * 40)
+                                            }
+                                            NumberAnimation {
+                                                target: col
+                                                property: "opacity"
+                                                from: 0
+                                                to: 1
+                                                duration: 320
+                                                easing.type: Easing.OutCubic
+                                            }
+                                        }
+
+                                        Column {
+                                            anchors.horizontalCenter: parent.horizontalCenter
+                                            anchors.bottom: parent.bottom
+                                            spacing: Tokens.spacing.extraSmall
 
                                             Column {
                                                 anchors.horizontalCenter: parent.horizontalCenter
-                                                anchors.top: parent.top
-                                                anchors.topMargin: Tokens.spacing.small
-                                                width: parent.width
-                                                spacing: Tokens.spacing.extraSmall
-
-                                                IconImage {
-                                                    anchors.horizontalCenter: parent.horizontalCenter
-                                                    asynchronous: true
-                                                    implicitSize: 28
-                                                    source: Icons.getAppIcon(col.appClass, "image-missing")
-                                                }
+                                                spacing: 0
 
                                                 StyledText {
+                                                    anchors.horizontalCenter: parent.horizontalCenter
+                                                    text: `${col.sharePct}%`
+                                                    font: Tokens.font.body.builders.medium.size(col.isHero ? 17 : 14).weight(Font.Bold).build()
+                                                    color: col.isHero ? Colours.palette.m3primary : Colours.palette.m3secondary
+                                                }
+                                            }
+
+                                            Rectangle {
+                                                anchors.horizontalCenter: parent.horizontalCenter
+                                                width: col.width
+                                                height: col.targetBarH
+                                                radius: Tokens.rounding.large
+
+                                                gradient: Gradient {
+                                                    GradientStop {
+                                                        position: 0
+                                                        color: col.isHero ? Qt.lighter(Colours.palette.m3primary, 1.15) : col.barTop
+                                                    }
+                                                    GradientStop {
+                                                        position: 1
+                                                        color: col.isHero ? Colours.palette.m3primary : col.barBottom
+                                                    }
+                                                }
+
+                                                Behavior on height {
+                                                    enabled: root.stBarsReady
+                                                    NumberAnimation {
+                                                        duration: 520
+                                                        easing.type: Easing.OutCubic
+                                                    }
+                                                }
+
+                                                Column {
+                                                    anchors.centerIn: parent
+                                                    spacing: 0
+
+                                                    StyledText {
+                                                        anchors.horizontalCenter: parent.horizontalCenter
+                                                        visible: root.hourLabel(col.seconds).length > 0
+                                                        text: root.hourLabel(col.seconds)
+                                                        font: Tokens.font.body.builders.medium.size(col.timeHourSize).weight(Font.Bold).build()
+                                                        color: Colours.palette.m3onPrimary
+                                                    }
+
+                                                    StyledText {
+                                                        anchors.horizontalCenter: parent.horizontalCenter
+                                                        text: root.minuteLabel(col.seconds)
+                                                        font: Tokens.font.body.builders.medium.size(col.timeMinSize).weight(Font.DemiBold).build()
+                                                        color: Colours.palette.m3onPrimary
+                                                    }
+                                                }
+                                            }
+
+                                            Item {
+                                                width: col.width
+                                                height: chartRow.footSlot
+
+                                                Column {
+                                                    anchors.horizontalCenter: parent.horizontalCenter
+                                                    anchors.top: parent.top
+                                                    anchors.topMargin: Tokens.spacing.small
                                                     width: parent.width
-                                                    horizontalAlignment: Text.AlignHCenter
-                                                    text: col.displayName
-                                                    font: Tokens.font.label.small
-                                                    color: col.isHero ? Colours.palette.m3primary : Colours.palette.m3onSurfaceVariant
-                                                    elide: Text.ElideRight
-                                                    maximumLineCount: 2
-                                                    wrapMode: Text.Wrap
+                                                    spacing: Tokens.spacing.extraSmall
+
+                                                    IconImage {
+                                                        anchors.horizontalCenter: parent.horizontalCenter
+                                                        asynchronous: true
+                                                        implicitSize: 28
+                                                        source: Icons.getAppIcon(col.appClass, "image-missing")
+                                                    }
+
+                                                    StyledText {
+                                                        width: parent.width
+                                                        horizontalAlignment: Text.AlignHCenter
+                                                        text: col.displayName
+                                                        font: Tokens.font.label.small
+                                                        color: col.isHero ? Colours.palette.m3primary : Colours.palette.m3onSurfaceVariant
+                                                        elide: Text.ElideRight
+                                                        maximumLineCount: 2
+                                                        wrapMode: Text.Wrap
+                                                    }
                                                 }
                                             }
                                         }
@@ -1646,6 +1959,38 @@ Item {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    component MetricPill: StyledRect {
+        id: metricPill
+
+        required property string icon
+        required property string text
+        property color accent: Colours.palette.m3onSurfaceVariant
+
+        radius: Tokens.rounding.full
+        color: Colours.tPalette.m3surfaceContainerHigh
+        implicitHeight: 24
+        implicitWidth: pillInner.implicitWidth + Tokens.padding.small * 2
+
+        RowLayout {
+            id: pillInner
+
+            anchors.centerIn: parent
+            spacing: 4
+
+            MaterialIcon {
+                text: metricPill.icon
+                fontStyle: Tokens.font.icon.small
+                color: metricPill.accent
+            }
+
+            StyledText {
+                text: metricPill.text
+                font: Tokens.font.label.small
+                color: metricPill.accent
             }
         }
     }

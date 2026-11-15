@@ -3,6 +3,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import Caelestia
 import Caelestia.Config
 import Caelestia.I18n
 import qs.services
@@ -46,6 +47,33 @@ Singleton {
             if (d && d.focusSecs) total += d.focusSecs;
         }
         return total;
+    }
+
+    readonly property int weekSessions: {
+        revision;
+        let total = 0;
+        let keys = weekKeys();
+        for (let i = 0; i < keys.length; i++) {
+            let d = days[keys[i]];
+            if (d && d.sessions) total += d.sessions;
+        }
+        return total;
+    }
+
+    readonly property int weekDailyAvgSecs: {
+        revision;
+        let keys = weekKeys();
+        let activeDays = 0;
+        let total = 0;
+        for (let i = 0; i < keys.length; i++) {
+            let d = days[keys[i]];
+            let s = (d && d.focusSecs) ? d.focusSecs : 0;
+            if (s > 0) {
+                activeDays++;
+                total += s;
+            }
+        }
+        return activeDays > 0 ? Math.round(total / activeDays) : 0;
     }
 
     property var weekNames: []
@@ -219,15 +247,77 @@ Singleton {
             if (d && d.subjects) {
                 for (let k in d.subjects) {
                     if (d.subjects.hasOwnProperty(k)) {
-                        map[k] = (map[k] || 0) + d.subjects[k];
+                        let s = Math.round(d.subjects[k] || 0);
+                        if (s > 0) {
+                            map[k] = (map[k] || 0) + s;
+                        }
                     }
                 }
             }
         }
-        let list = Object.keys(map).sort((a, b) => (map[b] || 0) - (map[a] || 0));
+        let list = Object.keys(map).filter(k => map[k] > 0).sort((a, b) => (map[b] || 0) - (map[a] || 0));
         if (JSON.stringify(list) !== JSON.stringify(weekNames)) {
             weekNames = list;
         }
+    }
+
+    // scopeOffset: 0 = This Week (Mon..Sun), 1 = Today, 2 = Yesterday, ..., 7 = 6 days ago
+    function scopeTotalSecs(scopeOffset: int): int {
+        revision;
+        if (scopeOffset <= 0) {
+            return weekSecs;
+        }
+        const d = new Date();
+        d.setHours(12, 0, 0, 0);
+        d.setDate(d.getDate() - (scopeOffset - 1));
+        const key = Qt.formatDate(d, "yyyy-MM-dd");
+        return (days[key] && days[key].focusSecs) ? Math.round(days[key].focusSecs) : 0;
+    }
+
+    function subjectBreakdownForScope(scopeOffset: int, topN: int): var {
+        revision;
+        const limit = (typeof topN === "number" && topN > 0) ? topN : 5;
+        const map = {};
+        if (scopeOffset <= 0) {
+            const keys = weekKeys();
+            for (let i = 0; i < keys.length; i++) {
+                const dayObj = days[keys[i]];
+                if (dayObj && dayObj.subjects) {
+                    for (const subj in dayObj.subjects) {
+                        if (dayObj.subjects.hasOwnProperty(subj)) {
+                            const s = Math.round(dayObj.subjects[subj] || 0);
+                            if (s > 0) map[subj] = (map[subj] || 0) + s;
+                        }
+                    }
+                }
+            }
+        } else {
+            const d = new Date();
+            d.setHours(12, 0, 0, 0);
+            d.setDate(d.getDate() - (scopeOffset - 1));
+            const key = Qt.formatDate(d, "yyyy-MM-dd");
+            const dayObj = days[key];
+            if (dayObj && dayObj.subjects) {
+                for (const subj in dayObj.subjects) {
+                    if (dayObj.subjects.hasOwnProperty(subj)) {
+                        const s = Math.round(dayObj.subjects[subj] || 0);
+                        if (s > 0) map[subj] = (map[subj] || 0) + s;
+                    }
+                }
+            }
+        }
+
+        const list = [];
+        for (const subj in map) {
+            if (map.hasOwnProperty(subj) && map[subj] >= 1) {
+                list.push({
+                    subject: subj,
+                    seconds: map[subj]
+                });
+            }
+        }
+        list.sort((a, b) => b.seconds - a.seconds);
+        return list.slice(0, limit);
     }
 
     function dayState(key: string): string {
@@ -245,6 +335,7 @@ Singleton {
 
     function fmt(secs: int): string {
         if (!secs || secs <= 0) return "0m";
+        if (secs < 60) return `${secs}s`;
         let totalMins = Math.floor(secs / 60);
         let h = Math.floor(totalMins / 60);
         let m = totalMins % 60;
@@ -351,6 +442,10 @@ Singleton {
         repeat: true
         running: true
         onTriggered: root.refreshWeekNames()
+    }
+
+    Component.onCompleted: {
+        CUtils.mkdirp(Paths.state);
     }
 
     Component.onDestruction: root.flush()

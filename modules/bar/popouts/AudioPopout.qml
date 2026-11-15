@@ -207,23 +207,7 @@ ColumnLayout {
                 id: streamRepeater
 
                 model: ScriptModel {
-                    values: Audio.streams.filter(stream => {
-                        const name = Audio.getStreamName(stream).toLowerCase();
-                        const appName = (stream.properties["application.name"] ?? "").toLowerCase();
-                        const nodeName = (stream.name ?? "").toLowerCase();
-                        const binary = (stream.properties["application.process.binary"] ?? "").toLowerCase();
-                        const mediaName = (stream.properties["media.name"] ?? "").toLowerCase();
-
-                        const isInternal = name.includes("quickshell") || name.includes("caelestia")
-                            || appName.includes("quickshell") || appName.includes("caelestia")
-                            || nodeName.includes("quickshell") || nodeName.includes("caelestia");
-
-                        const isWallpaper = name.includes("wallpaper") || appName.includes("wallpaper")
-                            || nodeName.includes("wallpaper") || binary.includes("wallpaper")
-                            || mediaName.includes(" - mpv") || (nodeName === "mpv" && binary !== "mpv");
-
-                        return !isInternal && !isWallpaper;
-                    })
+                    values: Audio.streams.filter(stream => !Audio.isHiddenStream(stream))
                 }
 
                 RowLayout {

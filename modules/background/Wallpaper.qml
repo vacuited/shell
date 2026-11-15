@@ -24,16 +24,31 @@ Item {
 
     readonly property string weDir: Wallpapers.committedWeDir
     readonly property bool isWE: weDir !== ""
-    readonly property bool weRunning: isWE && !weFailed
+    readonly property bool weRunning: isWE && !weFailed && !GameMode.enabled
     readonly property bool isPreviewWE: Wallpapers.previewWeDir !== ""
     readonly property bool weSurfaceVisible: weRunning && (!Wallpapers.showPreview || isPreviewWE) && weEngineReady
+
+    property real weRevealOpacity: 1
+    readonly property string wePosterPath: root.isWE ? Wallpapers.getPosterPath(root.weDir) : ""
 
     property string holdSource: ""
     property bool prevWasWe: false
 
-    readonly property bool isHolding: (!root.prevWasWe || isPreviewWE) && root.isWE && !root.weSurfaceVisible && !root.weFailed && (!Wallpapers.showPreview || isPreviewWE) && root.holdSource !== ""
-    readonly property string displaySource: root.isHolding ? root.holdSource : (root.weFailed ? (root.holdSource || Wallpapers.fallback) : root.source)
-    readonly property bool isPlaceholder: (root.prevWasWe || !root.holdSource) && root.isWE && !root.weSurfaceVisible && !root.weFailed && (!Wallpapers.showPreview || isPreviewWE)
+    readonly property bool showingStaticPreviewOverWe: root.isWE && Wallpapers.showPreview && !root.isPreviewWE
+    readonly property bool isHolding: (!root.prevWasWe || root.isPreviewWE) && root.weRunning && !root.weSurfaceVisible && !root.showingStaticPreviewOverWe && root.holdSource !== ""
+    readonly property string displaySource: {
+        if (root.showingStaticPreviewOverWe)
+            return root.source;
+        if (root.isHolding)
+            return root.holdSource;
+        if (root.isWE) {
+            if (root.weFailed && !root.prevWasWe && root.holdSource)
+                return root.holdSource;
+            return root.wePosterPath || Wallpapers.fallback;
+        }
+        return root.source;
+    }
+    readonly property bool isPlaceholder: false
 
     readonly property string currentSchemeName: (Colours.showPreview ? Colours["previewScheme"] : Colours.scheme) || ""
     readonly property string currentVariantName: (Colours.showPreview ? Colours["previewVariant"] : Colours.variant) || ""
@@ -70,12 +85,30 @@ Item {
         coalesceTimer.restart();
     }
 
+    NumberAnimation {
+        id: weRevealFadeAnim
+        target: root
+        property: "weRevealOpacity"
+        to: 0
+        duration: 220
+        easing.type: Easing.OutCubic
+    }
+
     onWeSurfaceVisibleChanged: {
+        weRevealFadeAnim.stop();
         if (weSurfaceVisible) {
             root.prevWasWe = true;
+            if (Skwd.usedTransitionFrom) {
+                root.weRevealOpacity = 0;
+            } else {
+                root.weRevealOpacity = 1;
+                weRevealFadeAnim.start();
+            }
             if (displaySource !== settledSource) {
                 applySourceChange();
             }
+        } else {
+            root.weRevealOpacity = 1;
         }
     }
 
@@ -108,6 +141,13 @@ Item {
             root.holdSource = settledSource;
         }
 
+        // While Skwd renders on top, keep the underlying poster updated silently
+        // without running a MaterialShape transition behind the live surface.
+        if (root.weSurfaceVisible && root.current && root.current.state === "active") {
+            root.current.path = settledSource;
+            return;
+        }
+
         let nextLayer = null;
         let prevLayer = null;
 
@@ -136,15 +176,18 @@ Item {
     }
 
     Component.onCompleted: {
-        if (source) {
+        if (displaySource) {
             if (!isWE) {
-                holdSource = source;
+                holdSource = displaySource;
             }
             prevWasWe = isWE;
             settledSource = displaySource;
             one.path = settledSource;
             one.state = "active";
             root.current = one;
+            if (weSurfaceVisible) {
+                weRevealOpacity = 0;
+            }
             completed = true;
         } else {
             completed = true;
@@ -307,7 +350,7 @@ Item {
         Item {
             id: contentItem
             anchors.fill: parent
-            opacity: root.weSurfaceVisible ? 0 : 1
+            opacity: root.weRevealOpacity
 
             layer.enabled: img.needsMask || (root.shouldRecolor && img.renderActive) || root.isPlaceholder
             layer.effect: MultiEffect {

@@ -137,6 +137,39 @@ Singleton {
         }
     }
 
+    function isIgnoredApp(appClass: string): bool {
+        if (!appClass) return true;
+        const low = appClass.trim().toLowerCase();
+        return low === "" || low.includes("quickshell") || low.includes("caelestia");
+    }
+
+    function sanitizeDays(): void {
+        if (!days) return;
+        let cleaned = false;
+        for (const k in days) {
+            if (!days.hasOwnProperty(k)) continue;
+            const dayObj = days[k];
+            if (!dayObj || !dayObj.apps) continue;
+            let sum = 0;
+            for (const app in dayObj.apps) {
+                if (!dayObj.apps.hasOwnProperty(app)) continue;
+                if (isIgnoredApp(app)) {
+                    delete dayObj.apps[app];
+                    cleaned = true;
+                } else {
+                    sum += Math.round(dayObj.apps[app] || 0);
+                }
+            }
+            if (dayObj.totalSecs !== sum) {
+                dayObj.totalSecs = sum;
+                cleaned = true;
+            }
+        }
+        if (cleaned) {
+            dirty = true;
+        }
+    }
+
     function appName(appClass: string): string {
         if (!appClass) return "";
         const entry = DesktopEntries.heuristicLookup(appClass);
@@ -191,7 +224,7 @@ Singleton {
         const limit = (typeof topN === "number" && topN > 0) ? topN : 5;
         const list = [];
         for (const app in appMap) {
-            if (appMap.hasOwnProperty(app)) {
+            if (appMap.hasOwnProperty(app) && !root.isIgnoredApp(app)) {
                 const s = Math.round(appMap[app] || 0);
                 if (s >= 1) {
                     list.push({
@@ -256,7 +289,7 @@ Singleton {
 
         const list = [];
         for (const app in appMap) {
-            if (appMap.hasOwnProperty(app)) {
+            if (appMap.hasOwnProperty(app) && !root.isIgnoredApp(app)) {
                 const s = Math.round(appMap[app] || 0);
                 if (s > 0) {
                     list.push({
@@ -286,7 +319,7 @@ Singleton {
             const dayObj = days ? days[k] : null;
             if (dayObj && dayObj.apps) {
                 for (const app in dayObj.apps) {
-                    if (dayObj.apps.hasOwnProperty(app)) {
+                    if (dayObj.apps.hasOwnProperty(app) && !root.isIgnoredApp(app)) {
                         const low = app.toLowerCase();
                         appSet.add(low);
                         usageMap[low] = (usageMap[low] || 0) + (dayObj.apps[app] || 0);
@@ -415,8 +448,10 @@ Singleton {
                 backedUp = true;
             }
             pruneOldDays();
+            sanitizeDays();
             ready = true;
             revision++;
+            if (dirty) saveDebounce.restart();
         } catch (e) {
             ready = false;
             corrupt = true;
@@ -460,7 +495,7 @@ Singleton {
             root.liveTick++;
 
             const appClass = root.activeAppClass;
-            if (!root.screenAwake || !appClass || appClass === "" || appClass === "quickshell" || appClass === "caelestia") {
+            if (!root.screenAwake || root.isIgnoredApp(appClass)) {
                 return;
             }
 
