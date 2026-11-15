@@ -14,6 +14,7 @@ Item {
     required property bool sidebarOrSessionVisible
 
     property bool hovered
+    property bool islandHandles: false
     readonly property Brightness.Monitor monitor: Brightness.getMonitorForScreen(root.screen)
     readonly property bool shouldBeActive: screenState.osd && Config.osd.enabled && !(screenState.utilities && Config.utilities.enabled)
     property real offsetScale: shouldBeActive ? 0 : 1
@@ -51,22 +52,26 @@ Item {
 
     Connections {
         function onMutedChanged(): void {
-            root.show();
+            if (!root.islandHandles)
+                root.show();
             root.muted = Audio.muted;
         }
 
         function onVolumeChanged(): void {
-            root.show();
+            if (!root.islandHandles)
+                root.show();
             root.volume = Audio.volume;
         }
 
         function onSourceMutedChanged(): void {
-            root.show();
+            if (!root.islandHandles)
+                root.show();
             root.sourceMuted = Audio.sourceMuted;
         }
 
         function onSourceVolumeChanged(): void {
-            root.show();
+            if (!root.islandHandles)
+                root.show();
             root.sourceVolume = Audio.sourceVolume;
         }
 
@@ -75,7 +80,8 @@ Item {
 
     Connections {
         function onBrightnessChanged(): void {
-            root.show();
+            if (!root.islandHandles)
+                root.show();
             root.brightness = root.monitor?.brightness ?? 0;
         }
 

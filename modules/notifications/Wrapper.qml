@@ -9,6 +9,7 @@ Item {
     property alias osdPanel: content.osdPanel
     property alias sessionPanel: content.sessionPanel
     property alias utilitiesPanel: content.utilitiesPanel
+    property alias islandHandles: content.islandHandles
 
     visible: height > 0
     readonly property real baseTopMargin: -5

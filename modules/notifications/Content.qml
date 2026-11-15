@@ -18,6 +18,7 @@ Item {
     required property Item osdPanel
     required property Item sessionPanel
     required property Item utilitiesPanel
+    property bool islandHandles: false
     readonly property int padding: Tokens.padding.large
     readonly property int clampedPadding: CUtils.clamp(padding - Config.border.thickness, 0, padding)
 
@@ -70,7 +71,7 @@ Item {
             id: list
 
             model: ScriptModel {
-                values: Notifs.popups.filter(n => !n.closed)
+                values: root.islandHandles ? [] : Notifs.popups.filter(n => !n.closed)
             }
 
             anchors.fill: parent

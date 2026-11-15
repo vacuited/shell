@@ -92,11 +92,25 @@ CustomMouseArea {
         return x >= nx && x <= nx + panels.notch.width && y >= topTrigger && y <= ny + nh + Tokens.padding.small;
     }
 
+    function inNotchBubble(x: real, y: real): bool {
+        if (!panels.notchBubble || panels.notchBubble.detachProg <= 0.01 || panels.notchBubble.offsetScale >= 1)
+            return false;
+        const topTrigger = Math.max(Config.border.minThickness, Config.border.thickness);
+        const bx = panels.leftMargin + panels.notchBubble.x;
+        const by = panels.topMargin + panels.notchBubble.y;
+        const bh = panels.notchBubble.height * (1 - panels.notchBubble.offsetScale);
+        return x >= bx && x <= bx + panels.notchBubble.width && y >= topTrigger && y <= by + bh + Tokens.padding.small;
+    }
+
     function onWheel(event: WheelEvent): void {
         if (fullscreen)
             return;
         if (inBarArea(event.x, event.y)) {
             bar.handleWheel(isBarHorizontal ? event.x : event.y, event.angleDelta);
+        } else if (panels.notch && (inNotch(event.x, event.y) || inNotchBubble(event.x, event.y))) {
+            const onBubble = inNotchBubble(event.x, event.y);
+            if (Config.notch.scrollToCycle || (!onBubble && panels.notch.activeActivity === "osd"))
+                panels.notch.handleWheel(event.angleDelta.y, onBubble);
         }
     }
 
@@ -106,8 +120,19 @@ CustomMouseArea {
 
     onPressed: event => {
         dragStart = Qt.point(event.x, event.y);
-        if (Config.notch.expandMode === "click" && panels.notch.hasControls && inNotch(event.x, event.y))
-            panels.notch.toggleExpanded();
+        if (panels.notchBubble && inNotchBubble(event.x, event.y)) {
+            if (event.button === Qt.LeftButton)
+                panels.notch.promoteBubble();
+            else if (event.button === Qt.RightButton)
+                panels.notch.triggerBubbleAction();
+            return;
+        }
+        if (panels.notch && inNotch(event.x, event.y)) {
+            if (event.button === Qt.RightButton)
+                panels.notch.triggerMainAction();
+            else if (event.button === Qt.LeftButton && Config.notch.expandMode === "click" && panels.notch.hasControls)
+                panels.notch.toggleExpanded();
+        }
     }
     onContainsMouseChanged: {
         if (!containsMouse) {
@@ -123,8 +148,13 @@ CustomMouseArea {
             if (!utilitiesShortcutActive)
                 screenState.utilities = false;
 
-            if (panels.notch)
-                panels.notch.expanded = false;
+            if (panels.notch) {
+                panels.notch.hovered = false;
+                panels.notch.collapse();
+            }
+
+            if (panels.notchBubble)
+                panels.notchBubble.hovered = false;
 
             if (!popouts.currentName.startsWith("traymenu") || ((popouts.current as StackView)?.depth ?? 0) <= 1) {
                 popouts.hasCurrent = false;
@@ -283,13 +313,18 @@ CustomMouseArea {
         }
 
         // Show dashboard on hover (top edge strip and left/right of notch always pop out dashboard)
-        const showDashboard = Config.dashboard.showOnHover && inTopPanel(panels.dashboard, x, y);
+        const overNotch = inNotch(x, y) || inNotchBubble(x, y);
+        const showDashboard = Config.dashboard.showOnHover && inTopPanel(panels.dashboard, x, y) && !overNotch;
 
         // Notch hover / click / disabled expansion logic
+        if (panels.notchBubble)
+            panels.notchBubble.hovered = inNotchBubble(x, y);
+
         if (panels.notch) {
+            panels.notch.hovered = inNotch(x, y);
             const mode = Config.notch.expandMode;
             if (mode === "none" || !panels.notch.hasControls || showDashboard) {
-                panels.notch.expanded = false;
+                panels.notch.collapse();
             } else if (mode === "hover") {
                 if (inNotch(x, y)) {
                     panels.notch.expanded = true;
@@ -300,7 +335,7 @@ CustomMouseArea {
                     const nh = panels.notch.height;
                     const inNotchGrace = x >= nx - 16 && x <= nx + panels.notch.width + 16 && y >= topTrigger && y <= ny + nh + 16;
                     if (!inNotchGrace)
-                        panels.notch.expanded = false;
+                        panels.notch.collapse();
                 }
             } else if (panels.notch.expanded) {
                 const topTrigger = Math.max(Config.border.minThickness, Config.border.thickness);
@@ -309,7 +344,7 @@ CustomMouseArea {
                 const nh = panels.notch.height;
                 const inNotchGrace = x >= nx - 24 && x <= nx + panels.notch.width + 24 && y >= topTrigger && y <= ny + nh + 24;
                 if (!inNotchGrace)
-                    panels.notch.expanded = false;
+                    panels.notch.collapse();
             }
         }
 

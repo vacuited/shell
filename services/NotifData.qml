@@ -51,6 +51,8 @@ QtObject {
     property int urgency: NotificationUrgency.Normal
     property bool resident
     property bool hasActionIcons
+    property bool hasInlineReply
+    property string inlineReplyPlaceholder
     property bool forceExpand
     property list<var> actions
 
@@ -178,6 +180,14 @@ QtObject {
             notif.hints = notif.notification.hints;
         }
 
+        function onHasInlineReplyChanged(): void {
+            notif.hasInlineReply = notif.notification.hasInlineReply;
+        }
+
+        function onInlineReplyPlaceholderChanged(): void {
+            notif.inlineReplyPlaceholder = notif.notification.inlineReplyPlaceholder;
+        }
+
         target: notif.notification
     }
 
@@ -216,6 +226,12 @@ QtObject {
             close();
     }
 
+    function sendReply(text: string): void {
+        const trimmed = text.trim();
+        if (notification && hasInlineReply && trimmed.length > 0)
+            notification.sendInlineReply(trimmed);
+    }
+
     function close(): void {
         closed = true;
         if (locks.size === 0 && Notifs.list.includes(this)) {
@@ -241,6 +257,8 @@ QtObject {
         urgency = notification.urgency;
         resident = notification.resident;
         hasActionIcons = notification.hasActionIcons;
+        hasInlineReply = notification.hasInlineReply;
+        inlineReplyPlaceholder = notification.inlineReplyPlaceholder;
 
         actions = (notification.actions as Array).map(a => ({
                     identifier: a.identifier,

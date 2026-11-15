@@ -29,6 +29,17 @@ class NotchConfig : public settings::ObjectNode {
     CONFIG_PROPERTY(QString, expandMode, u"hover"_s)
     CONFIG_PROPERTY(bool, showMediaControls, true)
     CONFIG_PROPERTY(bool, showFocusControls, true)
+    // Dynamic Island live activities & interactions
+    CONFIG_PROPERTY(bool, showNotifications, false)
+    CONFIG_PROPERTY(bool, notifReplies, false)
+    CONFIG_PROPERTY(bool, showOsd, false)
+    CONFIG_PROPERTY(bool, showRecording, false)
+    CONFIG_PROPERTY(bool, showCharging, false)
+    CONFIG_PROPERTY(bool, showToasts, false)
+    CONFIG_PROPERTY(bool, showBubble, false)
+    CONFIG_PROPERTY(bool, scrollToCycle, false)
+    CONFIG_PROPERTY(int, osdDuration, 1800)
+    CONFIG_PROPERTY(int, chargingDuration, 3000)
 };
 
 } // namespace caelestia::shell::config

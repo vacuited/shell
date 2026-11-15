@@ -41,6 +41,15 @@ Region {
     }
 
     R {
+        panel: root.panels.notchBubble
+        y: 0
+        width: root.panels.notchBubble.detachProg > 0.01 ? panel.width : 0
+        height: root.panels.notchBubble.detachProg > 0.01
+            ? (panel.height * (1 - root.panels.notchBubble.offsetScale) + root.borderThickness)
+            : 0
+    }
+
+    R {
         panel: root.panels.launcher
         y: root.win.height - height
         height: panel.height * (1 - root.panels.launcher.offsetScale) + root.borderThickness

@@ -21,8 +21,8 @@
 
 ### Dynamic Island Notch & Desktop Widgets
 <sub>Ported from [cykler-caelestia](https://github.com/cykler01/cykler-caelestia) and heavily reworked to fit my setup and be cleaner/minimal</sub>
-- **Notch / Dynamic Island**: Morphing top pill with Caelestia `BlobRect` jelly physics, live Cava visualiser bars, spinning album art, clock, and active Pomodoro countdown.
-- **Notch Controls Drawer**: Expands with shape-morphing `ButtonRow` media and focus controls, auto-collapses cleanly, and slides seamlessly into the top border when apps enter fullscreen or the dashboard opens.
+- **Notch / Dynamic Island**: Morphing top pill with `BlobGroup` liquid-metaball secondary droplet, live Cava visualiser, interactive OSD sliders, inline-reply notification cards, charging rings, toast routing, recording indicator, and Pomodoro countdown.
+- **Expanded Notch Cards**: Expands with shape-morphing `ButtonRow` controls, wavy music seek bar with artist metadata, Focus cycle counters, recording pause/stop actions, and clean fullscreen auto-hide.
 - **Smart Compact Mode**: Auto-shrinks when windows are open to save space, or toggle `Always compact` in settings.
 - **Top Edge Dashboard Access**: Fixed hit-testing so hovering the very top edge above or beside the notch still opens the dashboard smoothly without fighting the notch.
 - **Desktop Widgets**: 6 snapping cards (Weather, Focus timer, Calendar, System resources, Now playing, Battery) on a 40px grid with wallpaper blur and auto-fade when tiled windows open.

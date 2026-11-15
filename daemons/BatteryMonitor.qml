@@ -43,11 +43,11 @@ Scope {
                 return;
 
             if (UPower.onBattery) {
-                if (GlobalConfig.utilities.toasts.chargingChanged)
+                if (GlobalConfig.utilities.toasts.chargingChanged && !(GlobalConfig.notch.enabled && GlobalConfig.notch.showCharging))
                     Toaster.toast(Tr.tr("Charger unplugged"), Tr.tr("Battery is discharging"), "power_off");
                 root.handleBatteryWarnings();
             } else {
-                if (GlobalConfig.utilities.toasts.chargingChanged)
+                if (GlobalConfig.utilities.toasts.chargingChanged && !(GlobalConfig.notch.enabled && GlobalConfig.notch.showCharging))
                     Toaster.toast(Tr.tr("Charger plugged in"), Tr.tr("Battery is charging"), "power");
                 root.lastPercentage = 100;
             }

@@ -12,8 +12,11 @@ Item {
 
     readonly property int spacing: Tokens.spacing.small
     property bool flag
+    property bool islandHandles: false
 
     function shouldShowToast(toast: Toast): bool {
+        if (islandHandles)
+            return false;
         if (!Notifs.hasFullscreen())
             return true;
         if (GlobalConfig.utilities.toasts.fullscreen === "all")

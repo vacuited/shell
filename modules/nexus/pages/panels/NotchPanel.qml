@@ -162,7 +162,7 @@ PageBase {
 
         ToggleRow {
             text: qsTr("Show media controls")
-            subtext: qsTr("Show previous, play/pause, and next track buttons when expanded")
+            subtext: qsTr("Show shuffle, skip, play/pause, seek, and repeat controls when expanded")
             configNode: root.targetConfig.notch
             propertyName: "showMediaControls"
             checked: root.targetConfig.notch.showMediaControls
@@ -176,7 +176,7 @@ PageBase {
         ToggleRow {
             last: true
             text: qsTr("Show focus timer controls")
-            subtext: qsTr("Show pause, skip, and reset buttons when a focus session is active")
+            subtext: qsTr("Show pause, extend, skip, and reset buttons when a focus session is active")
             configNode: root.targetConfig.notch
             propertyName: "showFocusControls"
             checked: root.targetConfig.notch.showFocusControls
@@ -187,14 +187,117 @@ PageBase {
             }
         }
 
+        // Dynamic Island activities
+        SectionHeader {
+            text: qsTr("Dynamic Island activities")
+        }
+
+        ToggleRow {
+            first: true
+            text: qsTr("Show notifications")
+            subtext: qsTr("Display popup notifications in the notch instead of top-right banners")
+            configNode: root.targetConfig.notch
+            propertyName: "showNotifications"
+            checked: root.targetConfig.notch.showNotifications
+            onToggled: {
+                root.targetConfig.notch.showNotifications = checked;
+                root.targetConfig.save();
+            }
+        }
+
+        ToggleRow {
+            text: qsTr("Inline notification replies")
+            subtext: qsTr("Show a quick reply input field on notifications that support direct replies")
+            configNode: root.targetConfig.notch
+            propertyName: "notifReplies"
+            checked: root.targetConfig.notch.notifReplies
+            enabled: root.targetConfig.notch.showNotifications
+            onToggled: {
+                root.targetConfig.notch.notifReplies = checked;
+                root.targetConfig.save();
+            }
+        }
+
+        ToggleRow {
+            text: qsTr("Show volume and brightness OSD")
+            subtext: qsTr("Take over automatic volume, microphone, and brightness popups in the notch")
+            configNode: root.targetConfig.notch
+            propertyName: "showOsd"
+            checked: root.targetConfig.notch.showOsd
+            onToggled: {
+                root.targetConfig.notch.showOsd = checked;
+                root.targetConfig.save();
+            }
+        }
+
+        ToggleRow {
+            text: qsTr("Show screen recording indicator")
+            subtext: qsTr("Show an active recording badge, elapsed timer, and pause/stop controls")
+            configNode: root.targetConfig.notch
+            propertyName: "showRecording"
+            checked: root.targetConfig.notch.showRecording
+            onToggled: {
+                root.targetConfig.notch.showRecording = checked;
+                root.targetConfig.save();
+            }
+        }
+
+        ToggleRow {
+            text: qsTr("Show charging indicator")
+            subtext: qsTr("Animate charger plug and battery transitions inside the notch")
+            configNode: root.targetConfig.notch
+            propertyName: "showCharging"
+            checked: root.targetConfig.notch.showCharging
+            onToggled: {
+                root.targetConfig.notch.showCharging = checked;
+                root.targetConfig.save();
+            }
+        }
+
+        ToggleRow {
+            last: true
+            text: qsTr("Show system toasts")
+            subtext: qsTr("Route utility toast banners into the notch pill")
+            configNode: root.targetConfig.notch
+            propertyName: "showToasts"
+            checked: root.targetConfig.notch.showToasts
+            onToggled: {
+                root.targetConfig.notch.showToasts = checked;
+                root.targetConfig.save();
+            }
+        }
+
         // Behaviour
         SectionHeader {
             text: qsTr("Behaviour")
         }
 
-        StepperRow {
+        ToggleRow {
             first: true
-            last: true
+            text: qsTr("Secondary activity droplet")
+            subtext: qsTr("Pinch off a liquid-metaball bubble on the left when two ongoing activities run")
+            configNode: root.targetConfig.notch
+            propertyName: "showBubble"
+            checked: root.targetConfig.notch.showBubble
+            onToggled: {
+                root.targetConfig.notch.showBubble = checked;
+                root.targetConfig.save();
+            }
+        }
+
+        ToggleRow {
+            text: qsTr("Cycle activities with scroll wheel")
+            subtext: qsTr("Scroll over the notch or secondary droplet to switch active ongoing activities")
+            configNode: root.targetConfig.notch
+            propertyName: "scrollToCycle"
+            checked: root.targetConfig.notch.scrollToCycle
+            onToggled: {
+                root.targetConfig.notch.scrollToCycle = checked;
+                root.targetConfig.save();
+            }
+        }
+
+        StepperRow {
             label: qsTr("Show duration")
             subtext: qsTr("How long the transient pill stays up after track or phase change (ms)")
             value: root.targetConfig.notch.showDuration
@@ -203,6 +306,33 @@ PageBase {
             stepSize: 500
             onMoved: v => {
                 root.targetConfig.notch.showDuration = Math.round(v);
+                root.targetConfig.save();
+            }
+        }
+
+        StepperRow {
+            label: qsTr("OSD duration")
+            subtext: qsTr("How long the interactive volume/brightness OSD pill stays visible (ms)")
+            value: root.targetConfig.notch.osdDuration
+            from: 800
+            to: 5000
+            stepSize: 200
+            onMoved: v => {
+                root.targetConfig.notch.osdDuration = Math.round(v);
+                root.targetConfig.save();
+            }
+        }
+
+        StepperRow {
+            last: true
+            label: qsTr("Charging duration")
+            subtext: qsTr("How long charging state transitions stay highlighted in the notch (ms)")
+            value: root.targetConfig.notch.chargingDuration
+            from: 1000
+            to: 8000
+            stepSize: 500
+            onMoved: v => {
+                root.targetConfig.notch.chargingDuration = Math.round(v);
                 root.targetConfig.save();
             }
         }

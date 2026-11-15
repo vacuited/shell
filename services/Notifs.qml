@@ -110,6 +110,7 @@ Singleton {
         bodyMarkupSupported: true
         imageSupported: true
         persistenceSupported: true
+        inlineReplySupported: GlobalConfig.notch.enabled && GlobalConfig.notch.showNotifications && GlobalConfig.notch.notifReplies
 
         onNotification: notif => {
             notif.tracked = true;

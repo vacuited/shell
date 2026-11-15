@@ -31,6 +31,7 @@ Item {
     readonly property alias launcher: launcher
     readonly property alias dashboard: dashboard
     readonly property alias notch: notch
+    readonly property alias notchBubble: notchBubble
     readonly property alias popouts: popoutsWrapper.content
     readonly property alias popoutsWrapper: popoutsWrapper
     readonly property alias utilities: utilities
@@ -163,6 +164,7 @@ Item {
             screen: root.screen
             screenState: root.screenState
             sidebarOrSessionVisible: sidebar.visible || session.visible
+            islandHandles: notch.handlesOsd
 
             anchors.verticalCenter: parent.verticalCenter
             anchors.right: parent.right
@@ -179,6 +181,7 @@ Item {
         osdPanel: osdWrapper
         sessionPanel: sessionWrapper
         utilitiesPanel: utilities
+        islandHandles: notch.handlesNotifications
 
         anchors.top: parent.top
         anchors.right: parent.right
@@ -238,6 +241,13 @@ Item {
         fullscreen: root.bar.fullscreen
     }
 
+    Notch.BubbleWrapper {
+        id: notchBubble
+
+        notch: notch
+        screen: root.screen
+    }
+
     BarPopouts.ClipWrapper {
         id: popoutsWrapper
 
@@ -260,6 +270,8 @@ Item {
 
     Toasts.Toasts {
         id: toasts
+
+        islandHandles: notch.handlesToasts
 
         anchors.bottom: sidebar.visible ? parent.bottom : utilities.top
         anchors.right: parent.right

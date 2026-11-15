@@ -65,14 +65,14 @@ StyledWindow {
         screenState.launcher = false;
         screenState.session = false;
         screenState.dashboard = false;
-        panels.notch.expanded = false;
+        panels.notch.collapse();
         panels.popouts.close();
     }
 
     name: "drawers"
     WlrLayershell.exclusionMode: ExclusionMode.Ignore
     WlrLayershell.layer: (fsTransitionProg > 0 && (contentItem.Config.general.showOverFullscreen || fsTransitionProg < 1 || panels.notch.visible)) || (hasSpecialWorkspace && hasFullscreenOnNormalWs) ? WlrLayer.Overlay : WlrLayer.Top
-    WlrLayershell.keyboardFocus: screenState.launcher || screenState.session || screenState.dashboard || screenState.sidebar || panels.popouts.hasCurrent ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+    WlrLayershell.keyboardFocus: screenState.launcher || screenState.session || screenState.dashboard || screenState.sidebar || panels.popouts.hasCurrent || panels.notch.pinned ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
     mask: hasFullscreen ? emptyRegion : regions
 
@@ -208,9 +208,24 @@ StyledWindow {
 
             panel: panels.notch
             deformAmount: panels.notch.shouldBeActive ? 0.42 : 0.1
+            excludeCorners: [notchBubbleBg]
             y: Math.max(panels.topMargin - panels.notch.height - 2, panels.notch.y + panels.topMargin)
             implicitWidth: panels.notch.width
             implicitHeight: panels.notch.height
+        }
+
+        PanelBg {
+            id: notchBubbleBg
+
+            panel: panels.notchBubble
+            visible: panels.notchBubble.detachProg > 0.01
+            deformAmount: panels.notchBubble.shouldBeActive ? 0.42 : 0.1
+            excludeCorners: [notchBg]
+            y: Math.max(panels.topMargin - panels.notchBubble.height - 2, panels.notchBubble.y + panels.topMargin)
+            implicitWidth: panels.notchBubble.width
+            implicitHeight: panels.notchBubble.detachProg < 0.35
+                ? Math.min(panels.notch.height, panels.notchBubble.height)
+                : panels.notchBubble.height
         }
 
         PanelBg {
@@ -467,6 +482,10 @@ StyledWindow {
             }
             notch.transform: Matrix4x4 {
                 matrix: notchBg.deformMatrix
+            }
+
+            notchBubble.transform: Matrix4x4 {
+                matrix: notchBubbleBg.deformMatrix
             }
             launcher.transform: Matrix4x4 {
                 matrix: launcherBg.deformMatrix
