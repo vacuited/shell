@@ -115,7 +115,7 @@ class DesktopWidgetEntry : public settings::ObjectNode {
     CONFIG_PROPERTY(int, x, -1)
     CONFIG_PROPERTY(int, y, -1)
     CONFIG_PROPERTY(QString, style, {})
-    CONFIG_PROPERTY(QString, sizeMode, u"2x2"_s)
+    CONFIG_PROPERTY(QString, sizeMode, {})
     CONFIG_PROPERTY(QVariantMap, options, {})
 };
 CONFIG_LIST_TYPE(DesktopWidgetEntry, DesktopWidgetList)

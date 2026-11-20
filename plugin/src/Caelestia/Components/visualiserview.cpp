@@ -141,8 +141,11 @@ void VisualiserView::advance(qreal dt) {
     const qreal decayTau = std::max(10.0, static_cast<qreal>(m_decayMs) / 3.0);
     const qreal attackAlpha = 1.0 - std::exp(-dtMs / attackTau);
     const qreal decayAlpha = 1.0 - std::exp(-dtMs / decayTau);
+    const qreal sens = std::max(0.0, m_sensitivity);
 
     qreal maxDisplay = 0.0;
+    qreal maxPeak = 0.0;
+    qreal maxSpark = 0.0;
 
     for (qsizetype i = 0; i < count; ++i) {
         qreal raw = m_targetValues[i];
@@ -154,7 +157,7 @@ void VisualiserView::advance(qreal dt) {
             raw = std::clamp((0.28 * waveA + 0.24 * waveB + 0.14) * env, 0.0, 1.0);
         }
 
-        const qreal gained = raw > 0.0 ? std::clamp(std::pow(raw * m_sensitivity, 0.92), 0.0, 1.0) : 0.0;
+        const qreal gained = (raw > 0.0 && sens > 0.0) ? std::clamp(std::pow(raw * sens, 0.92), 0.0, 1.0) : 0.0;
         const qreal diff = gained - m_displayValues[i];
         const qreal alpha = diff > 0.0 ? attackAlpha : decayAlpha;
 
@@ -178,18 +181,25 @@ void VisualiserView::advance(qreal dt) {
             m_peakVelocities[i] += 1.6 * clampedDt;
             m_peakValues[i] = std::max(val, m_peakValues[i] - m_peakVelocities[i] * clampedDt);
         }
+        maxPeak = std::max(maxPeak, m_peakValues[i]);
 
         // Transient onset spark
         const qreal sparkTarget = diff > 0.0 ? std::clamp(diff * 2.5, 0.0, 1.0) : 0.0;
         m_sparkValues[i] += (sparkTarget - m_sparkValues[i]) * (1.0 - std::exp(-dtMs / 90.0));
+        if (m_sparkValues[i] < 0.0005 && sparkTarget <= 0.0)
+            m_sparkValues[i] = 0.0;
+        maxSpark = std::max(maxSpark, m_sparkValues[i]);
     }
 
     rebuildDataImage();
     update();
 
     const bool ambientActive = (m_idleMode == u"ambient"_s);
+    const bool fadeComplete = isFadeMode
+        ? (m_silenceSec >= m_idleTimeout && m_fadeOpacity < 0.002)
+        : (std::abs(m_fadeOpacity - targetFade) < 0.002);
     const bool canSettle = !ambientActive && !usePreviewSynth && !liveActive && maxDisplay < 0.001 &&
-                           m_beatEnergy < 0.001 && std::abs(m_fadeOpacity - targetFade) < 0.002;
+                           maxPeak < 0.001 && maxSpark < 0.001 && m_beatEnergy < 0.001 && fadeComplete;
     if (canSettle && !m_settled) {
         m_settled = true;
         emit settledChanged();
@@ -379,6 +389,7 @@ void VisualiserView::setValues(const QVector<double>& values) {
         m_peakHoldTimers.resize(values.size(), 0.0);
         m_peakVelocities.resize(values.size(), 0.0);
         m_sparkValues.resize(values.size(), 0.0);
+        rebuildDataImage();
     }
     emit valuesChanged();
     wakeUp();
@@ -673,8 +684,10 @@ void VisualiserMaterialShader::updateSampledImage(
         return;
 
     const auto* const mat = static_cast<const VisualiserMaterial*>(newMaterial);
-    if (!mat->m_dataTex)
+    if (!mat->m_dataTex) {
+        *texture = nullptr;
         return;
+    }
 
     mat->m_dataTex->commitTextureOperations(state.rhi(), state.resourceUpdateBatch());
     *texture = mat->m_dataTex.data();

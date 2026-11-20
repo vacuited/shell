@@ -10,7 +10,8 @@ Singleton {
     property string currentSidebarTab: "notifications"
     property bool pendingNewChat: false
     property bool desktopWidgetsUnlocked: false
-    property bool desktopWidgetEditing: false
+    property int desktopWidgetEditingCount: 0
+    readonly property bool desktopWidgetEditing: desktopWidgetEditingCount > 0
 
     signal requestAiFocus()
     signal requestNewChat()

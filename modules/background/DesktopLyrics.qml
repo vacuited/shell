@@ -35,8 +35,8 @@ Item {
     readonly property bool autoHideFullscreen: Config.background.desktopLyrics.autoHideFullscreen
     readonly property bool autoHideTiled: Config.background.desktopLyrics.autoHideTiled
     
-    readonly property bool hasFullscreen: Hypr.monitorFor(screen)?.activeWorkspace?.toplevels?.values.some(t => t.lastIpcObject?.fullscreen !== 0) ?? false
-    readonly property bool hasTiled: Hypr.monitorFor(screen)?.activeWorkspace?.toplevels?.values.some(t => !t.lastIpcObject?.floating && t.lastIpcObject?.fullscreen === 0) ?? false
+    readonly property bool hasFullscreen: Hypr.monitorFor(screen)?.activeWorkspace?.toplevels?.values.some(t => Boolean(t.lastIpcObject?.mapped && t.lastIpcObject?.fullscreen)) ?? false
+    readonly property bool hasTiled: Hypr.monitorFor(screen)?.activeWorkspace?.toplevels?.values.some(t => Boolean(t.lastIpcObject?.mapped) && !t.lastIpcObject?.floating && !t.lastIpcObject?.fullscreen) ?? false
 
     readonly property bool shouldHide: (autoHideFullscreen && hasFullscreen) || (autoHideTiled && hasTiled)
 
@@ -55,6 +55,7 @@ Item {
     property real targetPrevY: targetCenterY - prevLyricItem.height - lyricSpacing
     property real targetNextY: targetCenterY + lyricContainer.height + lyricSpacing
     property real startNextY: targetNextY + nextLyricItem.height + lyricSpacing
+    property real slideOffset: 0
 
     function reloadTrack() {
         const p = Players.active;
@@ -77,7 +78,8 @@ Item {
                 previousLyricText = "";
                 nextLyricText = (Lyrics.lyrics[0] ?? "").replace(/\u00A0/g, " ");
             }
-            lyricSlide.running = true;
+            if (!GameMode.enabled && root.visible)
+                lyricSlide.restart();
         } else {
             currentLyricIndex = -1;
             displayedLyric = "";
@@ -97,7 +99,8 @@ Item {
                 previousLyricText = "";
                 nextLyricText = (Lyrics.lyrics[0] ?? "").replace(/\u00A0/g, " ");
             }
-            lyricSlide.running = true;
+            if (!GameMode.enabled && root.visible)
+                lyricSlide.restart();
         } else {
             displayedLyric = "";
             previousLyricText = "";
@@ -131,51 +134,19 @@ Item {
         }
     }
 
-    SequentialAnimation {
+    NumberAnimation {
         id: lyricSlide
 
-        PropertyAction {
-            target: prevLyricItem
-            property: "y"
-            value: root.targetCenterY
-        }
-        PropertyAction {
-            target: lyricContainer
-            property: "y"
-            value: root.targetNextY
-        }
-        PropertyAction {
-            target: nextLyricItem
-            property: "y"
-            value: root.startNextY
-        }
-        ParallelAnimation {
-            NumberAnimation {
-                target: prevLyricItem
-                property: "y"
-                to: root.targetPrevY
-                duration: Tokens.anim.durations.expressiveDefaultEffects
-                easing.type: Easing.OutCubic
-            }
-            NumberAnimation {
-                target: lyricContainer
-                property: "y"
-                to: root.targetCenterY
-                duration: Tokens.anim.durations.expressiveDefaultEffects
-                easing.type: Easing.OutCubic
-            }
-            NumberAnimation {
-                target: nextLyricItem
-                property: "y"
-                to: root.targetNextY
-                duration: Tokens.anim.durations.expressiveDefaultEffects
-                easing.type: Easing.OutCubic
-            }
-        }
+        target: root
+        property: "slideOffset"
+        from: Math.max(24 * root.lyricsScale, lyricContainer.height + root.lyricSpacing)
+        to: 0
+        duration: Tokens.anim.durations.expressiveDefaultEffects
+        easing.type: Easing.OutCubic
     }
 
     Timer {
-        running: Players.active?.isPlaying ?? false
+        running: root.visible && !root.shouldHide && (Players.active?.isPlaying ?? false) && !GameMode.enabled
         interval: GlobalConfig.dashboard.mediaUpdateInterval
         triggeredOnStart: true
         repeat: true
@@ -199,6 +170,12 @@ Item {
         function onPostTrackChanged() {
             root.reloadTrack();
         }
+        function onTrackTitleChanged() {
+            root.reloadTrack();
+        }
+        function onTrackArtistChanged() {
+            root.reloadTrack();
+        }
 
         ignoreUnknownSignals: true
 
@@ -208,6 +185,13 @@ Item {
     Connections {
         function onHasLyricsChanged() {
             root.hasLyrics = Lyrics.hasLyrics;
+            root.forceUpdate();
+        }
+        function onLyricsChanged() {
+            root.hasLyrics = Lyrics.hasLyrics;
+            root.forceUpdate();
+        }
+        function onOffsetChanged() {
             root.forceUpdate();
         }
 
@@ -301,7 +285,7 @@ Item {
             clip: true
             opacity: root.hasLyrics ? 1 : 0
 
-            layer.enabled: true
+            layer.enabled: root.visible && !root.shouldHide && root.hasLyrics && !GameMode.enabled && width > 0 && height > 0
             layer.effect: Mask {
                 maskSource: fadeMask
             }
@@ -315,7 +299,7 @@ Item {
             Rectangle {
                 id: fadeMask
 
-                layer.enabled: true
+                layer.enabled: fadeContainer.layer.enabled
                 visible: false
                 implicitWidth: fadeContainer.width
                 implicitHeight: fadeContainer.height
@@ -349,8 +333,8 @@ Item {
                 width: parent.width
                 height: prevLyricLabel.implicitHeight
                 anchors.horizontalCenter: parent.horizontalCenter
-                y: root.targetPrevY
-                visible: root.isCurrentActive
+                y: root.targetPrevY + root.slideOffset
+                visible: root.isCurrentActive && root.previousLyricText.trim() !== ""
 
                 StyledText {
                     id: prevLyricLabel
@@ -382,7 +366,7 @@ Item {
                 width: parent.width
                 height: currentLyricLabel.implicitHeight
                 anchors.horizontalCenter: parent.horizontalCenter
-                y: root.targetCenterY
+                y: root.targetCenterY + root.slideOffset
                 visible: root.isCurrentActive
 
                 MultiEffect {
@@ -391,7 +375,7 @@ Item {
                     anchors.fill: currentLyricLabel
                     source: currentLyricLabel
                     scale: currentLyricLabel.scale
-                    enabled: root.isCurrentActive
+                    enabled: root.visible && !root.shouldHide && root.isCurrentActive && !GameMode.enabled
 
                     blurEnabled: true
                     blur: 0.4
@@ -441,8 +425,8 @@ Item {
                 width: parent.width
                 height: nextLyricLabel.implicitHeight
                 anchors.horizontalCenter: parent.horizontalCenter
-                y: root.targetNextY
-                visible: root.isCurrentActive
+                y: (root.isCurrentActive ? root.targetNextY : root.targetCenterY) + root.slideOffset
+                visible: root.hasLyrics && root.nextLyricText.trim() !== ""
 
                 StyledText {
                     id: nextLyricLabel

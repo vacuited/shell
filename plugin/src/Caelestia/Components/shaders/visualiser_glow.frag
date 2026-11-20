@@ -87,7 +87,7 @@ void main() {
         float dy = min(py, h - py) / max(h * heightScale * 0.5 * spread, 1.0);
         normDist = min(dx, dy);
         vec2 centered = qt_TexCoord0 - 0.5;
-        float angle = atan(abs(centered.y), centered.x);
+        float angle = dot(centered, centered) > 1e-8 ? atan(abs(centered.y), centered.x) : 0.0;
         uFreq = clamp(angle / 3.14159265, 0.0, 1.0);
     } else {
         float spanPos = px;
@@ -107,7 +107,7 @@ void main() {
             distEdge = w - px;
             orthoLen = w;
         } else if (edge == 4) {
-            distEdge = mirrored ? abs(py - h * 0.5) : abs(py - h * 0.5);
+            distEdge = abs(py - h * 0.5);
         }
 
         float uSpan = clamp(spanPos / max(spanLen, 1.0), 0.0, 1.0);

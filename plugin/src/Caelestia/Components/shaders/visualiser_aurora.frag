@@ -121,7 +121,7 @@ void main() {
         distEdge = w - px;
         orthoLen = w;
     } else if (edge == 4) {
-        distEdge = mirrored ? abs(py - h * 0.5) : max(0.0, h * 0.5 - py);
+        distEdge = mirrored ? abs(py - h * 0.5) : (h * 0.5 - py);
     }
 
     float maxReach = orthoLen * heightScale;
@@ -159,11 +159,13 @@ void main() {
     float beatEnergy = params2.z;
     float idleFactor = params2.w;
 
-    float yNorm = clamp(localOrtho / max(reach, 1.0), 0.0, 1.5);
-    if (yNorm > 1.35) {
+    float rawYNorm = localOrtho / max(reach, 1.0);
+    if (rawYNorm > 1.35 || localOrtho < -20.0) {
         fragColor = vec4(0.0);
         return;
     }
+    float yNorm = clamp(rawYNorm, -0.1, 1.5);
+    float negFade = smoothstep(-20.0, 0.0, localOrtho);
 
     vec3 accumRgb = vec3(0.0);
     float accumAlpha = 0.0;
@@ -189,7 +191,7 @@ void main() {
         // Layer 0 stays grounded to yNorm = 0; upper curtains form floating folds
         float lowerEdge = idx == 0 ? smoothstep(-0.02, 0.025, yNorm) : smoothstep(curtainBottom - 0.07, curtainBottom + 0.05, yNorm);
         float upperFade = exp(-max(0.0, yNorm - curtainBottom) / max(0.16, (curtainPeak - curtainBottom) * 0.58));
-        float ribbon = lowerEdge * upperFade * smoothstep(1.0, 0.56, yNorm);
+        float ribbon = lowerEdge * upperFade * (1.0 - smoothstep(0.56, 1.0, yNorm)) * negFade;
 
         // Vertical aurora curtain rays
         float rayNoise = noise(vec2(uSpan * (28.0 + fi * 11.0) + drift * 2.2, yNorm * 1.8 + fi * 4.0));
@@ -212,7 +214,7 @@ void main() {
     float maxColorAlpha = max(primaryColor.a, max(secondaryColor.a, accentColor.a));
     float baseAlpha = clamp(accumAlpha, 0.0, 1.0) * maxColorAlpha;
     // Soft horizon glow anchored down to yNorm = 0
-    float horizonGlow = exp(-yNorm * 4.5) * (0.22 + 0.28 * specVal + 0.18 * beatEnergy) * (0.45 + 0.55 * glowAmt) * splitMask * smoothstep(1.0, 0.56, yNorm);
+    float horizonGlow = exp(-max(yNorm, 0.0) * 4.5) * negFade * (0.22 + 0.28 * specVal + 0.18 * beatEnergy) * (0.45 + 0.55 * glowAmt) * splitMask * (1.0 - smoothstep(0.56, 1.0, yNorm));
     baseAlpha = clamp(baseAlpha + horizonGlow * primaryColor.a * 0.45, 0.0, 1.0);
     vec3 finalRgb = accumWeight > 0.001 ? (accumRgb / max(accumWeight, 0.45)) : primaryColor.rgb;
     finalRgb = clamp(mix(finalRgb, finalRgb + secondaryColor.rgb * 0.25, horizonGlow), 0.0, 1.0);

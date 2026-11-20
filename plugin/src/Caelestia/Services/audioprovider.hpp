@@ -25,6 +25,7 @@ protected:
 
 private:
     QTimer* m_timer = nullptr;
+    bool m_running = false;
 };
 
 class AudioProvider : public Service {

@@ -4,6 +4,7 @@ import QtQuick
 import QtQuick.Layouts
 import M3Shapes
 import Caelestia.Config
+import Caelestia.I18n
 import qs.components
 import qs.components.controls
 import qs.services
@@ -21,10 +22,10 @@ Item {
     property real plateOpacity: Config.background.desktopWidgets.opacity
     property var widgetOptions: ({})
 
-    readonly property real s: WidgetMetrics.scale
+    readonly property real s: Math.max(0.7, Math.min(1.5, Config.background.desktopWidgets.scale ?? 1.0))
     readonly property var todayForecast: (Weather.forecast && Weather.forecast.length > 0) ? Weather.forecast[0] : null
-    readonly property int todayHigh: Math.round(todayForecast?.maxTempC ?? 0)
-    readonly property int todayLow: Math.round(todayForecast?.minTempC ?? 0)
+    readonly property real todayHigh: todayForecast?.maxTempC ?? 0
+    readonly property real todayLow: todayForecast?.minTempC ?? 0
     readonly property var nextHours: (Weather.hourlyForecast ?? []).slice(0, 6)
     readonly property var nextDays: (Weather.forecast ?? []).slice(0, 5)
 
@@ -33,8 +34,20 @@ Item {
             return qsTr("Today");
         if (!dateStr)
             return "";
-        const d = new Date(dateStr.replace(/\//g, "-"));
+        const m = /^(\d{4})[\/-](\d{2})[\/-](\d{2})$/.exec(String(dateStr).trim());
+        if (!m)
+            return "";
+        const d = new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10), 12, 0, 0, 0);
         return isNaN(d.getTime()) ? "" : Qt.formatDate(d, "ddd");
+    }
+
+    function formatHourLabel(hour24: int, compact: bool): string {
+        if (Units.twelveHourClock) {
+            const suffix = hour24 >= 12 ? "PM" : "AM";
+            const h12 = (hour24 % 12) || 12;
+            return compact ? `${h12}${suffix.toLowerCase()}` : `${h12} ${suffix}`;
+        }
+        return compact ? `${String(hour24).padStart(2, "0")}h` : `${String(hour24).padStart(2, "0")}:00`;
     }
 
     function refresh(): void {
@@ -175,6 +188,7 @@ Item {
                 spacing: Math.round(4 * root.s)
 
                 StyledRect {
+                    visible: root.todayForecast !== null
                     Layout.fillWidth: true
                     Layout.preferredHeight: Math.round(24 * root.s)
                     radius: Math.round(12 * root.s)
@@ -182,7 +196,6 @@ Item {
 
                     StyledText {
                         anchors.centerIn: parent
-                        visible: root.todayForecast !== null
                         text: Weather.formatTemp(root.todayHigh, true) + " / " + Weather.formatTemp(root.todayLow, true)
                         font: Tokens.font.label.builders.small.scale(Math.max(0.82, root.s * 0.88)).weight(Font.Bold).build()
                         color: Colours.palette.m3onSecondaryContainer
@@ -345,7 +358,7 @@ Item {
                             }
 
                             StyledText {
-                                text: Weather.formatTemp(Math.round(tallDayRow.modelData.maxTempC), true) + "/" + Weather.formatTemp(Math.round(tallDayRow.modelData.minTempC), true)
+                                text: Weather.formatTemp(tallDayRow.modelData.maxTempC, true) + "/" + Weather.formatTemp(tallDayRow.modelData.minTempC, true)
                                 font: Tokens.font.label.small
                                 color: Colours.palette.m3onSurfaceVariant
                             }
@@ -515,7 +528,7 @@ Item {
 
                                 StyledText {
                                     Layout.alignment: Qt.AlignHCenter
-                                    text: Weather.formatTemp(Math.round(sqDayCol.modelData.maxTempC), true) + "/" + Weather.formatTemp(Math.round(sqDayCol.modelData.minTempC), true)
+                                    text: Weather.formatTemp(sqDayCol.modelData.maxTempC, true) + "/" + Weather.formatTemp(sqDayCol.modelData.minTempC, true)
                                     font: Tokens.font.label.builders.small.scale(0.84).build()
                                     color: sqDayCol.index === 0 ? Colours.palette.m3onPrimaryContainer : Colours.palette.m3onSurfaceVariant
                                 }
@@ -617,7 +630,7 @@ Item {
 
                             StyledText {
                                 Layout.alignment: Qt.AlignHCenter
-                                text: String(hrWideCol.modelData.hour).padStart(2, "0") + ":00"
+                                text: root.formatHourLabel(hrWideCol.modelData.hour, false)
                                 font: Tokens.font.label.builders.small.scale(0.9).build()
                                 color: Colours.palette.m3onSurfaceVariant
                             }
@@ -746,7 +759,7 @@ Item {
                         StatPill {
                             icon: "wb_twilight"
                             label: qsTr("Sun")
-                            value: Weather.cc?.sunset ? Weather.cc.sunset.split(" ").pop() : "--"
+                            value: Weather.sunset
                             compact: true
                         }
                     }
@@ -781,7 +794,7 @@ Item {
 
                             StyledText {
                                 Layout.alignment: Qt.AlignHCenter
-                                text: String(panoHr.modelData.hour).padStart(2, "0") + "h"
+                                text: root.formatHourLabel(panoHr.modelData.hour, true)
                                 font: Tokens.font.label.small
                                 color: Colours.palette.m3onSurfaceVariant
                             }
@@ -848,7 +861,7 @@ Item {
 
                             StyledText {
                                 Layout.alignment: Qt.AlignHCenter
-                                text: Weather.formatTemp(Math.round(panoDay.modelData.maxTempC), true) + "/" + Weather.formatTemp(Math.round(panoDay.modelData.minTempC), true)
+                                text: Weather.formatTemp(panoDay.modelData.maxTempC, true) + "/" + Weather.formatTemp(panoDay.modelData.minTempC, true)
                                 font: Tokens.font.label.builders.small.weight(Font.DemiBold).build()
                                 color: panoDay.index === 0 ? Colours.palette.m3onPrimaryContainer : Colours.palette.m3onSurface
                             }

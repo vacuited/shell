@@ -29,8 +29,19 @@ Item {
     readonly property bool showDateAndWeather: Boolean(options?.showDateAndWeather ?? true)
     readonly property bool showBackground: Boolean(options?.showBackground ?? false)
     readonly property bool hasWeather: Boolean(Weather.cc)
-    readonly property string timeString: Time.format(Units.twelveHourClock ? "h:mm A" : "HH:mm")
-    readonly property string dateString: Time.format("ddd, MMM d")
+    readonly property string todayKey: Qt.formatDate(Time.date, "yyyy-MM-dd")
+    readonly property date todayDate: FocusLedger.parseLocalDate(todayKey) ?? new Date()
+    readonly property string timeString: {
+        const h24 = Time.hours;
+        const m = String(Time.minutes).padStart(2, "0");
+        if (Units.twelveHourClock) {
+            const h12 = (h24 % 12) || 12;
+            const ap = h24 >= 12 ? "PM" : "AM";
+            return `${h12}:${m} ${ap}`;
+        }
+        return `${String(h24).padStart(2, "0")}:${m}`;
+    }
+    readonly property string dateString: Qt.formatDate(todayDate, "ddd, MMM d")
     readonly property string sansFont: Tokens.font.body.large.family || "GoogleSansFlex"
 
     readonly property int padH: showBackground ? Math.round(Tokens.padding.largeIncreased * clockScale) : 0
@@ -137,6 +148,11 @@ Item {
                 shadowBlur: Config.background.desktopClock.shadow.blur
                 shapeMask: contentMask
             }
+
+            SmoothContent {
+                anchors.centerIn: parent
+                opacity: 0.72
+            }
         }
     }
 
@@ -146,7 +162,7 @@ Item {
         Text {
             text: root.timeString
             color: Colours.palette.m3onSurface
-            renderType: Text.NativeRendering
+            renderType: Text.QtRendering
             font.family: root.sansFont
             font.pixelSize: Math.round(96 * root.clockScale)
             font.variableAxes: ({
@@ -167,7 +183,7 @@ Item {
                 text: root.dateString
                 color: Colours.palette.m3onSurface
                 horizontalAlignment: Text.AlignLeft
-                renderType: Text.NativeRendering
+                renderType: Text.QtRendering
                 font.family: root.sansFont
                 font.pixelSize: Math.round(22 * root.clockScale)
                 font.variableAxes: ({
@@ -194,7 +210,7 @@ Item {
                 Text {
                     text: Weather.temp
                     color: Colours.palette.m3onSurface
-                    renderType: Text.NativeRendering
+                    renderType: Text.QtRendering
                     font.family: root.sansFont
                     font.pixelSize: Math.round(22 * root.clockScale)
                     font.variableAxes: ({
@@ -218,7 +234,7 @@ Item {
                     visible: Weather.description !== ""
                     text: Weather.description
                     color: Colours.palette.m3onSurface
-                    renderType: Text.NativeRendering
+                    renderType: Text.QtRendering
                     font.family: root.sansFont
                     font.pixelSize: Math.round(22 * root.clockScale)
                     font.variableAxes: ({

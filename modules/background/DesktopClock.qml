@@ -16,6 +16,7 @@ Item {
     required property Item wallpaper
     required property real absX
     required property real absY
+    property bool desktopOccluded: false
 
     property real clockScale: Config.background.desktopClock.scale
     readonly property string clockStyle: Config.background.desktopClock.style || "classic"
@@ -67,6 +68,7 @@ Item {
             clockScale: root.clockScale
             surfaceStyle: root.surfaceStyle
             options: root.clockOptions
+            desktopOccluded: root.desktopOccluded
         }
     }
 

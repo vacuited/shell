@@ -8,6 +8,7 @@ import json
 import os
 import random
 import re
+import selectors
 import shutil
 import signal
 import socket
@@ -95,14 +96,14 @@ def _apply_hypr_rule_with_sentinel(
     sentinel_name: str,
     sentinel_val: str,
     attempts: tuple[tuple[list[str], ...], ...],
-) -> None:
+) -> bool:
     runtime_dir = _skwd_runtime_dir()
     sentinel = os.path.join(runtime_dir, sentinel_name)
     try:
         if os.path.isfile(sentinel):
             with open(sentinel, "r", encoding="utf-8") as fh:
                 if fh.read().strip() == sentinel_val and sentinel_val:
-                    return
+                    return True
     except OSError:
         pass
 
@@ -132,30 +133,44 @@ def _apply_hypr_rule_with_sentinel(
                         fh.write(sentinel_val)
                 except OSError:
                     pass
-            return
+            return True
+    return False
 
 
-def _ensure_hypr_bg_blur() -> None:
+def _sync_hypr_bg_blur(enabled: bool) -> bool:
     hyprctl = shutil.which("hyprctl")
     if not hyprctl:
-        return
+        return False
 
+    flag_kw = "1" if enabled else "0"
     sig = os.environ.get("HYPRLAND_INSTANCE_SIGNATURE", "")
-    sentinel_val = f"v1:{sig}" if sig else ""
-    lua_rule = 'hl.layer_rule({ match = { namespace = "caelestia-background" }, animation = "fade", blur = true, ignore_alpha = 0.22 })'
-    attempts = (
-        ([hyprctl, "eval", lua_rule],),
-        (
+    sentinel_val = f"v3:{sig}:{flag_kw}" if sig else ""
+    if enabled:
+        lua_rule = (
+            'hl.layer_rule({ name = "caelestia-bg-blur", match = { namespace = "caelestia-background" }, '
+            'animation = "fade", blur = true, ignore_alpha = 0.22 })'
+        )
+        kw_attempt: tuple[list[str], ...] = (
             [hyprctl, "keyword", "layerrule", "blur 1, match:namespace caelestia-background"],
             [hyprctl, "keyword", "layerrule", "ignore_alpha 0.22, match:namespace caelestia-background"],
-        ),
+        )
+    else:
+        lua_rule = (
+            'hl.layer_rule({ name = "caelestia-bg-blur", match = { namespace = "caelestia-background" }, '
+            'animation = "fade", blur = false })'
+        )
+        kw_attempt = (
+            [hyprctl, "keyword", "layerrule", "blur 0, match:namespace caelestia-background"],
+        )
+
+    attempts = (
+        ([hyprctl, "eval", lua_rule],),
+        kw_attempt,
     )
-    _apply_hypr_rule_with_sentinel(hyprctl, "caelestia_hypr_bg_blur", sentinel_val, attempts)
+    return _apply_hypr_rule_with_sentinel(hyprctl, "caelestia_hypr_bg_blur", sentinel_val, attempts)
 
 
 def _ensure_hypr_no_anim() -> None:
-    _ensure_hypr_bg_blur()
-
     hyprctl = shutil.which("hyprctl")
     if not hyprctl:
         return
@@ -288,10 +303,22 @@ def _parse_properties(data: dict[str, Any]) -> list[dict[str, Any]]:
             "min": prop.get("min", 0 if ptype == "slider" else None),
             "max": prop.get("max", 100 if ptype == "slider" else None),
             "step": prop.get("step", 1 if ptype == "slider" else None),
-            "precision": prop.get("precision", 2 if ptype == "slider" else None),
             "fraction": bool(prop.get("fraction", False)),
             "options": options_out,
         }
+        if prop.get("precision") is not None:
+            entry["precision"] = prop.get("precision")
+        elif ptype == "slider":
+            step_val = entry["step"]
+            is_float_slider = bool(entry["fraction"]) or (
+                isinstance(step_val, float) and not step_val.is_integer()
+            ) or any(
+                isinstance(entry[k], float) and not entry[k].is_integer()
+                for k in ("value", "min", "max")
+                if entry[k] is not None
+            )
+            if is_float_slider:
+                entry["precision"] = 2
         parsed.append((order_num, key_str, entry))
 
     parsed.sort(key=lambda item: (item[0], item[1]))
@@ -337,7 +364,7 @@ def _find_skwd_pids() -> list[int]:
     uid = os.getuid()
     pids: list[int] = []
     try:
-        for name in ("skwd-paper-v2", "skwd-wall-vk"):
+        for name in ("skwd-paper-v2", "skwd-wall-vk", "skwd-wall-still"):
             res = subprocess.run(
                 ["pgrep", "-u", str(uid), "-x", name],
                 capture_output=True,
@@ -378,15 +405,22 @@ def _paper_sock_rpc(method: str, params: dict[str, Any], timeout: float = 2.5) -
             "params": params,
         }
         sock.sendall((json.dumps(req) + "\n").encode("utf-8"))
-        buf = b""
-        while not buf.endswith(b"\n"):
+        max_rpc_bytes = 1024 * 1024
+        buf = bytearray()
+        while True:
+            nl_idx = buf.find(b"\n")
+            if nl_idx != -1:
+                buf = buf[:nl_idx]
+                break
+            if len(buf) >= max_rpc_bytes:
+                return False, f"Response from {method} exceeded buffer limit"
             chunk = sock.recv(4096)
             if not chunk:
                 break
-            buf += chunk
+            buf.extend(chunk)
         if not buf:
             return False, f"Empty response from {method}"
-        resp = json.loads(buf.decode("utf-8", errors="replace").strip())
+        resp = json.loads(bytes(buf).decode("utf-8", errors="replace").strip())
         if isinstance(resp, dict) and isinstance(resp.get("error"), dict):
             err = resp["error"]
             return False, str(err.get("message") or err.get("code") or f"{method} failed")
@@ -515,12 +549,21 @@ def _snapshot_log_offsets() -> dict[str, int]:
     return offsets
 
 
+def _safe_mtime(path: str) -> float:
+    try:
+        return os.path.getmtime(path)
+    except OSError:
+        return 0.0
+
+
 def _read_recent_skwd_error(since_offsets: dict[str, int] | None = None) -> tuple[str, bool]:
     candidates = [p for p in _skwd_log_paths() if os.path.isfile(p)]
-    candidates.sort(key=lambda p: os.path.getmtime(p), reverse=True)
+    candidates.sort(key=_safe_mtime, reverse=True)
 
-    lines: list[str] = []
+    rejected = False
+    newest_error = ""
     for path in candidates:
+        file_lines: list[str] = []
         try:
             size = os.path.getsize(path)
             start_pos = 0
@@ -531,28 +574,29 @@ def _read_recent_skwd_error(since_offsets: dict[str, int] | None = None) -> tupl
             with open(path, "r", encoding="utf-8", errors="replace") as fh:
                 if start_pos > 0:
                     fh.seek(start_pos)
-                    lines.extend(fh.readlines()[-40:])
+                    file_lines = fh.readlines()[-40:]
                 elif since_offsets is None:
-                    lines.extend(fh.readlines()[-30:])
+                    file_lines = fh.readlines()[-30:]
                 else:
-                    lines.extend(fh.readlines()[-40:])
+                    file_lines = fh.readlines()[-40:]
         except OSError:
             continue
 
-    text_blob = "\n".join(lines)
-    rejected = bool(
-        re.search(r"native-scene-gap|strict native scene startup rejected|rejected", text_blob, re.IGNORECASE)
-    )
+        text_blob = "\n".join(file_lines)
+        if re.search(r"native-scene-gap|strict native scene startup rejected|rejected", text_blob, re.IGNORECASE):
+            rejected = True
 
-    for line in reversed(lines):
-        clean = line.strip()
-        if not clean:
-            continue
-        if any(tok in clean.lower() for tok in ("error", "rejected", "failed", "native-scene-gap")):
-            if len(clean) > 260:
-                clean = clean[:257] + "..."
-            return clean, rejected
-    return "", rejected
+        if not newest_error:
+            for line in reversed(file_lines):
+                clean = line.strip()
+                if not clean:
+                    continue
+                if any(tok in clean.lower() for tok in ("error", "rejected", "failed", "native-scene-gap")):
+                    if len(clean) > 260:
+                        clean = clean[:257] + "..."
+                    newest_error = clean
+                    break
+    return newest_error, rejected
 
 
 def _volume_percent(raw_volume: float) -> int:
@@ -646,10 +690,14 @@ def _scan_drm_cards() -> list[dict[str, Any]]:
                     internal_active = True
 
         kind_hint = "unknown"
-        if internal_active or boot_vga or (vendor in ("intel", "amd") and is_root_bus and driver in ("i915", "xe", "amdgpu", "radeon")):
-            kind_hint = "integrated"
-        elif driver == "nvidia" or vendor == "nvidia" or (not is_root_bus and driver):
+        if driver in ("nvidia", "nouveau") or vendor == "nvidia":
             kind_hint = "discrete"
+        elif vendor in ("intel", "amd") and is_root_bus and driver in ("i915", "xe", "amdgpu", "radeon"):
+            kind_hint = "integrated"
+        elif not is_root_bus and driver:
+            kind_hint = "discrete"
+        elif internal_active:
+            kind_hint = "integrated"
 
         result.append({
             "card": card,
@@ -759,36 +807,62 @@ def _adapter_matches_compositor(
     return kind == "integrated"
 
 
-def _resolve_safe_gpu(requested_gpu: str, helm_bin: str | None) -> str:
+def _resolve_gpu_plan(requested_gpu: str, we_type: str, helm_bin: str | None) -> tuple[str, bool]:
     req = requested_gpu if requested_gpu in ("auto", "integrated", "discrete") else "auto"
     if req == "auto":
-        return "auto"
+        return "auto", False
 
     cards = _scan_drm_cards()
     comp_card = _detect_compositor_drm_card(cards)
     if not comp_card:
-        return "auto"
+        return "auto", False
 
     adapters = _probe_helm_adapters(helm_bin)
+    has_safe_discrete = False
+    has_offload_discrete = False
+    has_safe_integrated = False
+
     if adapters:
         for adapter in adapters:
             dt = str(adapter.get("device_type") or "").lower()
             kind = "integrated" if "integrated" in dt else ("discrete" if "discrete" in dt else "other")
-            if kind == req and _adapter_matches_compositor(adapter, kind, comp_card, cards):
-                return req
-        return "auto"
+            matched = _adapter_matches_compositor(adapter, kind, comp_card, cards)
+            if kind == "discrete":
+                if matched:
+                    has_safe_discrete = True
+                else:
+                    has_offload_discrete = True
+            elif kind == "integrated" and matched:
+                has_safe_integrated = True
+    else:
+        has_safe_discrete = comp_card.get("kindHint") == "discrete"
+        has_safe_integrated = comp_card.get("kindHint") == "integrated"
+        has_offload_discrete = any(
+            c.get("kindHint") == "discrete" and c.get("card") != comp_card.get("card")
+            for c in cards
+        )
 
-    if comp_card.get("kindHint") == req:
-        return req
-    return "auto"
+    if req == "integrated":
+        return ("integrated", False) if has_safe_integrated else ("auto", False)
+
+    if has_safe_discrete:
+        return "discrete", False
+    if we_type == "scene" and has_offload_discrete:
+        return "discrete", True
+    return "auto", False
 
 
-def _build_skwd_env(gpu: str = "auto") -> dict[str, str]:
+def _build_skwd_env(gpu: str = "auto", scene_shm: bool = False) -> dict[str, str]:
     env = os.environ.copy()
     if gpu in ("integrated", "discrete"):
         env["SKWD_VK_DEVICE"] = gpu
     else:
         env.pop("SKWD_VK_DEVICE", None)
+
+    if scene_shm and gpu == "discrete":
+        env["SKWD_VK_SCENE_SHM"] = "1"
+    else:
+        env.pop("SKWD_VK_SCENE_SHM", None)
 
     # Clear legacy env vars; runtime policy is passed cleanly via --manifest JSON
     for var in (
@@ -835,7 +909,9 @@ def cmd_probe(args: argparse.Namespace) -> int:
     steam_bin = shutil.which("skwd-steam")
     helm_bin = shutil.which("skwd-helm")
 
-    _ensure_hypr_no_anim()
+    if paper_bin:
+        _ensure_hypr_no_anim()
+        _sync_hypr_bg_blur(int(args.compositor_blur) != 0)
 
     cards = _scan_drm_cards()
     comp_card = _detect_compositor_drm_card(cards)
@@ -862,8 +938,15 @@ def cmd_probe(args: argparse.Namespace) -> int:
         })
 
     has_safe_discrete = any(g["kind"] == "discrete" and g["compositorMatched"] for g in gpus)
+    has_offload_discrete = (
+        any(g["kind"] == "discrete" and not g["compositorMatched"] for g in gpus)
+        if gpus
+        else any(c.get("kindHint") == "discrete" and (not comp_card or c.get("card") != comp_card.get("card")) for c in cards)
+    )
     has_safe_integrated = any(g["kind"] == "integrated" and g["compositorMatched"] for g in gpus)
     compositor_gpu = next((g["name"] for g in gpus if g["compositorMatched"] and g["name"]), "")
+    discrete_gpu = next((g["name"] for g in gpus if g["kind"] == "discrete" and g["name"]), "")
+    integrated_gpu = next((g["name"] for g in gpus if g["kind"] == "integrated" and g["name"]), "")
     if not compositor_gpu and gpus:
         compositor_gpu = gpus[0]["name"]
 
@@ -875,8 +958,11 @@ def cmd_probe(args: argparse.Namespace) -> int:
         "resolvedWorkshopDir": _resolve_workshop_dir(args.workshop_dir),
         "gpus": gpus,
         "hasSafeDiscrete": has_safe_discrete,
+        "hasOffloadDiscrete": has_offload_discrete,
         "hasSafeIntegrated": has_safe_integrated if gpus else (comp_card["kindHint"] == "integrated" if comp_card else True),
         "compositorGpu": compositor_gpu,
+        "discreteGpuName": discrete_gpu,
+        "integratedGpuName": integrated_gpu,
         "drmCompositorCard": comp_card["card"] if comp_card else "",
         "drmCompositorDriver": comp_card["driver"] if comp_card else "",
     })
@@ -1114,15 +1200,22 @@ def cmd_apply(args: argparse.Namespace) -> int:
         return _fail(f"Wallpaper Engine '{we_type}' items are not supported by skwd", rejected=True)
 
     helm_bin = shutil.which("skwd-helm")
-    gpu = _resolve_safe_gpu(args.gpu, helm_bin)
+    gpu, scene_shm = _resolve_gpu_plan(args.gpu, we_type, helm_bin)
     fps = max(0, min(240, int(args.fps)))
+    video_fps = max(0, min(240, int(args.video_fps)))
     disable_particles = 1 if int(args.disable_particles) != 0 else 0
     max_dim = _resolve_max_dimension(paper_bin, int(args.max_dim))
+    max_chains = int(args.max_effect_chains)
+    max_passes = int(args.max_effect_passes)
     desired_fp = {
         "gpu": gpu,
+        "scene_shm": scene_shm,
         "fps": fps,
+        "video_fps": video_fps,
         "disable_particles": disable_particles,
         "max_dim": max_dim,
+        "max_effect_chains": max_chains,
+        "max_effect_passes": max_passes,
     }
 
     rt_dir = _skwd_runtime_dir()
@@ -1140,7 +1233,8 @@ def cmd_apply(args: argparse.Namespace) -> int:
             prev_fp = None
 
     prev_gpu = prev_fp.get("gpu") if isinstance(prev_fp, dict) else None
-    if int(args.force_restart) != 0 or (_is_skwd_running() and prev_gpu != gpu):
+    prev_scene_shm = bool(prev_fp.get("scene_shm", False)) if isinstance(prev_fp, dict) else False
+    if int(args.force_restart) != 0 or (_is_skwd_running() and (prev_gpu != gpu or prev_scene_shm != scene_shm)):
         _unload_skwd_processes(paper_bin)
 
     try:
@@ -1149,7 +1243,7 @@ def cmd_apply(args: argparse.Namespace) -> int:
     except OSError:
         pass
 
-    env = _build_skwd_env(gpu)
+    env = _build_skwd_env(gpu, scene_shm=scene_shm)
 
     effect = (args.transition or "fade").strip().lower()
     if effect == "random":
@@ -1203,9 +1297,16 @@ def cmd_apply(args: argparse.Namespace) -> int:
         scene_policy["fps"] = fps
     if max_dim > 0:
         scene_policy["max_dimension"] = max_dim
+    if 1 <= max_chains <= 64:
+        scene_policy["max_effect_chains"] = max_chains
+    if 1 <= max_passes <= 64:
+        scene_policy["max_effect_passes"] = max_passes
 
     policy_obj: dict[str, Any] = {"scene": scene_policy}
-    if fps > 0:
+    if we_type == "video":
+        if video_fps > 0:
+            policy_obj["output_fps"] = {out: video_fps for out in outputs_list}
+    elif fps > 0:
         policy_obj["output_fps"] = {out: fps for out in outputs_list}
 
     manifest = {
@@ -1214,7 +1315,9 @@ def cmd_apply(args: argparse.Namespace) -> int:
         "replace_all": True,
     }
 
-    _ensure_hypr_no_anim()
+    if paper_bin:
+        _ensure_hypr_no_anim()
+        _sync_hypr_bg_blur(int(args.compositor_blur) != 0)
 
     # Resume before applying so neither legacy skwd-wall-still rejects apply nor playback.pause leaks stale state
     if _is_skwd_running():
@@ -1277,8 +1380,18 @@ def cmd_apply(args: argparse.Namespace) -> int:
         "appliedDir": we_dir,
         "effectUsed": effect,
         "gpuUsed": gpu,
+        "sceneShmUsed": scene_shm,
         "maxDimUsed": max_dim,
+        "maxEffectChains": max_chains,
+        "maxEffectPasses": max_passes,
+        "videoFpsUsed": video_fps,
     })
+
+
+def cmd_set_blur(args: argparse.Namespace) -> int:
+    enabled = int(args.enabled) != 0
+    applied = _sync_hypr_bg_blur(enabled)
+    return _emit({"ok": True, "enabled": enabled, "applied": applied})
 
 
 def cmd_pause(_args: argparse.Namespace) -> int:
@@ -1408,7 +1521,18 @@ def cmd_steam_search(args: argparse.Namespace) -> int:
 
 def cmd_steam_sub(args: argparse.Namespace) -> int:
     steam_bin = shutil.which("skwd-steam")
-    wid = str(args.id)
+    wid = str(args.id).strip()
+    if not wid.isdigit():
+        sys.stdout.write(json.dumps({
+            "id": wid,
+            "status": "error",
+            "progress": 0,
+            "message": "Invalid workshop item ID",
+            "folder": "",
+        }) + "\n")
+        sys.stdout.flush()
+        return 0
+
     if not steam_bin:
         sys.stdout.write(json.dumps({
             "id": wid,
@@ -1424,43 +1548,120 @@ def cmd_steam_sub(args: argparse.Namespace) -> int:
         [steam_bin, wid],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        text=True,
-        bufsize=1,
+        text=False,
     )
     saw_json = False
     saw_terminal = False
+    timed_out = False
+    cancelled = False
     deadline = time.monotonic() + 1800
 
+    sel = selectors.DefaultSelector()
+    stdout_buf = bytearray()
+    stderr_buf = bytearray()
+    max_stderr_bytes = 32768
+
+    prev_sigterm = signal.getsignal(signal.SIGTERM)
+    prev_sigint = signal.getsignal(signal.SIGINT)
+
+    def _on_signal(_signum: int, _frame: Any) -> None:
+        nonlocal cancelled
+        cancelled = True
+
+    def _emit_sub_line(raw_line: str) -> None:
+        nonlocal saw_json, saw_terminal
+        stripped = raw_line.strip()
+        if not stripped.startswith("{"):
+            return
+        try:
+            obj = json.loads(stripped)
+        except json.JSONDecodeError:
+            return
+        saw_json = True
+        if str(obj.get("status") or "").lower() in ("done", "complete", "completed", "error", "failed"):
+            saw_terminal = True
+        sys.stdout.write(json.dumps(obj, ensure_ascii=False) + "\n")
+        sys.stdout.flush()
+
     try:
-        assert proc.stdout is not None
-        for line in proc.stdout:
-            if time.monotonic() > deadline:
-                proc.kill()
-                sys.stdout.write(json.dumps({
-                    "id": wid,
-                    "status": "error",
-                    "progress": 0,
-                    "message": "Download timed out after 30m",
-                    "folder": "",
-                }) + "\n")
-                sys.stdout.flush()
-                return 0
-            stripped = line.strip()
-            if not stripped.startswith("{"):
-                continue
+        signal.signal(signal.SIGTERM, _on_signal)
+        signal.signal(signal.SIGINT, _on_signal)
+
+        assert proc.stdout is not None and proc.stderr is not None
+        os.set_blocking(proc.stdout.fileno(), False)
+        os.set_blocking(proc.stderr.fileno(), False)
+        sel.register(proc.stdout, selectors.EVENT_READ, data="stdout")
+        sel.register(proc.stderr, selectors.EVENT_READ, data="stderr")
+
+        while sel.get_map() and not cancelled:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                timed_out = True
+                break
+            events = sel.select(timeout=min(remaining, 1.0))
+            for key, _ in events:
+                try:
+                    chunk = os.read(key.fd, 4096)
+                except BlockingIOError:
+                    continue
+                if not chunk:
+                    sel.unregister(key.fileobj)
+                    continue
+                if key.data == "stdout":
+                    stdout_buf.extend(chunk)
+                    while True:
+                        nl = stdout_buf.find(b"\n")
+                        if nl == -1:
+                            break
+                        line = bytes(stdout_buf[:nl]).decode("utf-8", errors="replace")
+                        del stdout_buf[: nl + 1]
+                        _emit_sub_line(line)
+                else:
+                    stderr_buf.extend(chunk)
+                    if len(stderr_buf) > max_stderr_bytes:
+                        del stderr_buf[: len(stderr_buf) - max_stderr_bytes]
+
+        if stdout_buf:
+            _emit_sub_line(bytes(stdout_buf).decode("utf-8", errors="replace"))
+            stdout_buf.clear()
+
+        if timed_out:
+            proc.terminate()
             try:
-                obj = json.loads(stripped)
-            except json.JSONDecodeError:
-                continue
-            saw_json = True
-            if str(obj.get("status") or "").lower() in ("done", "complete", "completed", "error", "failed"):
-                saw_terminal = True
-            sys.stdout.write(json.dumps(obj, ensure_ascii=False) + "\n")
+                proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
+            sys.stdout.write(json.dumps({
+                "id": wid,
+                "status": "error",
+                "progress": 0,
+                "message": "Download timed out after 30m",
+                "folder": "",
+            }) + "\n")
             sys.stdout.flush()
+            return 0
+
+        if cancelled:
+            proc.terminate()
+            try:
+                proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
+            sys.stdout.write(json.dumps({
+                "id": wid,
+                "status": "error",
+                "progress": 0,
+                "message": "Download cancelled",
+                "folder": "",
+            }) + "\n")
+            sys.stdout.flush()
+            return 0
 
         rc = proc.wait(timeout=10)
         if rc != 0 and not saw_terminal:
-            stderr_txt = (proc.stderr.read() if proc.stderr else "").strip()
+            stderr_txt = bytes(stderr_buf).decode("utf-8", errors="replace").strip()
             msg = stderr_txt.splitlines()[-1] if stderr_txt else f"skwd-steam exited with code {rc}"
             sys.stdout.write(json.dumps({
                 "id": wid,
@@ -1480,10 +1681,6 @@ def cmd_steam_sub(args: argparse.Namespace) -> int:
             }) + "\n")
             sys.stdout.flush()
     except (OSError, subprocess.SubprocessError) as exc:
-        try:
-            proc.kill()
-        except OSError:
-            pass
         sys.stdout.write(json.dumps({
             "id": wid,
             "status": "error",
@@ -1492,19 +1689,48 @@ def cmd_steam_sub(args: argparse.Namespace) -> int:
             "folder": "",
         }) + "\n")
         sys.stdout.flush()
+    finally:
+        try:
+            signal.signal(signal.SIGTERM, prev_sigterm)
+            signal.signal(signal.SIGINT, prev_sigint)
+        except (OSError, ValueError):
+            pass
+        try:
+            sel.close()
+        except OSError:
+            pass
+        if proc.poll() is None:
+            try:
+                proc.terminate()
+                proc.wait(timeout=2)
+            except (OSError, subprocess.TimeoutExpired):
+                try:
+                    proc.kill()
+                    proc.wait()
+                except OSError:
+                    pass
+        for pipe in (proc.stdout, proc.stderr):
+            if pipe is not None:
+                try:
+                    pipe.close()
+                except OSError:
+                    pass
     return 0
 
 
 def cmd_steam_unsub(args: argparse.Namespace) -> int:
     steam_bin = shutil.which("skwd-steam")
+    wid = str(args.id).strip()
+    if not wid.isdigit():
+        return _fail("Invalid workshop item ID")
     if not steam_bin:
         return _fail("skwd-steam is not installed")
     try:
-        res = subprocess.run([steam_bin, "unsub", args.id], capture_output=True, text=True, timeout=30, check=False)
+        res = subprocess.run([steam_bin, "unsub", wid], capture_output=True, text=True, timeout=30, check=False)
         if res.returncode != 0:
             err = (res.stderr or res.stdout or "skwd-steam unsub failed").strip()
             return _fail(err.splitlines()[-1] if err else "skwd-steam unsub failed")
-        return _emit({"ok": True, "id": args.id})
+        return _emit({"ok": True, "id": wid})
     except subprocess.TimeoutExpired:
         return _fail("skwd-steam unsub timed out")
     except (OSError, subprocess.SubprocessError) as exc:
@@ -1517,7 +1743,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_probe = sub.add_parser("probe")
     p_probe.add_argument("--workshop-dir", default=None)
+    p_probe.add_argument("--compositor-blur", type=int, default=0)
     p_probe.set_defaults(func=cmd_probe)
+
+    p_blur = sub.add_parser("set-blur")
+    p_blur.add_argument("--enabled", type=int, required=True)
+    p_blur.set_defaults(func=cmd_set_blur)
 
     p_trans = sub.add_parser("transitions")
     p_trans.set_defaults(func=cmd_transitions)
@@ -1538,8 +1769,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_apply.add_argument("--path", required=True)
     p_apply.add_argument("--gpu", default="auto")
     p_apply.add_argument("--fps", type=int, default=0)
+    p_apply.add_argument("--video-fps", type=int, default=0)
     p_apply.add_argument("--disable-particles", type=int, default=0)
     p_apply.add_argument("--max-dim", type=int, default=0)
+    p_apply.add_argument("--max-effect-chains", type=int, default=0)
+    p_apply.add_argument("--max-effect-passes", type=int, default=0)
+    p_apply.add_argument("--compositor-blur", type=int, default=0)
     p_apply.add_argument("--mute", type=int, default=1)
     p_apply.add_argument("--volume", type=float, default=0.5)
     p_apply.add_argument("--transition", default="fade")

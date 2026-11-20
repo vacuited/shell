@@ -4,6 +4,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
+import Caelestia
 import Caelestia.Config
 import Caelestia.I18n
 import qs.components
@@ -18,8 +19,11 @@ PageBase {
     isSubPage: true
 
     readonly property list<MenuItem> presetItems: [
-        MenuItem { text: "25 / 5"; property int fM: 25; property int sM: 5 },
-        MenuItem { text: "50 / 10"; property int fM: 50; property int sM: 10 }
+        MenuItem { text: "25 / 5 (Pomodoro)"; property int fM: 25; property int sM: 5 },
+        MenuItem { text: "50 / 10 (Deep Study)"; property int fM: 50; property int sM: 10 },
+        MenuItem { text: "60 / 10 (1h MCQ Paper)"; property int fM: 60; property int sM: 10 },
+        MenuItem { text: "120 / 15 (2h Past Paper)"; property int fM: 120; property int sM: 15 },
+        MenuItem { text: "180 / 15 (3h Past Paper)"; property int fM: 180; property int sM: 15 }
     ]
 
     property list<MenuItem> focusSoundItems: []
@@ -39,6 +43,18 @@ PageBase {
         subjectInput.text = "";
     }
 
+    function addCountdown(): void {
+        const title = countdownTitleInput.text.trim();
+        const date = countdownDateInput.text.trim();
+        if (title === "" || date === "") return;
+        if (FocusLedger.addCountdown(title, date)) {
+            countdownTitleInput.text = "";
+            countdownDateInput.text = "";
+        } else {
+            Toaster.toast(Tr.tr("Invalid countdown date"), Tr.tr("Use YYYY-MM-DD format (e.g. 2027-08-02)."), "event_busy", Toast.Warning);
+        }
+    }
+
     contentChild: ColumnLayout {
         id: mainLayout
         anchors.horizontalCenter: parent.horizontalCenter
@@ -55,7 +71,7 @@ PageBase {
 
         Process {
             id: soundListProc
-            command: ["sh", "-c", `ls -1 "${Quickshell.shellDir}/assets/sounds/notifications" | grep -E '\\.wav$' | sort`]
+            command: ["sh", "-c", 'ls -1 "$1/assets/sounds/notifications" | grep -E "\\.wav$" | sort', "--", Quickshell.shellDir]
             stdout: StdioCollector {
                 onStreamFinished: {
                     let lines = text.trim().split("\n").filter(l => l.length > 0);
@@ -88,10 +104,11 @@ PageBase {
             label: Tr.tr("Preset")
             fallbackText: Tr.tr("Custom")
             active: {
-                if (GlobalConfig.focus.focusMins === 25 && GlobalConfig.focus.shortBreakMins === 5)
-                    return root.presetItems[0];
-                if (GlobalConfig.focus.focusMins === 50 && GlobalConfig.focus.shortBreakMins === 10)
-                    return root.presetItems[1];
+                for (let i = 0; i < root.presetItems.length; i++) {
+                    if (GlobalConfig.focus.focusMins === root.presetItems[i].fM
+                        && GlobalConfig.focus.shortBreakMins === root.presetItems[i].sM)
+                        return root.presetItems[i];
+                }
                 return null;
             }
             menuItems: root.presetItems
@@ -151,13 +168,20 @@ PageBase {
         }
 
         ToggleRow {
-            last: true
             text: Tr.tr("Auto-play next phase")
             checked: GlobalConfig.focus.autoPlay
             onToggled: {
                 GlobalConfig.focus.autoPlay = checked;
                 GlobalConfig.save();
             }
+        }
+
+        ToggleRow {
+            last: true
+            text: Tr.tr("Pause timer when screen sleeps")
+            subtext: Tr.tr("Keep off when studying from physical books while display sleeps")
+            checked: FocusLedger.pauseOnSleep
+            onToggled: FocusLedger.setPauseOnSleep(checked)
         }
 
         // Goals
@@ -205,7 +229,7 @@ PageBase {
                 Layout.fillWidth: true
                 placeholderText: Tr.tr("Add subject (max 20 chars)")
                 maximumLength: 20
-                onEditingFinished: root.addSubject()
+                onAccepted: root.addSubject()
             }
 
             IconTextButton {
@@ -380,37 +404,9 @@ PageBase {
             }
         }
 
-        // Digital Wellbeing & Shield
+        // Exam Countdowns
         SectionHeader {
-            text: Tr.tr("Digital Wellbeing & Shield")
-        }
-
-        ToggleRow {
-            first: true
-            text: Tr.tr("Strict Focus Shield")
-            checked: ScreenTime.strictShield
-            onToggled: ScreenTime.setStrictShield(checked)
-        }
-
-        StepperRow {
-            last: true
-            label: Tr.tr("History retention (days)")
-            value: ScreenTime.retentionDays
-            from: 7
-            to: 90
-            stepSize: 7
-            onMoved: v => {
-                let d = Math.round(v);
-                if (typeof ScreenTime.setRetentionDays === "function")
-                    ScreenTime.setRetentionDays(d);
-                else
-                    ScreenTime.retentionDays = d;
-            }
-        }
-
-        // App Shield & Daily Limits
-        SectionHeader {
-            text: Tr.tr("App Shield & Daily Limits")
+            text: Tr.tr("Exam Countdowns")
         }
 
         RowLayout {
@@ -418,48 +414,50 @@ PageBase {
             spacing: Tokens.spacing.small
 
             StyledTextField {
-                id: manualAppInput
+                id: countdownTitleInput
                 Layout.fillWidth: true
-                placeholderText: Tr.tr("App class (e.g. discord, steam, zen)")
-                onAccepted: {
-                    const text = manualAppInput.text.trim();
-                    if (text !== "") {
-                        ScreenTime.toggleDistraction(text);
-                        manualAppInput.text = "";
-                    }
-                }
+                placeholderText: Tr.tr("Exam or milestone name")
+                maximumLength: 32
+                onAccepted: countdownDateInput.forceActiveFocus()
+            }
+
+            StyledTextField {
+                id: countdownDateInput
+                Layout.preferredWidth: 140
+                placeholderText: "YYYY-MM-DD"
+                maximumLength: 10
+                onAccepted: root.addCountdown()
             }
 
             IconTextButton {
-                text: Tr.tr("Shield")
-                icon: "shield"
-                disabled: manualAppInput.text.trim() === ""
-                onClicked: {
-                    const text = manualAppInput.text.trim();
-                    if (text !== "") {
-                        ScreenTime.toggleDistraction(text);
-                        manualAppInput.text = "";
-                    }
-                }
+                text: Tr.tr("Add")
+                icon: "add"
+                disabled: countdownTitleInput.text.trim() === "" || !FocusLedger.parseLocalDate(countdownDateInput.text.trim())
+                onClicked: root.addCountdown()
             }
         }
 
         Repeater {
-            id: knownAppsRepeater
+            id: countdownRepeater
             model: {
-                ScreenTime.revision;
-                return ScreenTime.allKnownApps();
+                FocusLedger.revision;
+                return FocusLedger.countdowns;
             }
 
             delegate: ConnectedRect {
-                id: appRow
+                id: cdRow
                 required property var modelData
                 required property int index
+
+                readonly property int daysLeft: {
+                    void FocusLedger.todayKey;
+                    return FocusLedger.daysUntil(modelData?.date ?? "");
+                }
 
                 Layout.fillWidth: true
                 implicitHeight: 52
                 first: index === 0
-                last: index === knownAppsRepeater.count - 1
+                last: index === countdownRepeater.count - 1
 
                 RowLayout {
                     anchors.left: parent.left
@@ -475,76 +473,71 @@ PageBase {
 
                         StyledText {
                             Layout.fillWidth: true
-                            text: ScreenTime.appName(appRow.modelData.appClass)
+                            text: cdRow.modelData?.title ?? ""
                             font: Tokens.font.body.small
                             elide: Text.ElideRight
                         }
 
                         StyledText {
                             Layout.fillWidth: true
-                            text: ScreenTime.fmt(appRow.modelData.weekSecs ?? appRow.modelData.secs ?? 0) + " " + Tr.tr("this week")
+                            text: FocusLedger.formatDateShort(cdRow.modelData?.date ?? "") + " (" + (cdRow.modelData?.date ?? "") + ")"
                             color: Colours.palette.m3outline
                             font: Tokens.font.label.small
                             elide: Text.ElideRight
                         }
                     }
 
-                    IconTextButton {
-                        icon: appRow.modelData.isDistraction ? "gpp_bad" : "shield"
-                        text: appRow.modelData.isDistraction ? Tr.tr("Blocked in Focus") : Tr.tr("Allowed")
-                        isToggle: true
-                        checked: appRow.modelData.isDistraction
-                        onClicked: ScreenTime.toggleDistraction(appRow.modelData.appClass)
-                    }
-
                     StyledRect {
-                        implicitWidth: pillRow.implicitWidth + Tokens.padding.extraSmall * 2
-                        implicitHeight: 32
+                        implicitWidth: cdBadgeTxt.implicitWidth + Tokens.padding.medium * 2
+                        implicitHeight: 26
                         radius: Tokens.rounding.full
-                        color: Colours.layer(Colours.palette.m3surfaceContainerHighest, 1)
+                        color: cdRow.daysLeft >= 0 ? Colours.palette.m3primaryContainer : Colours.tPalette.m3surfaceContainerHighest
 
-                        RowLayout {
-                            id: pillRow
+                        StyledText {
+                            id: cdBadgeTxt
                             anchors.centerIn: parent
-                            spacing: Tokens.spacing.extraSmall
-
-                            IconButton {
-                                icon: "remove"
-                                type: IconButton.Text
-                                font: Tokens.font.icon.small
-                                disabled: (appRow.modelData.limitMins || 0) <= 0
-                                onClicked: {
-                                    const cur = appRow.modelData.limitMins || 0;
-                                    const next = Math.max(0, cur - 15);
-                                    ScreenTime.setAppLimit(appRow.modelData.appClass, next);
-                                }
-                            }
-
-                            StyledText {
-                                text: (appRow.modelData.limitMins > 0) ? `${appRow.modelData.limitMins}m` : Tr.tr("No limit")
-                                font: Tokens.font.label.medium
-                                color: (appRow.modelData.limitMins > 0) ? Colours.palette.m3primary : Colours.palette.m3outline
-                            }
-
-                            IconButton {
-                                icon: "add"
-                                type: IconButton.Text
-                                font: Tokens.font.icon.small
-                                onClicked: {
-                                    const cur = appRow.modelData.limitMins || 0;
-                                    ScreenTime.setAppLimit(appRow.modelData.appClass, cur + 15);
-                                }
-                            }
+                            text: cdRow.daysLeft > 0
+                                ? Tr.tr("%1d left").arg(cdRow.daysLeft)
+                                : (cdRow.daysLeft === 0 ? Tr.tr("Today!") : Tr.tr("%1d ago").arg(Math.abs(cdRow.daysLeft)))
+                            font: Tokens.font.label.small
+                            color: cdRow.daysLeft >= 0 ? Colours.palette.m3onPrimaryContainer : Colours.palette.m3onSurfaceVariant
                         }
                     }
+
+                    IconButton {
+                        icon: "delete"
+                        type: IconButton.Text
+                        onClicked: FocusLedger.removeCountdown(cdRow.modelData?.id ?? "")
+                    }
                 }
+            }
+        }
+
+        // Screen Time
+        SectionHeader {
+            text: Tr.tr("Screen Time")
+        }
+
+        StepperRow {
+            first: true
+            label: Tr.tr("History retention (days)")
+            value: ScreenTime.retentionDays
+            from: 7
+            to: 90
+            stepSize: 7
+            onMoved: v => {
+                let d = Math.round(v);
+                if (typeof ScreenTime.setRetentionDays === "function")
+                    ScreenTime.setRetentionDays(d);
+                else
+                    ScreenTime.retentionDays = d;
             }
         }
 
         ConnectedRect {
             Layout.fillWidth: true
             implicitHeight: clearRow.implicitHeight + clearRow.anchors.margins * 2
-            first: true
+            first: false
             last: true
 
             RowLayout {

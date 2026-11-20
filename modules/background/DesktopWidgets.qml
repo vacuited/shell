@@ -23,6 +23,9 @@ Item {
     property bool centerYActive: false
 
     readonly property var widgetConfig: Config.background.desktopWidgets
+    readonly property real widgetScale: Math.max(0.7, Math.min(1.5, widgetConfig.scale ?? 1.0))
+    readonly property int widgetGap: Math.round(WidgetMetrics.baseGap * widgetScale)
+    readonly property int widgetGridStep: Math.round((WidgetMetrics.baseCell + WidgetMetrics.baseGap) * widgetScale)
     readonly property bool weActive: wallpaper?.weSurfaceActive ?? wallpaper?.weSurfaceVisible ?? false
     readonly property var hostCanvas: {
         let p = root.parent;
@@ -48,7 +51,7 @@ Item {
 
     readonly property var placements: {
         const entries = widgetConfig.entries.values;
-        const s = WidgetMetrics.scale;
+        const s = widgetScale;
         for (const e of entries)
             void [e.enabled, e.sizeMode, e.col, e.row, e.right, e.x, e.y];
         return WidgetGrid.place(
@@ -57,9 +60,9 @@ Item {
             safeHeight,
             widgetConfig.columns,
             widgetConfig.position,
-            WidgetMetrics.gridStep,
+            widgetGridStep,
             Math.round(WidgetMetrics.baseCell * s),
-            WidgetMetrics.gap,
+            widgetGap,
             safeLeft,
             safeTop
         );
@@ -104,12 +107,18 @@ Item {
     }
 
     function targetScreenName(): string {
-        return Config.screenName || "";
+        return Config.screen || "";
     }
 
     function useScreenOverrideLayer(): bool {
         const scr = targetScreenName();
-        return scr !== "" && Config.forScreen(scr).background.desktopWidgets.entries.isOverride("values");
+        if (scr === "")
+            return false;
+        const entries = Config.forScreen(scr).background.desktopWidgets.entries;
+        if (entries.isOverride("values"))
+            return true;
+        const keys = ["id", "type", "enabled", "col", "row", "right", "x", "y", "style", "sizeMode", "options"];
+        return entries.values.some(e => keys.some(k => e.isOverride(k)));
     }
 
     function writableEntryFor(id: string): var {
@@ -267,6 +276,10 @@ Item {
                 delegate: TimersCard {}
             }
             DelegateChoice {
+                roleValue: "countdown"
+                delegate: CountdownCard {}
+            }
+            DelegateChoice {
                 roleValue: "resources"
                 delegate: ResourcesCard {}
             }
@@ -362,7 +375,7 @@ Item {
             let suffix = Date.now();
             while (entries.values.some(e => e.id === `${wType}-${suffix}`))
                 suffix++;
-            const step = Math.round(24 * WidgetMetrics.scale);
+            const step = Math.round(24 * root.widgetScale);
             const nextX = Math.round(Math.max(root.safeLeft, Math.min(Math.max(root.safeLeft, root.safeRight - card.width), card.x + step)));
             const nextY = Math.round(Math.max(root.safeTop, Math.min(Math.max(root.safeTop, root.safeBottom - card.height), card.y + step)));
             entries.insert({
@@ -442,7 +455,7 @@ Item {
         }
 
         canvas: root
-        widgetScale: WidgetMetrics.scale
+        widgetScale: root.widgetScale
         initialX: hasCustomPos ? entry.x : slot.x
         initialY: hasCustomPos ? entry.y : slot.y
         sizeMode: card.resolvedSizeMode
@@ -452,10 +465,10 @@ Item {
         showSettingsHandle: true
         settingsActive: root.editingWidgetId === card.widgetId
         outlineShape: WidgetMetrics.resolveShapeEnum(WidgetMetrics.effectiveShapeKey(card.widgetType, card.resolvedSizeMode, card.entryOptions?.outerShape ?? ""), "Rounded")
-        minWidth: WidgetMetrics.isAspectResizable(card.widgetType) ? Math.round(96 * WidgetMetrics.scale) : WidgetMetrics.widthFor("1x1", WidgetMetrics.scale)
-        minHeight: WidgetMetrics.isAspectResizable(card.widgetType) ? Math.round(48 * WidgetMetrics.scale) : WidgetMetrics.heightFor("1x1", card.widgetType, WidgetMetrics.scale)
-        implicitWidth: widgetContent ? widgetContent.implicitWidth : WidgetMetrics.widthFor(card.resolvedSizeMode, WidgetMetrics.scale)
-        implicitHeight: widgetContent ? widgetContent.implicitHeight : WidgetMetrics.heightFor(card.resolvedSizeMode, card.widgetType, WidgetMetrics.scale)
+        minWidth: WidgetMetrics.isAspectResizable(card.widgetType) ? Math.round(96 * root.widgetScale) : WidgetMetrics.widthFor("1x1", root.widgetScale)
+        minHeight: WidgetMetrics.isAspectResizable(card.widgetType) ? Math.round(48 * root.widgetScale) : WidgetMetrics.heightFor("1x1", card.widgetType, root.widgetScale)
+        implicitWidth: widgetContent ? widgetContent.implicitWidth : WidgetMetrics.widthFor(card.resolvedSizeMode, root.widgetScale)
+        implicitHeight: widgetContent ? widgetContent.implicitHeight : WidgetMetrics.heightFor(card.resolvedSizeMode, card.widgetType, root.widgetScale)
         width: implicitWidth
         height: implicitHeight
 
@@ -552,6 +565,22 @@ Item {
         }
     }
 
+    component CountdownCard: WidgetCard {
+        id: countdownCard
+
+        widgetContent: countdownW
+        CountdownWidget {
+            id: countdownW
+            anchors.fill: parent
+            wallpaper: root.wallpaper
+            weActive: root.weActive
+            locked: countdownCard.locked
+            sizeMode: countdownCard.resolvedSizeMode
+            surfaceStyle: countdownCard.resolvedSurfaceStyle
+            widgetOptions: countdownCard.entryOptions
+        }
+    }
+
     component ResourcesCard: WidgetCard {
         id: resCard
 
@@ -636,7 +665,7 @@ Item {
     component BatteryCard: WidgetCard {
         id: batCard
 
-        visible: UPower.displayDevice.isLaptopBattery || (Hardware.isSupported && Hardware.gpuPower > 0) || !batCard.locked
+        visible: (UPower.displayDevice?.isLaptopBattery ?? false) || (Hardware.isSupported && Hardware.gpuPower > 0) || !batCard.locked
         widgetContent: batW
         BatteryWidget {
             id: batW
@@ -657,7 +686,7 @@ Item {
         resizeMode: "diagonal"
         onUnlockedTapped: imageW.openPicker()
         onResizeFinished: finalWidth => imageCard.mergeOptions({
-            size: Math.max(96, Math.round(finalWidth / WidgetMetrics.scale))
+            size: Math.max(96, Math.round(finalWidth / root.widgetScale))
         }, true)
 
         CustomImageWidget {
@@ -680,7 +709,7 @@ Item {
         resizeMode: "diagonal"
         onUnlockedTapped: stickerW.openPicker()
         onResizeFinished: finalWidth => stickerCard.mergeOptions({
-            size: Math.max(88, Math.round(finalWidth / WidgetMetrics.scale))
+            size: Math.max(88, Math.round(finalWidth / root.widgetScale))
         }, true)
 
         StickerWidget {
@@ -702,7 +731,7 @@ Item {
         widgetContent: textW
         resizeMode: "horizontal"
         onResizeFinished: finalWidth => textCard.mergeOptions({
-            maxWidth: Math.max(140, Math.round(finalWidth / WidgetMetrics.scale))
+            maxWidth: Math.max(140, Math.round(finalWidth / root.widgetScale))
         }, true)
 
         CustomTextWidget {

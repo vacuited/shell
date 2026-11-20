@@ -95,7 +95,7 @@ void main() {
         distEdge = w - px;
         orthoLen = w;
     } else if (edge == 4) {
-        distEdge = mirrored ? abs(py - h * 0.5) : max(0.0, h * 0.5 - py);
+        distEdge = mirrored ? abs(py - h * 0.5) : (h * 0.5 - py);
     }
 
     float maxBarH = orthoLen * heightScale;
@@ -108,7 +108,7 @@ void main() {
         maxBarH *= 0.5;
     }
 
-    if (localOrtho > maxBarH + 28.0) {
+    if (localOrtho > maxBarH + 28.0 || localOrtho < -28.0) {
         fragColor = vec4(0.0);
         return;
     }
@@ -155,8 +155,8 @@ void main() {
     float barAlpha = 0.0;
     float glowAlpha = 0.0;
     if (barH > 0.5) {
-        float r = min(min(rounding, halfW), mirrored ? barH : barH * 0.99);
         float halfH = barH * 0.5;
+        float r = min(min(rounding, halfW), halfH);
         vec2 boxCenter = vec2(cx, halfH);
         vec2 p = vec2(spanPos, localOrtho) - boxCenter;
         float dist = sdRoundBox(p, vec2(halfW, halfH), r);

@@ -25,21 +25,22 @@ Item {
 
     property string selectedTab: FocusTimer.isStopwatch ? "stopwatch" : "focus"
 
-    readonly property real s: WidgetMetrics.scale
+    readonly property real s: Math.max(0.7, Math.min(1.5, Config.background.desktopWidgets.scale ?? 1.0))
     readonly property bool focusActive: !FocusTimer.isStopwatch
     readonly property bool stopwatchActive: FocusTimer.isStopwatch
     readonly property bool isTabRunning: selectedTab === "stopwatch"
         ? (stopwatchActive && FocusTimer.running)
         : (focusActive && FocusTimer.running)
     readonly property real ringProgress: selectedTab === "stopwatch"
-        ? (stopwatchActive ? ((FocusTimer.elapsedSecs % 60) / 60) : 0)
+        ? (stopwatchActive ? ((FocusTimer.elapsed % 60) / 60) : 0)
         : (focusActive ? FocusTimer.progress : 0)
     readonly property color accentColor: selectedTab === "stopwatch"
         ? Colours.palette.m3secondary
         : (FocusTimer.phase === "focus" ? Colours.palette.m3primary : Colours.palette.m3tertiary)
     readonly property string mainDisplay: selectedTab === "stopwatch"
         ? (stopwatchActive ? FocusTimer.display : "00:00")
-        : (focusActive ? FocusTimer.display : "25:00")
+        : (focusActive ? FocusTimer.display : `${String(FocusTimer.focusMins).padStart(2, "0")}:00`)
+    readonly property int focusDurationMins: Math.round((FocusTimer.sessionActive ? FocusTimer.phaseTotal : FocusTimer.durationSecs) / 60)
     readonly property string stateLabel: selectedTab === "stopwatch"
         ? ((stopwatchActive && FocusTimer.running) ? Tr.tr("Running") : Tr.tr("Stopwatch"))
         : (focusActive ? FocusTimer.phaseLabel : Tr.tr("Focus"))
@@ -122,8 +123,8 @@ Item {
                 CircularProgress {
                     anchors.fill: parent
                     value: root.ringProgress
-                    wavy: root.isTabRunning
-                    wavePaused: !root.isTabRunning
+                    wavy: root.visible && root.sizeMode === "1x1" && root.isTabRunning && !GameMode.enabled
+                    wavePaused: !wavy
                     strokeWidth: Math.max(5, Math.round(7 * root.s))
                     fgColour: root.accentColor
                     bgColour: WidgetMetrics.trackSurface
@@ -182,8 +183,8 @@ Item {
                 CircularProgress {
                     anchors.fill: parent
                     value: root.ringProgress
-                    wavy: root.isTabRunning
-                    wavePaused: !root.isTabRunning
+                    wavy: root.visible && root.sizeMode === "1x2" && root.isTabRunning && !GameMode.enabled
+                    wavePaused: !wavy
                     strokeWidth: Math.max(4, Math.round(6 * root.s))
                     fgColour: root.accentColor
                     bgColour: WidgetMetrics.trackSurface
@@ -230,8 +231,6 @@ Item {
                         text: Tr.tr("Focus")
                         isRound: true
                         type: root.selectedTab === "focus" ? TextButton.Filled : TextButton.Tonal
-                        isToggle: true
-                        checked: root.selectedTab === "focus"
                         verticalPadding: Tokens.padding.extraSmall
                         horizontalPadding: Tokens.padding.small
                         onClicked: root.selectedTab = "focus"
@@ -242,8 +241,6 @@ Item {
                         text: Tr.tr("Watch")
                         isRound: true
                         type: root.selectedTab === "stopwatch" ? TextButton.Filled : TextButton.Tonal
-                        isToggle: true
-                        checked: root.selectedTab === "stopwatch"
                         verticalPadding: Tokens.padding.extraSmall
                         horizontalPadding: Tokens.padding.small
                         onClicked: root.selectedTab = "stopwatch"
@@ -257,7 +254,7 @@ Item {
 
                     StyledText {
                         Layout.fillWidth: true
-                        text: `${Math.round(FocusTimer.durationSecs / 60)} min` + (FocusTimer.completedSessions > 0 ? ` · #${FocusTimer.completedSessions + 1}` : "")
+                        text: `${root.focusDurationMins} min` + (FocusTimer.completedSessions > 0 ? ` · #${FocusTimer.completedSessions + 1}` : "")
                         font: Tokens.font.label.small
                         color: Colours.palette.m3onSurfaceVariant
                         elide: Text.ElideRight
@@ -266,14 +263,14 @@ Item {
                     IconButton {
                         icon: "remove"
                         type: IconButton.Text
-                        disabled: !root.focusActive || (FocusTimer.running && !FocusTimer.sessionActive)
+                        disabled: !root.focusActive
                         onClicked: root.stepDuration(-5)
                     }
 
                     IconButton {
                         icon: "add"
                         type: IconButton.Text
-                        disabled: !root.focusActive || (FocusTimer.running && !FocusTimer.sessionActive)
+                        disabled: !root.focusActive
                         onClicked: root.stepDuration(5)
                     }
                 }
@@ -335,8 +332,6 @@ Item {
                     text: Tr.tr("Focus")
                     isRound: true
                     type: root.selectedTab === "focus" ? TextButton.Filled : TextButton.Tonal
-                    isToggle: true
-                    checked: root.selectedTab === "focus"
                     verticalPadding: Tokens.padding.extraSmall
                     horizontalPadding: Tokens.padding.extraSmall
                     onClicked: root.selectedTab = "focus"
@@ -347,8 +342,6 @@ Item {
                     text: Tr.tr("Watch")
                     isRound: true
                     type: root.selectedTab === "stopwatch" ? TextButton.Filled : TextButton.Tonal
-                    isToggle: true
-                    checked: root.selectedTab === "stopwatch"
                     verticalPadding: Tokens.padding.extraSmall
                     horizontalPadding: Tokens.padding.extraSmall
                     onClicked: root.selectedTab = "stopwatch"
@@ -367,8 +360,8 @@ Item {
                     CircularProgress {
                         anchors.fill: parent
                         value: root.ringProgress
-                        wavy: root.isTabRunning
-                        wavePaused: !root.isTabRunning
+                        wavy: root.visible && root.sizeMode === "2x1" && root.isTabRunning && !GameMode.enabled
+                        wavePaused: !wavy
                         strokeWidth: Math.max(5, Math.round(7 * root.s))
                         fgColour: root.accentColor
                         bgColour: WidgetMetrics.trackSurface
@@ -404,14 +397,14 @@ Item {
                 IconButton {
                     icon: "remove"
                     type: IconButton.Tonal
-                    disabled: !root.focusActive || (FocusTimer.running && !FocusTimer.sessionActive)
+                    disabled: !root.focusActive
                     onClicked: root.stepDuration(-5)
                 }
 
                 StyledText {
                     Layout.fillWidth: true
                     horizontalAlignment: Text.AlignHCenter
-                    text: `${Math.round(FocusTimer.durationSecs / 60)}m`
+                    text: `${root.focusDurationMins}m`
                     font: Tokens.font.label.builders.medium.weight(Font.DemiBold).build()
                     color: Colours.palette.m3onSurface
                 }
@@ -419,7 +412,7 @@ Item {
                 IconButton {
                     icon: "add"
                     type: IconButton.Tonal
-                    disabled: !root.focusActive || (FocusTimer.running && !FocusTimer.sessionActive)
+                    disabled: !root.focusActive
                     onClicked: root.stepDuration(5)
                 }
             }
@@ -485,8 +478,6 @@ Item {
                         text: Tr.tr("Focus")
                         isRound: true
                         type: root.selectedTab === "focus" ? TextButton.Filled : TextButton.Tonal
-                        isToggle: true
-                        checked: root.selectedTab === "focus"
                         verticalPadding: Tokens.padding.extraSmall
                         horizontalPadding: Tokens.padding.small
                         onClicked: root.selectedTab = "focus"
@@ -497,8 +488,6 @@ Item {
                         text: Tr.tr("Stopwatch")
                         isRound: true
                         type: root.selectedTab === "stopwatch" ? TextButton.Filled : TextButton.Tonal
-                        isToggle: true
-                        checked: root.selectedTab === "stopwatch"
                         verticalPadding: Tokens.padding.extraSmall
                         horizontalPadding: Tokens.padding.small
                         onClicked: root.selectedTab = "stopwatch"
@@ -517,8 +506,8 @@ Item {
                         CircularProgress {
                             anchors.fill: parent
                             value: root.ringProgress
-                            wavy: root.isTabRunning
-                            wavePaused: !root.isTabRunning
+                            wavy: root.visible && (root.sizeMode === "2x2" || root.sizeMode === "2x3") && root.isTabRunning && !GameMode.enabled
+                            wavePaused: !wavy
                             strokeWidth: Math.max(6, Math.round(9 * root.s))
                             fgColour: root.accentColor
                             bgColour: WidgetMetrics.trackSurface
@@ -577,7 +566,7 @@ Item {
                             Layout.preferredHeight: Math.round(24 * root.s)
                             radius: Math.round(12 * root.s)
                             color: WidgetMetrics.innerSurfaceStrong
-                            opacity: (!root.focusActive || (FocusTimer.running && !FocusTimer.sessionActive)) ? 0.45 : 1.0
+                            opacity: !root.focusActive ? 0.45 : 1.0
 
                             MaterialIcon {
                                 anchors.centerIn: parent
@@ -587,7 +576,7 @@ Item {
                             }
 
                             StateLayer {
-                                enabled: root.locked && root.focusActive && !(FocusTimer.running && !FocusTimer.sessionActive)
+                                enabled: root.locked && root.focusActive
                                 onClicked: root.stepDuration(-5)
                             }
                         }
@@ -595,7 +584,7 @@ Item {
                         StyledText {
                             Layout.fillWidth: true
                             horizontalAlignment: Text.AlignHCenter
-                            text: Tr.tr("%1 min").arg(Math.round(FocusTimer.durationSecs / 60))
+                            text: Tr.tr("%1 min").arg(root.focusDurationMins)
                             font: Tokens.font.label.builders.medium.weight(Font.DemiBold).build()
                             color: Colours.palette.m3onSurface
                         }
@@ -605,7 +594,7 @@ Item {
                             Layout.preferredHeight: Math.round(24 * root.s)
                             radius: Math.round(12 * root.s)
                             color: WidgetMetrics.innerSurfaceStrong
-                            opacity: (!root.focusActive || (FocusTimer.running && !FocusTimer.sessionActive)) ? 0.45 : 1.0
+                            opacity: !root.focusActive ? 0.45 : 1.0
 
                             MaterialIcon {
                                 anchors.centerIn: parent
@@ -615,7 +604,7 @@ Item {
                             }
 
                             StateLayer {
-                                enabled: root.locked && root.focusActive && !(FocusTimer.running && !FocusTimer.sessionActive)
+                                enabled: root.locked && root.focusActive
                                 onClicked: root.stepDuration(5)
                             }
                         }

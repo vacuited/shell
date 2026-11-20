@@ -17,8 +17,29 @@ import qs.utils
 Item {
     id: root
 
-    property int rightView: 0 // 0 = Focus Overview Bento, 1 = Digital Wellbeing
+    property int rightView: 0 // 0 = Study Breakdown, 1 = Consistency, 2 = Screen Time
     property bool initialized: false
+    property bool presetsOpen: false
+    property bool reassigningUntagged: false
+    property var hoveredHeatmapDay: null
+
+    readonly property var timerPresets: [
+        { label: "25m", fM: 25, sM: 5 },
+        { label: "50m", fM: 50, sM: 10 },
+        { label: "1h", fM: 60, sM: 10 },
+        { label: "2h", fM: 120, sM: 15 },
+        { label: "3h", fM: 180, sM: 15 }
+    ]
+
+    readonly property var heatmapWeeksData: {
+        void FocusLedger.summaryRevision;
+        return FocusLedger.heatmapWeeks(16);
+    }
+
+    readonly property var allTimeSubjects: {
+        void FocusLedger.summaryRevision;
+        return FocusLedger.subjectBreakdownForScope(8, 5);
+    }
 
     readonly property list<color> subjectColors: [
         Colours.palette.m3primary,
@@ -50,7 +71,7 @@ Item {
     // Focus Breakdown Chart State & Helpers
     // ==========================================
     readonly property int focusTopN: 5
-    readonly property int focusMaxScopeOffset: 7 // 0 = This Week, 1 = Today, 2..7 = past 6 days
+    readonly property int focusMaxScopeOffset: 8 // 0 = This Week, 1 = Today, 2..7 = past 6 days, 8 = All Time
     property int focusScopeOffset: 0
     property bool focusBarsReady: true
     property bool focusAllowAppear: false
@@ -59,6 +80,8 @@ Item {
     property int focusMaxSeconds: 1
 
     readonly property string focusScopeTitle: {
+        void FocusLedger.todayKey;
+        if (focusScopeOffset >= 8) return Tr.tr("All Time");
         if (focusScopeOffset <= 0) return Tr.tr("This Week");
         if (focusScopeOffset === 1) return Tr.tr("Today");
         if (focusScopeOffset === 2) return Tr.tr("Yesterday");
@@ -135,6 +158,7 @@ Item {
         const clamped = Math.max(0, Math.min(nextOffset, focusMaxScopeOffset));
         if (clamped === focusScopeOffset)
             return;
+        reassigningUntagged = false;
         focusScopeOffset = clamped;
         replaceFocusModel(fetchFocusSubjects(clamped), true);
     }
@@ -166,8 +190,14 @@ Item {
         return `${y}-${m}-${day}`;
     }
 
-    readonly property string stSelectedDay: dayKeyForOffset(stDayOffset)
-    readonly property string stDayTitle: stDayOffset === 0 ? Tr.tr("Today") : Qt.formatDate(dateForOffset(stDayOffset), "dddd, MMMM d")
+    readonly property string stSelectedDay: {
+        void ScreenTime.todayKey;
+        return dayKeyForOffset(stDayOffset);
+    }
+    readonly property string stDayTitle: {
+        void ScreenTime.todayKey;
+        return stDayOffset === 0 ? Tr.tr("Today") : Qt.formatDate(dateForOffset(stDayOffset), "dddd, MMMM d");
+    }
     readonly property bool stIsEmpty: stAppsModel.count === 0 || stDayTotalSeconds <= 0
 
     ListModel {
@@ -214,9 +244,11 @@ Item {
     }
 
     function totalsFrom(list: var): void {
-        let total = 0;
-        for (let i = 0; i < list.length; i++)
-            total += list[i].seconds;
+        let total = ScreenTime.dayTotalSecs(dayKeyForOffset(stDayOffset));
+        if (total <= 0) {
+            for (let i = 0; i < list.length; i++)
+                total += list[i].seconds;
+        }
         stDayTotalSeconds = total;
         stMaxSeconds = list.length > 0 ? list[0].seconds : 1;
     }
@@ -278,10 +310,19 @@ Item {
     }
 
     onRightViewChanged: {
-        if (rightView === 1) {
+        if (rightView === 2) {
             root.loadApps(false);
-        } else {
+        } else if (rightView === 0) {
             root.loadFocusSubjects(false);
+        }
+    }
+
+    onVisibleChanged: {
+        if (visible) {
+            if (rightView === 2)
+                root.loadApps(false);
+            else if (rightView === 0)
+                root.loadFocusSubjects(false);
         }
     }
 
@@ -289,14 +330,14 @@ Item {
         id: stQuietRefresh
         interval: 3000
         repeat: true
-        running: root.rightView === 1
+        running: root.rightView === 2 && root.visible
         onTriggered: root.loadApps(false)
     }
 
     Connections {
         target: ScreenTime
         function onRevisionChanged(): void {
-            if (root.rightView === 1)
+            if (root.rightView === 2)
                 root.loadApps(false);
         }
     }
@@ -350,7 +391,7 @@ Item {
                         color: FocusTimer.phase === "focus" ? Colours.palette.m3primaryContainer : Colours.palette.m3tertiaryContainer
 
                         animationEasing: Tokens.anim.expressiveDefaultSpatial
-                        animationDuration: Tokens.anim.durations.expressiveDefaultSpatial * Tokens.anim.durations.scale
+                        animationDuration: Tokens.anim.durations.expressiveDefaultSpatial
 
                         Behavior on color {
                             enabled: root.initialized
@@ -375,14 +416,14 @@ Item {
                         Layout.fillWidth: true
                     }
 
-                    // Strict Shield Quick Toggle Button
+                    // Timer Presets Quick Toggle Button
                     StyledRect {
-                        id: shieldToggleBtn
+                        id: presetToggleBtn
 
                         implicitWidth: 32
                         implicitHeight: 32
                         radius: Tokens.rounding.full
-                        color: ScreenTime.strictShield ? Colours.palette.m3tertiaryContainer : Colours.tPalette.m3surfaceContainerHigh
+                        color: root.presetsOpen ? Colours.palette.m3primaryContainer : Colours.tPalette.m3surfaceContainerHigh
 
                         Behavior on color {
                             enabled: root.initialized
@@ -391,15 +432,15 @@ Item {
 
                         StateLayer {
                             radius: Tokens.rounding.full
-                            color: ScreenTime.strictShield ? Colours.palette.m3onTertiaryContainer : Colours.palette.m3onSurface
-                            onClicked: ScreenTime.setStrictShield(!ScreenTime.strictShield)
+                            color: root.presetsOpen ? Colours.palette.m3onPrimaryContainer : Colours.palette.m3onSurface
+                            onClicked: root.presetsOpen = !root.presetsOpen
                         }
 
                         MaterialIcon {
                             anchors.centerIn: parent
-                            text: ScreenTime.strictShield ? "gpp_good" : "shield"
+                            text: "tune"
                             fontStyle: Tokens.font.icon.small
-                            color: ScreenTime.strictShield ? Colours.palette.m3onTertiaryContainer : Colours.palette.m3onSurfaceVariant
+                            color: root.presetsOpen ? Colours.palette.m3onPrimaryContainer : Colours.palette.m3onSurfaceVariant
 
                             Behavior on color {
                                 enabled: root.initialized
@@ -490,6 +531,69 @@ Item {
                                 enabled: root.initialized
                                 Anim {
                                     type: Anim.DefaultSpatial
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 1B. Collapsible Timer Presets Strip (25m / 50m / 1h / 2h / 3h)
+                Item {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: root.presetsOpen ? 30 : 0
+                    opacity: root.presetsOpen ? 1 : 0
+                    visible: Layout.preferredHeight > 0.5
+                    clip: true
+
+                    Behavior on Layout.preferredHeight {
+                        enabled: root.initialized
+                        Anim {
+                            type: Anim.Standard
+                        }
+                    }
+
+                    Behavior on opacity {
+                        enabled: root.initialized
+                        Anim {
+                            type: Anim.FastEffects
+                        }
+                    }
+
+                    RowLayout {
+                        anchors.fill: parent
+                        spacing: Tokens.spacing.extraSmall
+
+                        Repeater {
+                            model: root.timerPresets
+
+                            delegate: StyledRect {
+                                id: presetPill
+
+                                required property var modelData
+                                readonly property bool active: !FocusTimer.isStopwatch && GlobalConfig.focus.focusMins === modelData.fM
+                                readonly property bool lockedOut: FocusTimer.running || FocusTimer.sessionActive
+
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 26
+                                radius: Tokens.rounding.full
+                                color: active ? Colours.palette.m3primaryContainer : Colours.tPalette.m3surfaceContainerHigh
+                                opacity: lockedOut ? 0.45 : 1.0
+
+                                StateLayer {
+                                    radius: Tokens.rounding.full
+                                    color: presetPill.active ? Colours.palette.m3onPrimaryContainer : Colours.palette.m3onSurface
+                                    disabled: presetPill.lockedOut
+                                    onClicked: {
+                                        FocusTimer.applyPreset(presetPill.modelData.fM, presetPill.modelData.sM);
+                                        root.presetsOpen = false;
+                                    }
+                                }
+
+                                StyledText {
+                                    anchors.centerIn: parent
+                                    text: presetPill.modelData.label
+                                    font: Tokens.font.label.builders.small.weight(presetPill.active ? Font.Bold : Font.Medium).build()
+                                    color: presetPill.active ? Colours.palette.m3onPrimaryContainer : Colours.palette.m3onSurfaceVariant
                                 }
                             }
                         }
@@ -934,22 +1038,22 @@ Item {
         }
 
         // ==========================================
-        // 2. MIDDLE COLUMN: Persistent Streak + Daily Goal Stack (328px)
+        // 2. MIDDLE COLUMN: Compact 3-Card Stack (Streak + Goal + Countdowns, 328px)
         // ==========================================
         ColumnLayout {
             Layout.preferredWidth: 328
             Layout.minimumWidth: 328
             Layout.maximumWidth: 328
             Layout.fillHeight: true
-            spacing: Tokens.spacing.medium
+            spacing: Tokens.spacing.small
 
             // 2A. Streak & 7-Day Card
             StyledRect {
                 id: streakCard
 
                 Layout.fillWidth: true
-                Layout.preferredHeight: 234
-                Layout.maximumHeight: 234
+                Layout.preferredHeight: 162
+                Layout.maximumHeight: 162
                 radius: Tokens.rounding.extraLarge
                 color: Colours.tPalette.m3surfaceContainer
 
@@ -959,8 +1063,8 @@ Item {
 
                 ColumnLayout {
                     anchors.fill: parent
-                    anchors.margins: Tokens.padding.large
-                    spacing: Tokens.spacing.small
+                    anchors.margins: Tokens.padding.medium
+                    spacing: 6
 
                     // Top Row: Title + Rest Day Toggle
                     RowLayout {
@@ -976,7 +1080,7 @@ Item {
 
                         StyledText {
                             text: Tr.tr("Streak")
-                            font: Tokens.font.title.medium
+                            font: Tokens.font.title.small
                             color: Colours.palette.m3onSurface
                         }
 
@@ -986,7 +1090,7 @@ Item {
 
                         // Rest Day Toggle Pill
                         StyledRect {
-                            implicitHeight: 26
+                            implicitHeight: 24
                             implicitWidth: restRow.implicitWidth + Tokens.padding.small * 2
                             radius: Tokens.rounding.full
                             color: FocusLedger.todayRest ? Colours.palette.m3tertiaryContainer : Colours.tPalette.m3surfaceContainerHigh
@@ -1027,18 +1131,18 @@ Item {
                     RowLayout {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        spacing: Tokens.spacing.medium
+                        spacing: Tokens.spacing.small
 
                         ColumnLayout {
                             Layout.fillWidth: true
-                            spacing: 2
+                            spacing: 1
 
                             StyledText {
                                 Layout.fillWidth: true
                                 text: FocusLedger.streak > 0
                                     ? Tr.tr("%1 days in a row").arg(FocusLedger.streak)
                                     : Tr.tr("Start a streak today")
-                                font: Tokens.font.body.medium
+                                font: Tokens.font.body.small
                                 color: FocusLedger.streak > 0 ? Colours.palette.m3primary : Colours.palette.m3onSurface
                                 elide: Text.ElideRight
                             }
@@ -1046,7 +1150,7 @@ Item {
                             StyledText {
                                 Layout.fillWidth: true
                                 text: Tr.tr("%1 sessions completed today").arg(FocusLedger.todaySessions)
-                                font: Tokens.font.body.small
+                                font: Tokens.font.label.small
                                 color: Colours.palette.m3onSurfaceVariant
                                 elide: Text.ElideRight
                             }
@@ -1054,7 +1158,7 @@ Item {
 
                         // Signature Caelestia HeroCard MaterialShape Badge
                         MaterialShape {
-                            implicitSize: 54
+                            implicitSize: 44
                             color: Colours.palette.m3secondaryContainer
                             shape: {
                                 if (FocusLedger.streak >= 7)
@@ -1065,7 +1169,7 @@ Item {
                             }
 
                             animationEasing: Tokens.anim.expressiveDefaultSpatial
-                            animationDuration: Tokens.anim.durations.expressiveDefaultSpatial * Tokens.anim.durations.scale
+                            animationDuration: Tokens.anim.durations.expressiveDefaultSpatial
 
                             Behavior on color {
                                 CAnim {}
@@ -1075,7 +1179,7 @@ Item {
                                 anchors.centerIn: parent
                                 text: `${FocusLedger.streak}d`
                                 color: Colours.palette.m3primary
-                                font: Tokens.font.headline.builders.small.width(50).build()
+                                font: Tokens.font.title.builders.medium.width(50).build()
                             }
                         }
                     }
@@ -1097,12 +1201,12 @@ Item {
                                 readonly property bool isToday: modelData === FocusLedger.todayKey
 
                                 Layout.fillWidth: true
-                                spacing: 4
+                                spacing: 2
 
                                 Item {
                                     Layout.alignment: Qt.AlignHCenter
-                                    implicitWidth: 30
-                                    implicitHeight: 30
+                                    implicitWidth: 26
+                                    implicitHeight: 26
 
                                     HoverHandler {
                                         id: dayCircleHover
@@ -1110,7 +1214,7 @@ Item {
 
                                     MaterialShape {
                                         anchors.centerIn: parent
-                                        implicitSize: dayCol.isToday ? 30 : 26
+                                        implicitSize: dayCol.isToday ? 26 : 22
                                         shape: dayCol.dayState === "done"
                                             ? MaterialShape.Cookie6Sided
                                             : (dayCol.isToday ? MaterialShape.Sunny : MaterialShape.Circle)
@@ -1121,7 +1225,7 @@ Item {
                                                 : (dayCol.isToday ? Colours.palette.m3primaryContainer : Colours.tPalette.m3surfaceContainerHigh))
 
                                         animationEasing: Tokens.anim.expressiveDefaultSpatial
-                                        animationDuration: Tokens.anim.durations.expressiveDefaultSpatial * Tokens.anim.durations.scale
+                                        animationDuration: Tokens.anim.durations.expressiveDefaultSpatial
 
                                         Behavior on color {
                                             CAnim {}
@@ -1131,8 +1235,8 @@ Item {
                                     StreakFlame {
                                         anchors.centerIn: parent
                                         visible: dayCol.dayState === "done"
-                                        implicitWidth: 17
-                                        implicitHeight: 17
+                                        implicitWidth: 15
+                                        implicitHeight: 15
                                         outerColor: Colours.palette.m3onTertiaryContainer
                                         innerColor: Colours.palette.m3tertiaryContainer
                                         autoplay: dayCol.dayState === "done" && (dayCol.isToday || dayCircleHover.hovered || streakCardHover.hovered)
@@ -1150,7 +1254,7 @@ Item {
                                 StyledText {
                                     Layout.alignment: Qt.AlignHCenter
                                     text: root.dayInitials[dayCol.index] || ""
-                                    font: Tokens.font.body.builders.small.weight(dayCol.isToday ? Font.Bold : Font.Medium).build()
+                                    font: Tokens.font.label.builders.small.weight(dayCol.isToday ? Font.Bold : Font.Medium).build()
                                     color: dayCol.isToday
                                         ? Colours.palette.m3primary
                                         : ((dayCol.index === 5 || dayCol.index === 6) ? Colours.palette.m3tertiary : Colours.palette.m3onSurfaceVariant)
@@ -1161,7 +1265,7 @@ Item {
                 }
             }
 
-            // 2B. Daily Goal Card (StorageCard.qml-style Horizontal Layout)
+            // 2B. Daily Goal Card (Compact Horizontal Layout)
             StyledRect {
                 id: dailyGoalCard
 
@@ -1171,19 +1275,20 @@ Item {
                 readonly property int remainingSecs: Math.max(0, goalSecs - FocusLedger.todaySecs)
 
                 Layout.fillWidth: true
-                Layout.fillHeight: true
+                Layout.preferredHeight: 136
+                Layout.maximumHeight: 136
                 color: Colours.tPalette.m3surfaceContainer
                 radius: Tokens.rounding.extraLarge
 
                 RowLayout {
                     anchors.fill: parent
-                    anchors.margins: Tokens.padding.large
-                    spacing: Tokens.spacing.large
+                    anchors.margins: Tokens.padding.medium
+                    spacing: Tokens.spacing.medium
 
                     CircularProgress {
                         Layout.alignment: Qt.AlignVCenter
-                        implicitSize: 132
-                        strokeWidth: 7
+                        implicitSize: 96
+                        strokeWidth: 6
                         startAngle: -225
                         sweepAngle: 270
                         fgColour: dailyGoalCard.accent
@@ -1203,20 +1308,20 @@ Item {
                                 text: "track_changes"
                                 fill: 1
                                 color: dailyGoalCard.accent
-                                fontStyle: Tokens.font.icon.medium
+                                fontStyle: Tokens.font.icon.small
                             }
 
                             StyledText {
                                 Layout.alignment: Qt.AlignHCenter
                                 text: Strings.percentOne(dailyGoalCard.percentage)
-                                font: Tokens.font.title.builders.large.width(90).build()
+                                font: Tokens.font.title.builders.medium.width(90).build()
                                 color: dailyGoalCard.accent
                             }
 
                             StyledText {
                                 Layout.alignment: Qt.AlignHCenter
                                 text: Tr.tr("Goal")
-                                font: Tokens.font.body.small
+                                font: Tokens.font.label.small
                                 color: Colours.palette.m3onSurfaceVariant
                             }
                         }
@@ -1225,12 +1330,12 @@ Item {
                     ColumnLayout {
                         Layout.fillWidth: true
                         Layout.alignment: Qt.AlignVCenter
-                        spacing: Tokens.spacing.small
+                        spacing: 3
 
                         StyledText {
                             Layout.fillWidth: true
                             text: Tr.tr("Daily Goal")
-                            font: Tokens.font.title.medium
+                            font: Tokens.font.title.small
                             color: Colours.palette.m3onSurface
                             elide: Text.ElideRight
                         }
@@ -1238,34 +1343,23 @@ Item {
                         StyledText {
                             Layout.fillWidth: true
                             text: `${FocusLedger.fmt(FocusLedger.todaySecs)} / ${FocusLedger.fmt(dailyGoalCard.goalSecs)}`
-                            font: Tokens.font.body.builders.large.weight(Font.DemiBold).build()
+                            font: Tokens.font.body.builders.medium.weight(Font.DemiBold).build()
                             color: dailyGoalCard.accent
                             elide: Text.ElideRight
                         }
 
-                        RowLayout {
+                        StyledText {
                             Layout.fillWidth: true
-                            spacing: 4
-
-                            MaterialIcon {
-                                text: "task_alt"
-                                fontStyle: Tokens.font.icon.small
-                                color: Colours.palette.m3onSurfaceVariant
-                            }
-
-                            StyledText {
-                                Layout.fillWidth: true
-                                text: Tr.tr("%1 sessions today").arg(FocusLedger.todaySessions)
-                                font: Tokens.font.body.small
-                                color: Colours.palette.m3onSurfaceVariant
-                                elide: Text.ElideRight
-                            }
+                            text: Tr.tr("%1 sessions today").arg(FocusLedger.todaySessions)
+                            font: Tokens.font.label.small
+                            color: Colours.palette.m3onSurfaceVariant
+                            elide: Text.ElideRight
                         }
 
                         StyledRect {
                             radius: Tokens.rounding.full
                             color: Colours.tPalette.m3surfaceContainerHigh
-                            implicitHeight: 24
+                            implicitHeight: 22
                             implicitWidth: Math.min(parent.width, goalRemRow.implicitWidth + Tokens.padding.small * 2)
 
                             RowLayout {
@@ -1286,6 +1380,178 @@ Item {
                                         : Tr.tr("%1 left").arg(FocusLedger.fmt(dailyGoalCard.remainingSecs))
                                     font: Tokens.font.label.small
                                     color: dailyGoalCard.remainingSecs <= 0 ? Colours.palette.m3primary : Colours.palette.m3onSurfaceVariant
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 2C. Exam & Milestone Countdowns Card
+            StyledRect {
+                id: countdownsCard
+
+                readonly property var items: {
+                    void FocusLedger.revision;
+                    return FocusLedger.countdowns || [];
+                }
+
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                radius: Tokens.rounding.extraLarge
+                color: Colours.tPalette.m3surfaceContainer
+
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: Tokens.padding.medium
+                    spacing: 6
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Tokens.spacing.small
+
+                        MaterialIcon {
+                            text: "event_upcoming"
+                            fill: 1
+                            color: Colours.palette.m3secondary
+                            fontStyle: Tokens.font.icon.medium
+                        }
+
+                        StyledText {
+                            text: Tr.tr("Countdowns")
+                            font: Tokens.font.title.small
+                            color: Colours.palette.m3onSurface
+                        }
+
+                        Item {
+                            Layout.fillWidth: true
+                        }
+
+                        StyledRect {
+                            visible: countdownsCard.items.length > 0
+                            implicitHeight: 20
+                            implicitWidth: cdCountTxt.implicitWidth + Tokens.padding.small * 2
+                            radius: Tokens.rounding.full
+                            color: Colours.tPalette.m3surfaceContainerHigh
+
+                            StyledText {
+                                id: cdCountTxt
+                                anchors.centerIn: parent
+                                text: `${countdownsCard.items.length}`
+                                font: Tokens.font.label.small
+                                color: Colours.palette.m3onSurfaceVariant
+                            }
+                        }
+                    }
+
+                    Item {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+
+                        StyledText {
+                            anchors.centerIn: parent
+                            visible: countdownsCard.items.length === 0
+                            text: Tr.tr("Add countdowns in Nexus")
+                            font: Tokens.font.body.small
+                            color: Colours.palette.m3onSurfaceVariant
+                        }
+
+                        Flickable {
+                            anchors.fill: parent
+                            visible: countdownsCard.items.length > 0
+                            contentWidth: width
+                            contentHeight: cdCol.implicitHeight
+                            boundsBehavior: Flickable.StopAtBounds
+                            clip: true
+
+                            ColumnLayout {
+                                id: cdCol
+
+                                width: parent.width
+                                spacing: 6
+
+                                Repeater {
+                                    model: countdownsCard.items
+
+                                    delegate: StyledRect {
+                                        id: cdItem
+
+                                        required property var modelData
+                                        required property int index
+
+                                        readonly property int daysLeft: FocusLedger.daysUntil(modelData?.date ?? "")
+                                        readonly property int absDays: Math.abs(daysLeft)
+                                        readonly property int weeksPart: Math.floor(absDays / 7)
+                                        readonly property int remPart: absDays % 7
+                                        readonly property bool isPrimary: index === 0
+
+                                        Layout.fillWidth: true
+                                        implicitHeight: 50
+                                        radius: Tokens.rounding.large
+                                        color: Colours.tPalette.m3surfaceContainerHigh
+
+                                        RowLayout {
+                                            anchors.fill: parent
+                                            anchors.leftMargin: Tokens.padding.small
+                                            anchors.rightMargin: Tokens.padding.medium
+                                            spacing: Tokens.spacing.small
+
+                                            MaterialShape {
+                                                implicitSize: 32
+                                                shape: cdItem.isPrimary ? MaterialShape.Sunny : MaterialShape.Cookie6Sided
+                                                color: cdItem.isPrimary ? Colours.palette.m3primaryContainer : Colours.palette.m3tertiaryContainer
+
+                                                MaterialIcon {
+                                                    anchors.centerIn: parent
+                                                    text: cdItem.isPrimary ? "school" : "flag"
+                                                    fontStyle: Tokens.font.icon.small
+                                                    color: cdItem.isPrimary ? Colours.palette.m3onPrimaryContainer : Colours.palette.m3onTertiaryContainer
+                                                }
+                                            }
+
+                                            ColumnLayout {
+                                                Layout.fillWidth: true
+                                                spacing: 0
+
+                                                StyledText {
+                                                    Layout.fillWidth: true
+                                                    text: cdItem.modelData?.title ?? ""
+                                                    font: Tokens.font.label.builders.medium.weight(Font.DemiBold).build()
+                                                    color: Colours.palette.m3onSurface
+                                                    elide: Text.ElideRight
+                                                }
+
+                                                StyledText {
+                                                    Layout.fillWidth: true
+                                                    text: FocusLedger.formatDateShort(cdItem.modelData?.date ?? "")
+                                                    font: Tokens.font.label.small
+                                                    color: Colours.palette.m3onSurfaceVariant
+                                                    elide: Text.ElideRight
+                                                }
+                                            }
+
+                                            ColumnLayout {
+                                                spacing: 0
+
+                                                StyledText {
+                                                    Layout.alignment: Qt.AlignRight
+                                                    text: cdItem.daysLeft > 0
+                                                        ? `${cdItem.daysLeft}d`
+                                                        : (cdItem.daysLeft === 0 ? Tr.tr("Today") : `-${cdItem.absDays}d`)
+                                                    font: Tokens.font.title.builders.small.weight(Font.Bold).build()
+                                                    color: cdItem.isPrimary ? Colours.palette.m3primary : Colours.palette.m3tertiary
+                                                }
+
+                                                StyledText {
+                                                    Layout.alignment: Qt.AlignRight
+                                                    visible: cdItem.daysLeft > 0
+                                                    text: cdItem.weeksPart > 0 ? `${cdItem.weeksPart}w ${cdItem.remPart}d` : `${cdItem.remPart}d`
+                                                    font: Tokens.font.label.small
+                                                    color: Colours.palette.m3onSurfaceVariant
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -1318,13 +1584,15 @@ Item {
                     spacing: Tokens.spacing.small
 
                     MaterialIcon {
-                        text: root.rightView === 0 ? "school" : "monitoring"
+                        text: root.rightView === 0 ? "school" : (root.rightView === 1 ? "calendar_month" : "monitoring")
                         color: Colours.palette.m3primary
                         fontStyle: Tokens.font.icon.medium
                     }
 
                     StyledText {
-                        text: root.rightView === 0 ? Tr.tr("Study Breakdown") : Tr.tr("Screen Time")
+                        text: root.rightView === 0
+                            ? Tr.tr("Study Breakdown")
+                            : (root.rightView === 1 ? Tr.tr("Consistency") : Tr.tr("Screen Time"))
                         font: Tokens.font.title.medium
                         color: Colours.palette.m3onSurface
                     }
@@ -1432,6 +1700,122 @@ Item {
                             MetricPill {
                                 icon: "task_alt"
                                 text: Tr.tr("%1 sessions").arg(FocusLedger.weekSessions)
+                            }
+                        }
+
+                        // Optional Reassign Untagged Bar (appears when clicking the Untagged column)
+                        Item {
+                            readonly property bool shown: root.reassigningUntagged && GlobalConfig.focus.subjects.length > 0
+
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: shown ? 32 : 0
+                            opacity: shown ? 1 : 0
+                            visible: Layout.preferredHeight > 0.5
+                            clip: true
+
+                            Behavior on Layout.preferredHeight {
+                                enabled: root.initialized
+                                Anim {
+                                    type: Anim.Standard
+                                }
+                            }
+
+                            Behavior on opacity {
+                                enabled: root.initialized
+                                Anim {
+                                    type: Anim.FastEffects
+                                }
+                            }
+
+                            StyledRect {
+                                anchors.fill: parent
+                                radius: Tokens.rounding.full
+                                color: Colours.tPalette.m3surfaceContainerHigh
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: Tokens.padding.medium
+                                    anchors.rightMargin: Tokens.padding.extraSmall
+                                    spacing: Tokens.spacing.small
+
+                                    MaterialIcon {
+                                        text: "swap_horiz"
+                                        fontStyle: Tokens.font.icon.small
+                                        color: Colours.palette.m3primary
+                                    }
+
+                                    StyledText {
+                                        text: Tr.tr("Move Untagged:")
+                                        font: Tokens.font.label.small
+                                        color: Colours.palette.m3onSurfaceVariant
+                                    }
+
+                                    Flickable {
+                                        Layout.fillWidth: true
+                                        Layout.fillHeight: true
+                                        contentWidth: reassignSubjRow.implicitWidth
+                                        flickableDirection: Flickable.HorizontalFlick
+                                        clip: true
+
+                                        RowLayout {
+                                            id: reassignSubjRow
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            spacing: Tokens.spacing.extraSmall
+
+                                            Repeater {
+                                                model: GlobalConfig.focus.subjects
+
+                                                delegate: StyledRect {
+                                                    id: moveTargetChip
+
+                                                    required property string modelData
+
+                                                    implicitWidth: moveChipTxt.implicitWidth + Tokens.padding.small * 2
+                                                    implicitHeight: 22
+                                                    radius: Tokens.rounding.full
+                                                    color: Colours.palette.m3primaryContainer
+
+                                                    StateLayer {
+                                                        radius: Tokens.rounding.full
+                                                        color: Colours.palette.m3onPrimaryContainer
+                                                        onClicked: {
+                                                            FocusLedger.reassignSubjectForScope(root.focusScopeOffset, "__none__", moveTargetChip.modelData);
+                                                            root.reassigningUntagged = false;
+                                                        }
+                                                    }
+
+                                                    StyledText {
+                                                        id: moveChipTxt
+                                                        anchors.centerIn: parent
+                                                        text: moveTargetChip.modelData
+                                                        font: Tokens.font.label.small
+                                                        color: Colours.palette.m3onPrimaryContainer
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    StyledRect {
+                                        implicitWidth: 24
+                                        implicitHeight: 24
+                                        radius: Tokens.rounding.full
+                                        color: "transparent"
+
+                                        StateLayer {
+                                            radius: Tokens.rounding.full
+                                            color: Colours.palette.m3onSurface
+                                            onClicked: root.reassigningUntagged = false
+                                        }
+
+                                        MaterialIcon {
+                                            anchors.centerIn: parent
+                                            text: "close"
+                                            fontStyle: Tokens.font.icon.small
+                                            color: Colours.palette.m3onSurfaceVariant
+                                        }
+                                    }
+                                }
                             }
                         }
 
@@ -1604,6 +1988,13 @@ Item {
                                                         color: Colours.palette.m3onPrimary
                                                     }
                                                 }
+
+                                                StateLayer {
+                                                    visible: subjCol.subject === "__none__" && GlobalConfig.focus.subjects.length > 0
+                                                    radius: Tokens.rounding.large
+                                                    color: Colours.palette.m3onPrimary
+                                                    onClicked: root.reassigningUntagged = !root.reassigningUntagged
+                                                }
                                             }
 
                                             Item {
@@ -1657,14 +2048,339 @@ Item {
                     }
 
                     // ----------------------------------------------------
-                    // VIEW 1: Digital Wellbeing / Screen Time
+                    // VIEW 1: Consistency & Progress (16-Week Heatmap + All-Time Split)
+                    // ----------------------------------------------------
+                    ColumnLayout {
+                        id: consistencyPane
+
+                        anchors.fill: parent
+                        spacing: Tokens.spacing.small
+                        opacity: root.rightView === 1 ? 1 : 0
+                        visible: opacity > 0
+
+                        Behavior on opacity {
+                            enabled: root.initialized
+                            Anim {
+                                type: Anim.EmphasizedLarge
+                            }
+                        }
+
+                        // Lifetime Metric Pills
+                        RowLayout {
+                            Layout.alignment: Qt.AlignHCenter
+                            spacing: Tokens.spacing.small
+
+                            MetricPill {
+                                icon: "schedule"
+                                text: Tr.tr("Total %1").arg(FocusLedger.fmt(FocusLedger.totalFocusSecs))
+                                accent: Colours.palette.m3primary
+                            }
+
+                            MetricPill {
+                                icon: "local_fire_department"
+                                text: Tr.tr("Best %1d").arg(FocusLedger.bestStreak)
+                                accent: Colours.palette.m3tertiary
+                            }
+
+                            MetricPill {
+                                icon: "task_alt"
+                                text: Tr.tr("%1 sessions").arg(FocusLedger.totalSessions)
+                            }
+                        }
+
+                        // Heatmap Info / Hover Strip
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Layout.topMargin: 2
+
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: root.hoveredHeatmapDay
+                                    ? (root.hoveredHeatmapDay.dateLabel + " · "
+                                        + (root.hoveredHeatmapDay.secs > 0
+                                            ? Tr.tr("%1 (%2 sess)").arg(FocusLedger.fmt(root.hoveredHeatmapDay.secs)).arg(root.hoveredHeatmapDay.sessions)
+                                            : (root.hoveredHeatmapDay.restDay ? Tr.tr("Rest day") : Tr.tr("No study logged"))))
+                                    : Tr.tr("Last 16 weeks (%1 active days)").arg(FocusLedger.activeDaysCount)
+                                font: Tokens.font.label.small
+                                color: root.hoveredHeatmapDay ? Colours.palette.m3primary : Colours.palette.m3onSurfaceVariant
+                                elide: Text.ElideRight
+                            }
+
+                            Row {
+                                spacing: 4
+
+                                StyledText {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: Tr.tr("Less")
+                                    font: Tokens.font.label.small
+                                    color: Colours.palette.m3onSurfaceVariant
+                                }
+
+                                Repeater {
+                                    model: 5
+
+                                    StyledRect {
+                                        required property int index
+
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        width: 10
+                                        height: 10
+                                        radius: 3
+                                        color: {
+                                            if (index === 0) return Colours.tPalette.m3surfaceContainerHigh;
+                                            if (index === 1) return Qt.alpha(Colours.palette.m3primary, 0.30);
+                                            if (index === 2) return Qt.alpha(Colours.palette.m3primary, 0.52);
+                                            if (index === 3) return Qt.alpha(Colours.palette.m3primary, 0.76);
+                                            return Colours.palette.m3primary;
+                                        }
+                                    }
+                                }
+
+                                StyledText {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: Tr.tr("More")
+                                    font: Tokens.font.label.small
+                                    color: Colours.palette.m3onSurfaceVariant
+                                }
+                            }
+                        }
+
+                        // 16-Week Heatmap Matrix
+                        Item {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+
+                            Row {
+                                anchors.centerIn: parent
+                                spacing: Tokens.spacing.small
+
+                                // Day Initials Column (offset for month header row)
+                                Column {
+                                    spacing: 4
+
+                                    Item {
+                                        width: 14
+                                        height: 16
+                                    }
+
+                                    Repeater {
+                                        model: root.dayInitials
+
+                                        Item {
+                                            required property string modelData
+                                            required property int index
+
+                                            width: 14
+                                            height: 20
+
+                                            StyledText {
+                                                anchors.centerIn: parent
+                                                text: modelData
+                                                font: Tokens.font.label.small
+                                                color: (index === 5 || index === 6) ? Colours.palette.m3tertiary : Colours.palette.m3onSurfaceVariant
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // 16 Week Columns
+                                Row {
+                                    spacing: 4
+
+                                    Repeater {
+                                        model: root.heatmapWeeksData
+
+                                        Column {
+                                            id: weekCol
+
+                                            required property var modelData
+                                            required property int index
+
+                                            spacing: 4
+
+                                            Item {
+                                                width: 22
+                                                height: 16
+
+                                                StyledText {
+                                                    anchors.left: parent.left
+                                                    anchors.verticalCenter: parent.verticalCenter
+                                                    visible: (weekCol.modelData.monthLabel || "") !== ""
+                                                    text: weekCol.modelData.monthLabel || ""
+                                                    font: Tokens.font.label.small
+                                                    color: Colours.palette.m3onSurfaceVariant
+                                                }
+                                            }
+
+                                            Repeater {
+                                                model: weekCol.modelData.days
+
+                                                delegate: StyledRect {
+                                                    id: heatCell
+
+                                                    required property var modelData
+
+                                                    readonly property int lvl: modelData.level || 0
+                                                    readonly property bool hovered: cellHover.hovered
+
+                                                    width: 22
+                                                    height: 20
+                                                    radius: 5
+                                                    opacity: modelData.isFuture ? 0.22 : 1.0
+                                                    border.width: hovered ? 1.5 : (modelData.isToday ? 1 : 0)
+                                                    border.color: hovered ? Colours.palette.m3onSurface : Colours.palette.m3tertiary
+                                                    color: {
+                                                        if (modelData.isFuture) return Colours.tPalette.m3surfaceContainerHigh;
+                                                        if (lvl === 4) return Colours.palette.m3primary;
+                                                        if (lvl === 3) return Qt.alpha(Colours.palette.m3primary, 0.76);
+                                                        if (lvl === 2) return Qt.alpha(Colours.palette.m3primary, 0.52);
+                                                        if (lvl === 1) return Qt.alpha(Colours.palette.m3primary, 0.30);
+                                                        if (modelData.restDay) return Colours.palette.m3secondaryContainer;
+                                                        return Colours.tPalette.m3surfaceContainerHigh;
+                                                    }
+
+                                                    HoverHandler {
+                                                        id: cellHover
+                                                        enabled: !heatCell.modelData.isFuture
+                                                        onHoveredChanged: {
+                                                            if (hovered)
+                                                                root.hoveredHeatmapDay = heatCell.modelData;
+                                                            else if (root.hoveredHeatmapDay && root.hoveredHeatmapDay.key === heatCell.modelData.key)
+                                                                root.hoveredHeatmapDay = null;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // All-Time Subject Split Strip
+                        StyledRect {
+                            Layout.fillWidth: true
+                            implicitHeight: splitCol.implicitHeight + Tokens.padding.small * 2
+                            radius: Tokens.rounding.large
+                            color: Colours.tPalette.m3surfaceContainerHigh
+
+                            ColumnLayout {
+                                id: splitCol
+
+                                anchors.fill: parent
+                                anchors.margins: Tokens.padding.small
+                                spacing: 6
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+
+                                    StyledText {
+                                        text: Tr.tr("All-Time Subject Split")
+                                        font: Tokens.font.label.builders.small.weight(Font.DemiBold).build()
+                                        color: Colours.palette.m3onSurface
+                                    }
+
+                                    Item {
+                                        Layout.fillWidth: true
+                                    }
+
+                                    StyledText {
+                                        text: root.allTimeSubjects.length > 0
+                                            ? FocusLedger.fmt(FocusLedger.totalFocusSecs)
+                                            : Tr.tr("No sessions yet")
+                                        font: Tokens.font.label.small
+                                        color: Colours.palette.m3onSurfaceVariant
+                                    }
+                                }
+
+                                // Stacked Bar
+                                StyledRect {
+                                    Layout.fillWidth: true
+                                    implicitHeight: 8
+                                    radius: Tokens.rounding.full
+                                    color: Colours.tPalette.m3surfaceContainerHighest
+                                    clip: true
+                                    visible: root.allTimeSubjects.length > 0 && FocusLedger.totalFocusSecs > 0
+
+                                    RowLayout {
+                                        anchors.fill: parent
+                                        spacing: 2
+
+                                        Repeater {
+                                            model: root.allTimeSubjects
+
+                                            delegate: Rectangle {
+                                                id: splitSeg
+
+                                                required property var modelData
+                                                required property int index
+
+                                                readonly property real share: FocusLedger.totalFocusSecs > 0
+                                                    ? (modelData.seconds / FocusLedger.totalFocusSecs)
+                                                    : 0
+
+                                                Layout.fillHeight: true
+                                                Layout.fillWidth: true
+                                                Layout.preferredWidth: Math.max(8, Math.round(share * 1000))
+                                                radius: 4
+                                                color: root.subjectColors[index % root.subjectColors.length]
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Subject Chips
+                                Flow {
+                                    Layout.fillWidth: true
+                                    spacing: Tokens.spacing.small
+                                    visible: root.allTimeSubjects.length > 0
+
+                                    Repeater {
+                                        model: root.allTimeSubjects
+
+                                        delegate: Row {
+                                            id: splitLeg
+
+                                            required property var modelData
+                                            required property int index
+
+                                            readonly property string labelName: modelData.subject === "__none__" ? Tr.tr("Untagged") : modelData.subject
+                                            readonly property int pct: FocusLedger.totalFocusSecs > 0
+                                                ? Math.round((modelData.seconds / FocusLedger.totalFocusSecs) * 100)
+                                                : 0
+
+                                            spacing: 4
+
+                                            Rectangle {
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                width: 8
+                                                height: 8
+                                                radius: 4
+                                                color: root.subjectColors[splitLeg.index % root.subjectColors.length]
+                                            }
+
+                                            StyledText {
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                text: `${splitLeg.labelName} ${FocusLedger.fmt(splitLeg.modelData.seconds)} (${splitLeg.pct}%)`
+                                                font: Tokens.font.label.small
+                                                color: Colours.palette.m3onSurfaceVariant
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // ----------------------------------------------------
+                    // VIEW 2: Digital Wellbeing / Screen Time
                     // ----------------------------------------------------
                     ColumnLayout {
                         id: wellbeingPane
 
                         anchors.fill: parent
                         spacing: Tokens.spacing.small
-                        opacity: root.rightView === 1 ? 1 : 0
+                        opacity: root.rightView === 2 ? 1 : 0
                         visible: opacity > 0
 
                         Behavior on opacity {
@@ -1745,9 +2461,8 @@ Item {
                             }
 
                             MetricPill {
-                                icon: ScreenTime.strictShield ? "gpp_good" : "shield"
-                                text: ScreenTime.strictShield ? Tr.tr("Strict Shield") : Tr.tr("%1 shielded").arg(ScreenTime.distractions.length)
-                                accent: ScreenTime.strictShield ? Colours.palette.m3tertiary : Colours.palette.m3onSurfaceVariant
+                                icon: "apps"
+                                text: Tr.tr("%1 apps").arg(ScreenTime.dayAppCount(root.stSelectedDay))
                             }
                         }
 
@@ -2001,7 +2716,8 @@ Item {
 
         readonly property var views: [
             { label: Tr.tr("Focus"), icon: "local_fire_department" },
-            { label: Tr.tr("Wellbeing"), icon: "monitoring" }
+            { label: Tr.tr("Consistency"), icon: "calendar_month" },
+            { label: Tr.tr("Screen Time"), icon: "monitoring" }
         ]
 
         implicitHeight: 32

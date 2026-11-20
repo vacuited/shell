@@ -80,7 +80,7 @@ Item {
         let nx = clampX(rawX, width);
         let ny = clampY(rawY, height);
         const tol = WidgetMetrics.snapThreshold;
-        const gap = WidgetMetrics.gap;
+        const gap = Math.round(WidgetMetrics.baseGap * root.widgetScale);
 
         let cxActive = false;
         let cyActive = false;
@@ -322,8 +322,8 @@ Item {
             : root.ghostHeight
 
         visible: root.resizing
-        x: 0
-        y: 0
+        x: isDiscrete ? Math.max(root.safeLeft - root.x, Math.min(0, root.safeRight - root.x - targetW)) : 0
+        y: isDiscrete ? Math.max(root.safeTop - root.y, Math.min(0, root.safeBottom - root.y - targetH)) : 0
         width: targetW
         height: targetH
         z: 35
@@ -573,23 +573,50 @@ Item {
                 const dx = p.x - startGlobalX;
                 const dy = p.y - startGlobalY;
                 const origin = root.parent ? root.parent.mapToItem(root.canvas ?? root.parent, 0, 0) : Qt.point(0, 0);
-                const maxAvailW = Math.max(root.minWidth, root.safeRight - (root.x + origin.x));
-                const maxAvailH = Math.max(root.minHeight, root.safeBottom - (root.y + origin.y));
-                const candW = Math.max(root.minWidth, Math.min(maxAvailW, startWidth + dx));
-                const candH = root.resizeMode === "horizontal"
-                    ? startHeight
-                    : Math.max(root.minHeight, Math.min(maxAvailH, startHeight + dy));
+                const maxEdgeW = Math.max(root.minWidth, root.safeRight - (root.x + origin.x));
+                const maxEdgeH = Math.max(root.minHeight, root.safeBottom - (root.y + origin.y));
+                const totalSafeW = Math.max(root.minWidth, root.safeRight - root.safeLeft);
+                const totalSafeH = Math.max(root.minHeight, root.safeBottom - root.safeTop);
 
                 if (root.resizeMode === "discrete" && (root.supportedSizes?.length ?? 0) > 0) {
+                    const candW = Math.max(root.minWidth, Math.min(totalSafeW, startWidth + dx));
+                    const candH = Math.max(root.minHeight, Math.min(totalSafeH, startHeight + dy));
                     const matched = WidgetMetrics.nearestSizeMode(candW, candH, root.supportedSizes, root.widgetType, root.widgetScale);
                     root.previewSizeMode = matched;
                     root.ghostWidth = WidgetMetrics.widthFor(matched, root.widgetScale);
                     root.ghostHeight = WidgetMetrics.heightFor(matched, root.widgetType, root.widgetScale);
-                } else {
+                } else if (root.resizeMode === "diagonal") {
+                    const aspect = startHeight > 0 ? (startWidth / startHeight) : 1.0;
+                    const rawW = Math.max(root.minWidth, Math.min(maxEdgeW, startWidth + dx));
+                    const rawH = Math.max(root.minHeight, Math.min(maxEdgeH, startHeight + dy));
+                    const scaleW = rawW / Math.max(1, startWidth);
+                    const scaleH = rawH / Math.max(1, startHeight);
+                    const chosenScale = Math.abs(dx) >= Math.abs(dy) ? scaleW : scaleH;
+                    let candW = Math.max(root.minWidth, Math.min(maxEdgeW, startWidth * chosenScale));
+                    let candH = candW / aspect;
+                    if (candH > maxEdgeH) {
+                        candH = maxEdgeH;
+                        candW = candH * aspect;
+                    }
+                    if (candH < root.minHeight) {
+                        candH = root.minHeight;
+                        candW = Math.min(maxEdgeW, candH * aspect);
+                    }
+                    candW = Math.max(root.minWidth, Math.min(maxEdgeW, candW));
+                    candH = Math.max(root.minHeight, Math.min(maxEdgeH, candW / aspect));
                     root.ghostWidth = Math.round(candW);
                     root.ghostHeight = Math.round(candH);
-                    root.widthResized(Math.round(candW));
-                    root.sizeResized(Math.round(candW), Math.round(candH));
+                    root.widthResized(root.ghostWidth);
+                    root.sizeResized(root.ghostWidth, root.ghostHeight);
+                } else {
+                    const candW = Math.max(root.minWidth, Math.min(maxEdgeW, startWidth + dx));
+                    const candH = root.resizeMode === "horizontal"
+                        ? startHeight
+                        : Math.max(root.minHeight, Math.min(maxEdgeH, startHeight + dy));
+                    root.ghostWidth = Math.round(candW);
+                    root.ghostHeight = Math.round(candH);
+                    root.widthResized(root.ghostWidth);
+                    root.sizeResized(root.ghostWidth, root.ghostHeight);
                 }
             }
 

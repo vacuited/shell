@@ -105,7 +105,7 @@ void main() {
         distEdge = w - px;
         orthoLen = w;
     } else if (edge == 4) {
-        distEdge = mirrored ? abs(py - h * 0.5) : max(0.0, h * 0.5 - py);
+        distEdge = mirrored ? abs(py - h * 0.5) : (h * 0.5 - py);
     }
 
     float maxReach = orthoLen * heightScale;
@@ -118,7 +118,7 @@ void main() {
         maxReach *= 0.5;
     }
 
-    if (localOrtho > maxReach + 32.0) {
+    if (localOrtho > maxReach + 32.0 || localOrtho < -32.0) {
         fragColor = vec4(0.0);
         return;
     }
@@ -138,8 +138,11 @@ void main() {
     }
 
     int countInt = int(waveLayers + 0.5);
-    vec3 totalRgb = vec3(0.0);
+    vec3 accumRgb = vec3(0.0);
+    float accumWeight = 0.0;
     float totalAlpha = 0.0;
+    float baseAA = smoothstep(-1.0 / dpr, 0.0, localOrtho);
+    float negHaloFade = smoothstep(-32.0, 0.0, localOrtho);
 
     for (int idx = 0; idx < 3; ++idx) {
         if (idx >= countInt)
@@ -154,9 +157,9 @@ void main() {
         float waveY = val * maxReach;
         float d = localOrtho - waveY;
 
-        float bodyFill = smoothstep(1.0 / dpr, -1.0 / dpr, d) * (fillStrength * (0.85 - 0.2 * fi));
-        float crest = smoothstep(crestThick + 1.0 / dpr, 0.0, abs(d));
-        float halo = glowAmt > 0.01 ? exp(-abs(d) / (6.0 + 18.0 * glowAmt)) * glowAmt * (0.35 + 0.45 * val) : 0.0;
+        float bodyFill = (1.0 - smoothstep(-1.0 / dpr, 1.0 / dpr, d)) * baseAA * (fillStrength * (0.85 - 0.2 * fi));
+        float crest = 1.0 - smoothstep(0.0, crestThick + 1.0 / dpr, abs(d));
+        float halo = glowAmt > 0.01 ? exp(-abs(d) / (6.0 + 18.0 * glowAmt)) * glowAmt * (0.35 + 0.45 * val) * negHaloFade : 0.0;
 
         float hNorm = clamp(localOrtho / max(waveY, 1.0), 0.0, 1.0);
         vec3 col = evalGradient(layerU, hNorm, val);
@@ -164,11 +167,15 @@ void main() {
         if (idx == 2) col = mix(col, accentColor.rgb, 0.45);
 
         float layerA = clamp(max(bodyFill * mix(0.35, 1.0, hNorm), max(crest, halo)), 0.0, 1.0);
-        totalRgb = mix(totalRgb, col + accentColor.rgb * s.b * 0.25, layerA * (1.0 - totalAlpha * 0.45));
+        vec3 layerCol = col + accentColor.rgb * s.b * 0.25;
+        float wLayer = layerA * (1.0 - totalAlpha * 0.45);
+        accumRgb += layerCol * wLayer;
+        accumWeight += wLayer;
         totalAlpha = clamp(totalAlpha + layerA * (1.0 - totalAlpha * 0.5), 0.0, 1.0);
     }
 
+    vec3 finalRgb = accumWeight > 0.001 ? clamp(accumRgb / accumWeight, 0.0, 1.0) : primaryColor.rgb;
     float baseA = max(primaryColor.a, max(secondaryColor.a, accentColor.a));
     float outAlpha = clamp(totalAlpha * baseA, 0.0, 1.0);
-    fragColor = vec4(totalRgb * outAlpha, outAlpha) * qt_Opacity;
+    fragColor = vec4(finalRgb * outAlpha, outAlpha) * qt_Opacity;
 }

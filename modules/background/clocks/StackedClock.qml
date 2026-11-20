@@ -39,6 +39,8 @@ Item {
     readonly property int padV: showBackground ? Math.round(Tokens.padding.large * clockScale) : 0
 
     readonly property bool is12Hour: Units.twelveHourClock
+    readonly property string todayKey: Qt.formatDate(Time.date, "yyyy-MM-dd")
+    readonly property date todayDate: FocusLedger.parseLocalDate(todayKey) ?? new Date()
     readonly property string displayHours: {
         const h = Time.hours;
         if (!is12Hour)
@@ -46,9 +48,9 @@ Item {
         return (h % 12 || 12).toString().padStart(2, "0");
     }
     readonly property string displayMinutes: Time.minutes.toString().padStart(2, "0")
-    readonly property string meridian: Time.amPmStr || (Time.hours >= 12 ? "PM" : "AM")
-    readonly property string dayName: Time.format("ddd").toLowerCase()
-    readonly property string dayNumber: ordinal(Time.date.getDate())
+    readonly property string meridian: (Time.hours >= 12 ? "PM" : "AM")
+    readonly property string dayName: Qt.formatDate(todayDate, "ddd").toLowerCase()
+    readonly property string dayNumber: ordinal(todayDate.getDate())
 
     readonly property color timeColor: roleColor(timeColorOpt, Colours.palette.m3primary)
     readonly property color labelColor: roleColor(labelColorOpt, Colours.palette.m3onSurface)
@@ -220,6 +222,12 @@ Item {
                 shadowBlur: Config.background.desktopClock.shadow.blur
                 shapeMask: textMask
             }
+
+            ClockContent {
+                anchors.centerIn: parent
+                width: root.contentWidth
+                opacity: 0.72
+            }
         }
     }
 
@@ -234,19 +242,19 @@ Item {
             text: root.dayName
             color: root.labelColor
             opacity: 0.8
-            renderType: Text.NativeRendering
+            renderType: Text.QtRendering
             font.family: root.sansFont
             font.pixelSize: root.labelFontSize
             font.variableAxes: root.weightAxes(root.labelWeightOpt)
             Layout.alignment: root.layoutAlignment()
-            Layout.topMargin: -(root.labelFontSize * 0.22)
+            Layout.topMargin: 0
         }
 
         Text {
             visible: root.showDate
             text: root.dayNumber
             color: root.labelColor
-            renderType: Text.NativeRendering
+            renderType: Text.QtRendering
             font.family: root.sansFont
             font.pixelSize: root.fontSize
             font.variableAxes: root.weightAxes(root.labelWeightOpt)
@@ -257,13 +265,13 @@ Item {
         Text {
             text: root.displayHours + ":" + root.displayMinutes
             color: root.timeColor
-            renderType: Text.NativeRendering
+            renderType: Text.QtRendering
             font.family: root.sansFont
             font.pixelSize: root.fontSize
             font.variableAxes: root.weightAxes(root.fontWeightOpt)
             Layout.alignment: root.layoutAlignment()
-            Layout.topMargin: -(root.fontSize * 0.22)
-            Layout.bottomMargin: root.is12Hour ? 0 : -(root.fontSize * 0.15)
+            Layout.topMargin: root.showDate ? -(root.fontSize * 0.22) : 0
+            Layout.bottomMargin: 0
         }
 
         Text {
@@ -271,13 +279,13 @@ Item {
             text: root.meridian
             color: root.labelColor
             opacity: 0.8
-            renderType: Text.NativeRendering
+            renderType: Text.QtRendering
             font.family: root.sansFont
             font.pixelSize: Math.round(root.labelFontSize + 6 * root.clockScale)
             font.variableAxes: root.weightAxes(root.labelWeightOpt)
             Layout.alignment: root.layoutAlignment()
             Layout.topMargin: -(root.labelFontSize * 0.3)
-            Layout.bottomMargin: -(root.labelFontSize * 0.15)
+            Layout.bottomMargin: 0
         }
     }
 }

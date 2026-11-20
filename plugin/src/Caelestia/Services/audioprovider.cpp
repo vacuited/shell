@@ -25,9 +25,16 @@ void AudioProcessor::init() {
     m_timer = new QTimer(this);
     m_timer->setInterval(static_cast<int>(ac::k_chunkSize * 1000.0 / ac::k_sampleRate));
     connect(m_timer, &QTimer::timeout, this, &AudioProcessor::process);
+    if (m_running) {
+        m_timer->start();
+    }
 }
 
 void AudioProcessor::start() {
+    if (m_running) {
+        return;
+    }
+    m_running = true;
     QMetaObject::invokeMethod(&AudioCollector::instance(), &AudioCollector::ref, Qt::QueuedConnection, this);
     if (m_timer) {
         m_timer->start();
@@ -35,6 +42,10 @@ void AudioProcessor::start() {
 }
 
 void AudioProcessor::stop() {
+    if (!m_running) {
+        return;
+    }
+    m_running = false;
     if (m_timer) {
         m_timer->stop();
     }

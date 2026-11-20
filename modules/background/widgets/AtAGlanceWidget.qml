@@ -24,7 +24,9 @@ Item {
     property real plateOpacity: Config.background.desktopWidgets.opacity
     property var widgetOptions: ({})
 
-    readonly property real s: WidgetMetrics.scale
+    readonly property real s: Math.max(0.7, Math.min(1.5, Config.background.desktopWidgets.scale ?? 1.0))
+    readonly property string todayKey: Qt.formatDate(Time.date, "yyyy-MM-dd")
+    readonly property date todayDate: FocusLedger.parseLocalDate(todayKey) ?? new Date()
     readonly property bool showWeather: (widgetOptions?.showWeather ?? true) !== false
     readonly property bool showBluetooth: (widgetOptions?.showBluetooth ?? true) !== false
     readonly property var activePlayer: Players.recentPlayer ?? Players.active ?? null
@@ -115,14 +117,15 @@ Item {
                     spacing: 6
 
                     MaterialShape {
-                        width: Math.round(24 * root.s)
-                        height: Math.round(24 * root.s)
+                        Layout.preferredWidth: Math.round(24 * root.s)
+                        Layout.preferredHeight: Math.round(24 * root.s)
+                        implicitSize: Math.round(24 * root.s)
                         shape: MaterialShape.Sunny
                         color: Colours.palette.m3primaryContainer
 
                         StyledText {
                             anchors.centerIn: parent
-                            text: String(Time.date.getDate())
+                            text: String(root.todayDate.getDate())
                             font: Tokens.font.label.builders.small.scale(0.85).weight(Font.Bold).build()
                             color: Colours.palette.m3onPrimaryContainer
                         }
@@ -130,7 +133,7 @@ Item {
 
                     StyledText {
                         Layout.fillWidth: true
-                        text: Time.format("ddd, MMM d")
+                        text: Qt.formatDate(root.todayDate, "ddd, MMM d")
                         font: Tokens.font.label.builders.medium.weight(Font.DemiBold).build()
                         color: Colours.palette.m3primary
                         elide: Text.ElideRight
@@ -214,14 +217,15 @@ Item {
                 spacing: 6
 
                 MaterialShape {
-                    width: Math.round(28 * root.s)
-                    height: Math.round(28 * root.s)
+                    Layout.preferredWidth: Math.round(28 * root.s)
+                    Layout.preferredHeight: Math.round(28 * root.s)
+                    implicitSize: Math.round(28 * root.s)
                     shape: MaterialShape.Sunny
                     color: Colours.palette.m3primary
 
                     StyledText {
                         anchors.centerIn: parent
-                        text: String(Time.date.getDate())
+                        text: String(root.todayDate.getDate())
                         font: Tokens.font.label.builders.small.weight(Font.Bold).build()
                         color: Colours.palette.m3onPrimary
                     }
@@ -229,7 +233,7 @@ Item {
 
                 StyledText {
                     Layout.fillWidth: true
-                    text: Time.format("ddd, MMM d")
+                    text: Qt.formatDate(root.todayDate, "ddd, MMM d")
                     font: Tokens.font.label.builders.medium.weight(Font.DemiBold).build()
                     color: Colours.palette.m3onSurface
                     elide: Text.ElideRight
@@ -341,14 +345,15 @@ Item {
                 spacing: 8
 
                 MaterialShape {
-                    width: Math.round(32 * root.s)
-                    height: Math.round(32 * root.s)
+                    Layout.preferredWidth: Math.round(32 * root.s)
+                    Layout.preferredHeight: Math.round(32 * root.s)
+                    implicitSize: Math.round(32 * root.s)
                     shape: MaterialShape.Sunny
                     color: Colours.palette.m3primaryContainer
 
                     StyledText {
                         anchors.centerIn: parent
-                        text: String(Time.date.getDate())
+                        text: String(root.todayDate.getDate())
                         font: Tokens.font.label.builders.medium.weight(Font.Bold).build()
                         color: Colours.palette.m3onPrimaryContainer
                     }
@@ -360,7 +365,7 @@ Item {
 
                     StyledText {
                         Layout.fillWidth: true
-                        text: Time.format("dddd, MMM d")
+                        text: Qt.formatDate(root.todayDate, "dddd, MMM d")
                         font: Tokens.font.label.builders.medium.weight(Font.DemiBold).build()
                         color: Colours.palette.m3primary
                         elide: Text.ElideRight
@@ -443,7 +448,7 @@ Item {
                         Layout.preferredWidth: Math.round(36 * root.s)
                         Layout.preferredHeight: Math.round(36 * root.s)
                         source: root.mediaArt
-                        spinning: root.mediaPlaying
+                        spinning: root.visible && root.sizeMode === "2x2" && root.mediaPlaying && !GameMode.enabled
                     }
 
                     ColumnLayout {
@@ -492,8 +497,9 @@ Item {
                     spacing: 10
 
                     MaterialShape {
-                        width: Math.round(34 * root.s)
-                        height: Math.round(34 * root.s)
+                        Layout.preferredWidth: Math.round(34 * root.s)
+                        Layout.preferredHeight: Math.round(34 * root.s)
+                        implicitSize: Math.round(34 * root.s)
                         shape: MaterialShape.Puffy
                         color: Colours.palette.m3primaryContainer
 
@@ -559,14 +565,15 @@ Item {
                     spacing: 8
 
                     MaterialShape {
-                        width: Math.round(34 * root.s)
-                        height: Math.round(34 * root.s)
+                        Layout.preferredWidth: Math.round(34 * root.s)
+                        Layout.preferredHeight: Math.round(34 * root.s)
+                        implicitSize: Math.round(34 * root.s)
                         shape: MaterialShape.Sunny
                         color: Colours.palette.m3primaryContainer
 
                         StyledText {
                             anchors.centerIn: parent
-                            text: String(Time.date.getDate())
+                            text: String(root.todayDate.getDate())
                             font: Tokens.font.label.builders.medium.weight(Font.Bold).build()
                             color: Colours.palette.m3onPrimaryContainer
                         }
@@ -578,7 +585,7 @@ Item {
 
                         StyledText {
                             Layout.fillWidth: true
-                            text: Time.format("dddd, MMMM d")
+                            text: Qt.formatDate(root.todayDate, "dddd, MMMM d")
                             font: Tokens.font.label.builders.medium.weight(Font.DemiBold).build()
                             color: Colours.palette.m3primary
                             elide: Text.ElideRight
@@ -666,8 +673,9 @@ Item {
                         spacing: 10
 
                         MaterialShape {
-                            width: Math.round(42 * root.s)
-                            height: Math.round(42 * root.s)
+                            Layout.preferredWidth: Math.round(42 * root.s)
+                            Layout.preferredHeight: Math.round(42 * root.s)
+                            implicitSize: Math.round(42 * root.s)
                             shape: MaterialShape.Puffy
                             color: Colours.palette.m3primaryContainer
 
@@ -724,7 +732,7 @@ Item {
                             Layout.preferredWidth: Math.round(44 * root.s)
                             Layout.preferredHeight: Math.round(44 * root.s)
                             source: root.mediaArt
-                            spinning: root.mediaPlaying
+                            spinning: root.visible && (root.sizeMode === "1x3" || root.sizeMode === "2x3") && root.mediaPlaying && !GameMode.enabled
                         }
 
                         ColumnLayout {

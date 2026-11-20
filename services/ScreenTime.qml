@@ -2,10 +2,12 @@ pragma Singleton
 
 import QtQuick
 import Quickshell
+import Quickshell.Hyprland
 import Quickshell.Io
 import Caelestia
 import Caelestia.Config
 import Caelestia.I18n
+import Caelestia.Services
 import qs.services
 import qs.utils
 
@@ -29,19 +31,44 @@ Singleton {
     property double lastNudgedAt: 0
     property bool dirty: false
     property bool backedUp: false
+    property bool sessionLocked: false
+    property bool systemSleeping: false
+    property bool dpmsAsleep: false
+    property double _dpmsOffAt: 0
+
+    function setDpmsAsleep(asleep: bool): void {
+        dpmsAsleep = asleep;
+        if (asleep)
+            _dpmsOffAt = Date.now();
+    }
 
     readonly property string activeAppClass: {
         const top = Hypr.activeToplevel;
         if (!top) return "";
         const ipc = top.lastIpcObject;
-        const cls = (ipc?.class || ipc?.initialClass || top.title || "").trim().toLowerCase();
+        const cls = (ipc?.class || ipc?.initialClass || "").trim().toLowerCase();
         return cls;
     }
 
     readonly property bool screenAwake: {
+        if (sessionLocked || systemSleeping || dpmsAsleep)
+            return false;
         const mon = Hypr.focusedMonitor;
-        if (!mon || !mon.lastIpcObject) return true;
-        return mon.lastIpcObject.dpmsStatus !== false;
+        if (mon && mon.lastIpcObject && mon.lastIpcObject.dpmsStatus === false)
+            return false;
+        const mons = Hypr.monitors?.values;
+        if (mons && mons.length > 0) {
+            let anyAwake = false;
+            for (let i = 0; i < mons.length; i++) {
+                if (mons[i]?.lastIpcObject?.dpmsStatus !== false) {
+                    anyAwake = true;
+                    break;
+                }
+            }
+            if (!anyAwake)
+                return false;
+        }
+        return true;
     }
 
     readonly property int todayTotalSecs: {
@@ -211,6 +238,19 @@ Singleton {
         return `${m}m`;
     }
 
+    function dayAppCount(key: string): int {
+        revision;
+        liveTick;
+        if (!key || !days || !days[key] || !days[key].apps) return 0;
+        let n = 0;
+        const appMap = days[key].apps;
+        for (const app in appMap) {
+            if (appMap.hasOwnProperty(app) && !root.isIgnoredApp(app) && Math.round(appMap[app] || 0) >= 1)
+                n++;
+        }
+        return n;
+    }
+
     function dayTotalSecs(key: string): int {
         if (!key || !days || !days[key]) return 0;
         return Math.round(days[key].totalSecs || 0);
@@ -265,6 +305,7 @@ Singleton {
     }
 
     function last7DaysKeys(): var {
+        void todayKey;
         const now = new Date();
         const keys = [];
         const offset = (now.getDay() + 6) % 7; // Monday = 0, Sunday = 6
@@ -368,7 +409,7 @@ Singleton {
     }
 
     function toggleDistraction(appClass: string): void {
-        if (!appClass) return;
+        if (!ready || corrupt || !appClass) return;
         const low = appClass.toLowerCase();
         const arr = Array.isArray(distractions) ? [...distractions] : [];
         const idx = arr.indexOf(low);
@@ -384,7 +425,7 @@ Singleton {
     }
 
     function setAppLimit(appClass: string, mins: int): void {
-        if (!appClass) return;
+        if (!ready || corrupt || !appClass) return;
         const low = appClass.toLowerCase();
         const newLimits = Object.assign({}, limits);
         if (mins <= 0) {
@@ -404,6 +445,7 @@ Singleton {
     }
 
     function setStrictShield(on: bool): void {
+        if (!ready || corrupt) return;
         strictShield = !!on;
         dirty = true;
         revision++;
@@ -411,6 +453,7 @@ Singleton {
     }
 
     function setRetentionDays(days: int): void {
+        if (!ready || corrupt) return;
         retentionDays = Math.max(1, Math.round(days));
         dirty = true;
         revision++;
@@ -419,6 +462,7 @@ Singleton {
     }
 
     function clearHistory(): void {
+        if (!ready || corrupt) return;
         days = {};
         notifiedLimitsToday = {};
         dirty = true;
@@ -455,7 +499,7 @@ Singleton {
         } catch (e) {
             ready = false;
             corrupt = true;
-            Toaster.toast(Tr.tr("Screen Time Error"), Tr.tr("Failed to read screen time data. Store locked to prevent overwrite."), "error");
+            Toaster.toast(Tr.tr("Screen Time Error"), Tr.tr("Failed to read screen time data. Store locked to prevent overwrite."), "error", Toast.Error);
         }
     }
 
@@ -485,6 +529,20 @@ Singleton {
         }
     }
 
+    Connections {
+        target: SessionManager
+
+        function onAboutToSleep(): void {
+            root.systemSleeping = true;
+        }
+
+        function onResumed(): void {
+            root.systemSleeping = false;
+            root.dpmsAsleep = false;
+            Hyprland.refreshMonitors();
+        }
+    }
+
     Timer {
         id: tickTimer
         interval: 1000
@@ -493,6 +551,16 @@ Singleton {
         onTriggered: {
             root.checkTodayKey();
             root.liveTick++;
+
+            if (root.dpmsAsleep && root.liveTick % 10 === 0) {
+                if (Date.now() - root._dpmsOffAt > 1500) {
+                    const mons = Hypr.monitors?.values;
+                    if (mons && mons.some(m => m?.lastIpcObject?.dpmsStatus === true))
+                        root.dpmsAsleep = false;
+                }
+                if (root.dpmsAsleep)
+                    Hyprland.refreshMonitors();
+            }
 
             const appClass = root.activeAppClass;
             if (!root.screenAwake || root.isIgnoredApp(appClass)) {
@@ -517,59 +585,6 @@ Singleton {
 
             if (root.liveTick % 5 === 0) {
                 root.revision++;
-            }
-
-            // Per-App Daily Limit Check:
-            const limitMins = root.limits[appClass] || 0;
-            if (limitMins > 0) {
-                const usedSecs = root.days[root.todayKey].apps[appClass] || 0;
-                const limitSecs = limitMins * 60;
-                if (usedSecs >= limitSecs && root.notifiedLimitsToday[appClass] !== root.todayKey) {
-                    root.notifiedLimitsToday[appClass] = root.todayKey;
-                    Toaster.toast(
-                        Tr.tr("Daily App Limit Reached"),
-                        Tr.tr("You've used %1 for %2 today.").arg(root.appName(appClass)).arg(root.fmt(usedSecs)),
-                        "hourglass_bottom",
-                        Toast.Warning
-                    );
-                }
-            }
-
-            // Focus Distraction Shield Check:
-            if (FocusTimer.running && FocusTimer.phase === "focus" && root.isDistraction(appClass)) {
-                FocusTimer.recordDistractionSecond(appClass);
-                const now = Date.now();
-                if (root.lastNudgedApp !== appClass || (now - root.lastNudgedAt) > 30000) {
-                    root.lastNudgedApp = appClass;
-                    root.lastNudgedAt = now;
-                    if (root.strictShield) {
-                        Toaster.toast(
-                            Tr.tr("Strict Shield Active"),
-                            Tr.tr("%1 is blocked during Focus. Minimizing in 3s...").arg(root.appName(appClass)),
-                            "gpp_bad",
-                            Toast.Warning
-                        );
-                        strictDefocusTimer.restart();
-                    } else {
-                        Toaster.toast(
-                            Tr.tr("Focus Shield"),
-                            Tr.tr("%1 is marked as a distraction. Stay focused!").arg(root.appName(appClass)),
-                            "shield",
-                            Toast.Info
-                        );
-                    }
-                }
-            }
-        }
-    }
-
-    Timer {
-        id: strictDefocusTimer
-        interval: 3000
-        repeat: false
-        onTriggered: {
-            if (FocusTimer.running && FocusTimer.phase === "focus" && root.strictShield && root.isDistraction(root.activeAppClass)) {
-                Hypr.dispatch("focuscurrentorlast");
             }
         }
     }

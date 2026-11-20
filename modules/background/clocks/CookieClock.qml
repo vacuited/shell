@@ -4,6 +4,7 @@ import QtQuick
 import Quickshell
 import M3Shapes
 import Caelestia.Config
+import Caelestia.I18n
 import qs.components
 import qs.services
 import "../components"
@@ -18,6 +19,7 @@ Item {
     property real clockScale: 1.0
     property string surfaceStyle: "glass"
     property var options: ({})
+    property bool desktopOccluded: false
 
     readonly property int baseSize: 230
     readonly property bool isMaterial: surfaceStyle === "material"
@@ -56,9 +58,16 @@ Item {
     readonly property color colOnDateContainer: isMaterial ? Colours.palette.m3onSecondaryContainer : Colours.palette.m3onSurface
 
     readonly property int clockHour: Time.hours % 12
+    readonly property int displayHour: Units.twelveHourClock ? ((Time.hours % 12) || 12) : Time.hours
     readonly property int clockMinute: Time.minutes
     readonly property int clockSecond: Time.seconds
-    readonly property string displayFont: "Titan One"
+    readonly property string todayKey: Qt.formatDate(Time.date, "yyyy-MM-dd")
+    readonly property date todayDate: FocusLedger.parseLocalDate(todayKey) ?? new Date()
+    readonly property string dayStr: Qt.formatDate(todayDate, "d")
+    readonly property string monthStr: Qt.formatDate(todayDate, "MM")
+    readonly property string displayFont: Qt.fontFamilies().includes("Titan One") ? "Titan One" : (Tokens.font.body.large.family || "Sans Serif")
+    readonly property bool shouldSpin: constantlyRotate && !surfaceHidden && !desktopOccluded && !GameMode.enabled
+    readonly property real spinFitScale: constantlyRotate ? 0.80 : 1.0
 
     function resolveShape(name: string): int {
         const shapes = {
@@ -106,10 +115,9 @@ Item {
     width: implicitWidth
     height: implicitHeight
 
-    onConstantlyRotateChanged: cookieRotator.settleRotation()
-    onSurfaceHiddenChanged: cookieRotator.settleRotation()
+    onShouldSpinChanged: cookieRotator.settleRotation()
     Component.onCompleted: {
-        if (constantlyRotate && !surfaceHidden)
+        if (shouldSpin)
             ambientSpin.start();
     }
 
@@ -121,7 +129,7 @@ Item {
 
         function settleRotation(): void {
             ambientSpin.stop();
-            if (root.surfaceHidden)
+            if (root.surfaceHidden || root.desktopOccluded || GameMode.enabled)
                 return;
             if (root.constantlyRotate) {
                 ambientReset.stop();
@@ -162,8 +170,10 @@ Item {
         layer.smooth: true
 
         MaterialShape {
-            anchors.fill: parent
-            implicitSize: root.width
+            anchors.centerIn: parent
+            width: Math.round(parent.width * root.spinFitScale)
+            height: Math.round(parent.height * root.spinFitScale)
+            implicitSize: width
             shape: root.cookieShape
             color: "black"
             rotation: cookieRotator.ambientRotation
@@ -191,7 +201,7 @@ Item {
         anchors.centerIn: parent
         width: root.baseSize
         height: root.baseSize
-        scale: root.clockScale
+        scale: root.clockScale * root.spinFitScale
 
         MinuteMarks {
             anchors.fill: parent
@@ -203,7 +213,7 @@ Item {
         TimeColumn {
             anchors.centerIn: parent
             color: Qt.alpha(root.colOnBackground, 0.4)
-            hour: root.clockHour
+            hour: root.displayHour
             minute: root.clockMinute
             opacity: root.showTimeIndicators ? 1 : 0
             visible: opacity > 0
@@ -281,7 +291,7 @@ Item {
 
                 anchors.fill: parent
                 color: root.colDateContainer
-                onColor: root.colOnDateContainer
+                textColor: root.colOnDateContainer
                 style: root.dateStyle
             }
         }
@@ -442,7 +452,7 @@ Item {
 
         Text {
             anchors.horizontalCenter: parent.horizontalCenter
-            text: ("0" + (colRoot.hour === 0 ? 12 : colRoot.hour)).slice(-2)
+            text: ("0" + colRoot.hour).slice(-2)
             color: colRoot.color
             font.family: root.displayFont
             font.pixelSize: 70
@@ -596,7 +606,7 @@ Item {
 
         property string style: "bubble"
         property color color: Colours.palette.m3secondaryContainer
-        property color onColor: Colours.palette.m3onSecondaryContainer
+        property color textColor: Colours.palette.m3onSecondaryContainer
 
         FadeGroup {
             anchors.fill: parent
@@ -618,7 +628,7 @@ Item {
 
                 Text {
                     anchors.centerIn: parent
-                    text: Time.format("d")
+                    text: root.dayStr
                     color: root.isMaterial ? Colours.palette.m3onTertiaryContainer : (root.isTranslucentBlur ? Colours.palette.m3onSurface : Colours.palette.m3onPrimaryContainer)
                     font.family: root.displayFont
                     font.pixelSize: 22
@@ -644,7 +654,7 @@ Item {
 
                 Text {
                     anchors.centerIn: parent
-                    text: Time.format("MM")
+                    text: root.monthStr
                     color: root.isTranslucentBlur ? Colours.palette.m3onSurface : Colours.palette.m3onSecondaryContainer
                     font.family: root.displayFont
                     font.pixelSize: 20
@@ -670,8 +680,8 @@ Item {
 
                 Text {
                     anchors.centerIn: parent
-                    text: Time.format("d")
-                    color: dateRoot.onColor
+                    text: root.dayStr
+                    color: dateRoot.textColor
                     font.family: root.displayFont
                     font.pixelSize: 14
                     font.bold: true

@@ -47,6 +47,7 @@ ConnectedRect {
                     id: label
 
                     font: Tokens.font.body.small
+                    color: root.enabled ? Colours.palette.m3onSurface : Qt.alpha(Colours.palette.m3onSurface, 0.38)
                     elide: Text.ElideRight
                 }
 
@@ -64,7 +65,7 @@ ConnectedRect {
                 Layout.fillWidth: true
                 visible: root.subtext
                 text: root.subtext
-                color: Colours.palette.m3outline
+                color: root.enabled ? Colours.palette.m3outline : Qt.alpha(Colours.palette.m3outline, 0.38)
                 font: Tokens.font.label.small
                 elide: Text.ElideRight
             }
@@ -73,6 +74,7 @@ ConnectedRect {
         SplitButton {
             id: splitButton
 
+            disabled: !root.enabled
             type: SplitButton.Tonal
             stateLayer.onClicked: splitButton.expanded = !splitButton.expanded
             menu.onItemSelected: item => root.selected(item)

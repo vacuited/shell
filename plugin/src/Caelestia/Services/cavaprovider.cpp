@@ -4,6 +4,7 @@
 
 #include <cava/cavacore.h>
 
+#include <algorithm>
 #include <cstddef>
 
 #include "audiocollector.hpp"
@@ -72,9 +73,9 @@ void CavaProcessor::process() {
 }
 
 void CavaProcessor::setBars(int bars) {
-    if (bars < 0) {
-        qCWarning(lcCavaProcessor) << "setBars: bars must be greater than 0. Setting to 0.";
-        bars = 0;
+    if (bars < 0 || bars > 256) {
+        qCWarning(lcCavaProcessor) << "setBars: bars must be between 0 and 256. Clamping.";
+        bars = std::clamp(bars, 0, 256);
     }
 
     if (m_bars != bars) {
@@ -128,9 +129,9 @@ int CavaProvider::bars() const {
 }
 
 void CavaProvider::setBars(int bars) {
-    if (bars < 0) {
-        qCWarning(lcCava) << "setBars: bars must be greater than 0. Setting to 0.";
-        bars = 0;
+    if (bars < 0 || bars > 256) {
+        qCWarning(lcCava) << "setBars: bars must be between 0 and 256. Clamping.";
+        bars = std::clamp(bars, 0, 256);
     }
 
     if (m_bars == bars) {
@@ -166,6 +167,9 @@ QVector<double> CavaProvider::values() const {
 }
 
 void CavaProvider::updateValues(const QVector<double>& values) {
+    if (values.size() != m_bars) {
+        return;
+    }
     if (values != m_values) {
         m_values = values;
         emit valuesChanged();

@@ -35,7 +35,8 @@ Item {
     readonly property bool is12Hour: Units.twelveHourClock
     readonly property bool useTitan: fontOpt === "titan"
 
-    readonly property int baseWidth: isVertical ? 276 : 420
+    readonly property int digitsWidth: isVertical ? 276 : 420
+    readonly property int baseWidth: isVertical ? 276 : (is12Hour ? 496 : 420)
     readonly property int glyphBoxHeight: isVertical ? 252 : 150
     readonly property int baseHeight: isVertical ? (is12Hour ? 296 : 252) : 150
     readonly property int padH: showBackground ? Tokens.padding.largeIncreased : 0
@@ -44,7 +45,7 @@ Item {
     readonly property int hour24: Time.hours
     readonly property string hourStr: (is12Hour ? (hour24 % 12 === 0 ? 12 : hour24 % 12) : hour24).toString().padStart(2, "0")
     readonly property string minuteStr: Time.minutes.toString().padStart(2, "0")
-    readonly property string meridian: Time.amPmStr || (hour24 >= 12 ? "PM" : "AM")
+    readonly property string meridian: (hour24 >= 12 ? "PM" : "AM")
     readonly property string glyphTopLeft: hourStr.charAt(0)
     readonly property string glyphTopRight: hourStr.charAt(1)
     readonly property string glyphBottomLeft: minuteStr.charAt(0)
@@ -53,24 +54,23 @@ Item {
     readonly property color tintSoft: roleColor(softColorOpt, Colours.palette.m3primary)
     readonly property color tintBold: roleColor(boldColorOpt, Colours.palette.m3inverseSurface)
     readonly property string sansFont: Tokens.font.body.large.family || "GoogleSansFlex"
-    readonly property string displayFont: "Titan One"
+    readonly property string displayFont: Qt.fontFamilies().includes("Titan One") ? "Titan One" : sansFont
 
-    readonly property real fringeSize: isVertical ? baseWidth * 0.026 : glyphBoxHeight * 0.03
-    readonly property real tileW: isVertical ? baseWidth * 0.66 : baseWidth * 0.30
+    readonly property real fringeSize: isVertical ? digitsWidth * 0.026 : glyphBoxHeight * 0.03
+    readonly property real tileW: isVertical ? digitsWidth * 0.66 : digitsWidth * 0.30
     readonly property real tileH: isVertical ? glyphBoxHeight * 0.66 : glyphBoxHeight * 0.9
     readonly property int glyphSize: Math.round(isVertical ? glyphBoxHeight * 0.66 : glyphBoxHeight * 0.85)
     readonly property real pos0X: 0
-    readonly property real pos1X: isVertical ? baseWidth * 0.30 : baseWidth * 0.15
-    readonly property real pos2X: isVertical ? 0 : baseWidth * 0.46
-    readonly property real pos3X: isVertical ? baseWidth * 0.30 : baseWidth * 0.60
+    readonly property real pos1X: isVertical ? digitsWidth * 0.30 : digitsWidth * 0.15
+    readonly property real pos2X: isVertical ? 0 : digitsWidth * 0.46
+    readonly property real pos3X: isVertical ? digitsWidth * 0.30 : digitsWidth * 0.60
     readonly property real pos0Y: isVertical ? glyphBoxHeight * -0.04 : glyphBoxHeight * 0.05
     readonly property real pos1Y: pos0Y
     readonly property real pos2Y: isVertical ? glyphBoxHeight * 0.42 : glyphBoxHeight * 0.05
     readonly property real pos3Y: pos2Y
-    readonly property real colonX: pos1X + tileW + (pos2X - (pos1X + tileW)) / 2 - baseWidth * 0.03
+    readonly property real colonX: pos1X + tileW + (pos2X - (pos1X + tileW)) / 2 - digitsWidth * 0.03
     readonly property real colonDotSize: glyphBoxHeight * 0.2
     readonly property real colonGap: glyphBoxHeight * 0.04
-    readonly property var fringeSamples: ringSamples(16, fringeSize)
 
     function roleColor(key: string, fallback: color): color {
         switch (key) {
@@ -218,6 +218,12 @@ Item {
                 shadowBlur: Config.background.desktopClock.shadow.blur
                 shapeMask: glyphMask
             }
+
+            GlyphStage {
+                transformOrigin: Item.TopLeft
+                scale: root.clockScale
+                opacity: 0.72
+            }
         }
     }
 
@@ -248,38 +254,32 @@ Item {
             anchors.fill: parent
             visible: false
             layer.enabled: true
+            layer.effect: MultiEffect {
+                blurEnabled: true
+                blur: 1.0
+                blurMax: Math.max(8, Math.round(root.fringeSize * 2.2))
+                autoPaddingEnabled: false
+            }
 
-            Repeater {
-                model: root.fringeSamples
+            GlyphTile {
+                x: root.pos1X
+                y: root.pos1Y
+                text: root.glyphTopRight
+                color: "black"
+            }
 
-                Item {
-                    id: punchA
+            GlyphTile {
+                x: root.pos2X
+                y: root.pos2Y
+                text: root.glyphBottomLeft
+                color: "black"
+            }
 
-                    required property var modelData
-
-                    anchors.fill: parent
-
-                    GlyphTile {
-                        x: root.pos1X + punchA.modelData.dx
-                        y: root.pos1Y + punchA.modelData.dy
-                        text: root.glyphTopRight
-                        color: "black"
-                    }
-
-                    GlyphTile {
-                        x: root.pos2X + punchA.modelData.dx
-                        y: root.pos2Y + punchA.modelData.dy
-                        text: root.glyphBottomLeft
-                        color: "black"
-                    }
-
-                    GlyphTile {
-                        x: root.pos3X + punchA.modelData.dx
-                        y: root.pos3Y + punchA.modelData.dy
-                        text: root.glyphBottomRight
-                        color: "black"
-                    }
-                }
+            GlyphTile {
+                x: root.pos3X
+                y: root.pos3Y
+                text: root.glyphBottomRight
+                color: "black"
             }
         }
 
@@ -290,8 +290,8 @@ Item {
             maskSource: tileAPunch
             maskEnabled: true
             maskInverted: true
-            maskThresholdMin: 0.4
-            maskSpreadAtMin: 1.0
+            maskThresholdMin: 0.08
+            maskSpreadAtMin: 0.25
         }
 
         Item {
@@ -315,31 +315,25 @@ Item {
             anchors.fill: parent
             visible: false
             layer.enabled: true
+            layer.effect: MultiEffect {
+                blurEnabled: true
+                blur: 1.0
+                blurMax: Math.max(8, Math.round(root.fringeSize * 2.2))
+                autoPaddingEnabled: false
+            }
 
-            Repeater {
-                model: root.fringeSamples
+            GlyphTile {
+                x: root.pos2X
+                y: root.pos2Y
+                text: root.glyphBottomLeft
+                color: "black"
+            }
 
-                Item {
-                    id: punchB
-
-                    required property var modelData
-
-                    anchors.fill: parent
-
-                    GlyphTile {
-                        x: root.pos2X + punchB.modelData.dx
-                        y: root.pos2Y + punchB.modelData.dy
-                        text: root.glyphBottomLeft
-                        color: "black"
-                    }
-
-                    GlyphTile {
-                        x: root.pos3X + punchB.modelData.dx
-                        y: root.pos3Y + punchB.modelData.dy
-                        text: root.glyphBottomRight
-                        color: "black"
-                    }
-                }
+            GlyphTile {
+                x: root.pos3X
+                y: root.pos3Y
+                text: root.glyphBottomRight
+                color: "black"
             }
         }
 
@@ -350,8 +344,8 @@ Item {
             maskSource: tileBPunch
             maskEnabled: true
             maskInverted: true
-            maskThresholdMin: 0.4
-            maskSpreadAtMin: 1.0
+            maskThresholdMin: 0.08
+            maskSpreadAtMin: 0.25
         }
 
         Item {
@@ -375,24 +369,18 @@ Item {
             anchors.fill: parent
             visible: false
             layer.enabled: true
+            layer.effect: MultiEffect {
+                blurEnabled: true
+                blur: 1.0
+                blurMax: Math.max(8, Math.round(root.fringeSize * 2.2))
+                autoPaddingEnabled: false
+            }
 
-            Repeater {
-                model: root.fringeSamples
-
-                Item {
-                    id: punchC
-
-                    required property var modelData
-
-                    anchors.fill: parent
-
-                    GlyphTile {
-                        x: root.pos3X + punchC.modelData.dx
-                        y: root.pos3Y + punchC.modelData.dy
-                        text: root.glyphBottomRight
-                        color: "black"
-                    }
-                }
+            GlyphTile {
+                x: root.pos3X
+                y: root.pos3Y
+                text: root.glyphBottomRight
+                color: "black"
             }
         }
 
@@ -403,8 +391,8 @@ Item {
             maskSource: tileCPunch
             maskEnabled: true
             maskInverted: true
-            maskThresholdMin: 0.5
-            maskSpreadAtMin: 1.0
+            maskThresholdMin: 0.08
+            maskSpreadAtMin: 0.25
         }
 
         GlyphTile {
@@ -442,13 +430,13 @@ Item {
         Text {
             z: 4
             visible: root.is12Hour
-            x: root.isVertical ? root.pos2X + root.tileW * 0.75 : root.pos3X + root.tileW - 6
-            y: root.isVertical ? root.glyphBoxHeight - 4 : root.pos3Y + root.tileH - height - root.glyphBoxHeight * 0.05
+            x: root.isVertical ? root.pos2X + root.tileW * 0.75 : root.pos3X + root.tileW - 4
+            y: root.isVertical ? root.glyphBoxHeight - 4 : root.pos3Y + root.tileH - height - root.glyphBoxHeight * 0.08
             text: root.meridian
             color: root.tintSoft
             font.family: root.displayFont
-            font.pixelSize: Math.round(root.isVertical ? root.baseWidth * 0.16 : root.glyphBoxHeight * 0.50)
-            renderType: Text.NativeRendering
+            font.pixelSize: Math.round(root.isVertical ? root.digitsWidth * 0.16 : root.glyphBoxHeight * 0.36)
+            renderType: Text.QtRendering
         }
     }
 
@@ -457,7 +445,7 @@ Item {
         height: root.tileH
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
-        renderType: Text.NativeRendering
+        renderType: Text.QtRendering
         font.family: root.useTitan ? root.displayFont : root.sansFont
         font.pixelSize: root.glyphSize
         font.variableAxes: root.useTitan ? ({}) : ({

@@ -26,9 +26,12 @@ Item {
     property real plateOpacity: Config.background.desktopWidgets.opacity
     property var widgetOptions: ({})
 
-    readonly property real s: WidgetMetrics.scale
+    readonly property real s: Math.max(0.7, Math.min(1.5, Config.background.desktopWidgets.scale ?? 1.0))
     readonly property string fillStyle: widgetOptions?.fillStyle ?? "shape"
-    readonly property string focusMetric: widgetOptions?.focusMetric ?? "cpu"
+    readonly property string focusMetric: {
+        const raw = widgetOptions?.focusMetric ?? "cpu";
+        return ["cpu", "ram", "gpu", "disk"].indexOf(raw) >= 0 ? raw : "cpu";
+    }
     readonly property bool hasGpu: Gpu.type !== GpuType.None
 
     readonly property var activeMetricKeys: {
@@ -79,7 +82,7 @@ Item {
         case "ram":
             return "memory_alt";
         case "gpu":
-            return "DeveloperBoard";
+            return "developer_board";
         case "disk":
             return "hard_drive";
         default:
@@ -113,9 +116,25 @@ Item {
         case "disk":
             return Colours.palette.m3primary;
         default:
-            return (UPower.displayDevice.isLaptopBattery && UPower.displayDevice.percentage <= 0.2)
+            return ((UPower.displayDevice?.isLaptopBattery ?? false) && (UPower.displayDevice?.percentage ?? 1) <= 0.2)
                 ? Colours.palette.m3error
                 : Colours.palette.m3tertiary;
+        }
+    }
+
+    function metricOnColor(kind: string): color {
+        switch (kind) {
+        case "cpu":
+        case "disk":
+            return Colours.palette.m3onPrimary;
+        case "ram":
+            return Colours.palette.m3onSecondary;
+        case "gpu":
+            return Colours.palette.m3onTertiary;
+        default:
+            return ((UPower.displayDevice?.isLaptopBattery ?? false) && (UPower.displayDevice?.percentage ?? 1) <= 0.2)
+                ? Colours.palette.m3onError
+                : Colours.palette.m3onTertiary;
         }
     }
 
@@ -128,8 +147,8 @@ Item {
             return Math.max(0, Math.min(1, Gpu.percentage));
         if (kind === "disk")
             return Math.max(0, Math.min(1, Storage.percentage));
-        if (UPower.displayDevice.isLaptopBattery)
-            return Math.max(0, Math.min(1, UPower.displayDevice.percentage));
+        if (UPower.displayDevice?.isLaptopBattery ?? false)
+            return Math.max(0, Math.min(1, UPower.displayDevice?.percentage ?? 0));
         return 1.0;
     }
 
@@ -144,8 +163,8 @@ Item {
             const d = Storage.primaryDisk;
             return d ? Units.formatKibUsage(d.used, d.total) : "/";
         }
-        return UPower.displayDevice.isLaptopBattery
-            ? `${Math.round(UPower.displayDevice.percentage * 100)}%`
+        return (UPower.displayDevice?.isLaptopBattery ?? false)
+            ? `${Math.round((UPower.displayDevice?.percentage ?? 0) * 100)}%`
             : Tr.tr("AC");
     }
 
@@ -153,7 +172,7 @@ Item {
     implicitHeight: WidgetMetrics.heightFor(sizeMode, "resources", s)
 
     Loader {
-        active: root.visible && root.metricNeedsCpu()
+        active: root.visible && !GameMode.enabled && root.metricNeedsCpu()
         sourceComponent: Component {
             ServiceRef {
                 service: Cpu
@@ -162,7 +181,7 @@ Item {
     }
 
     Loader {
-        active: root.visible && root.metricNeedsRam()
+        active: root.visible && !GameMode.enabled && root.metricNeedsRam()
         sourceComponent: Component {
             ServiceRef {
                 service: Memory
@@ -171,7 +190,7 @@ Item {
     }
 
     Loader {
-        active: root.visible && root.metricNeedsGpu()
+        active: root.visible && !GameMode.enabled && root.metricNeedsGpu()
         sourceComponent: Component {
             ServiceRef {
                 service: Gpu
@@ -180,7 +199,7 @@ Item {
     }
 
     Loader {
-        active: root.visible && root.metricNeedsDisk()
+        active: root.visible && !GameMode.enabled && root.metricNeedsDisk()
         sourceComponent: Component {
             ServiceRef {
                 service: Storage
@@ -220,6 +239,7 @@ Item {
                     Layout.alignment: Qt.AlignHCenter
                     kind: root.focusMetric
                     gaugeSize: Math.round((shell.isShaped ? 68 : 78) * root.s)
+                    activeLayout: root.sizeMode === "1x1"
                 }
 
                 StyledText {
@@ -262,6 +282,7 @@ Item {
                             Layout.alignment: Qt.AlignHCenter
                             kind: dualTile.modelData
                             gaugeSize: Math.round(68 * root.s)
+                            activeLayout: root.sizeMode === "1x2"
                         }
 
                         StyledText {
@@ -321,6 +342,7 @@ Item {
                             Layout.alignment: Qt.AlignVCenter
                             kind: colMeter.modelData
                             gaugeSize: Math.round(52 * root.s)
+                            activeLayout: root.sizeMode === "2x1"
                         }
 
                         ColumnLayout {
@@ -391,6 +413,7 @@ Item {
                                 Layout.alignment: Qt.AlignHCenter
                                 kind: sqMeter.modelData
                                 gaugeSize: Math.round(62 * root.s)
+                                activeLayout: root.sizeMode === "2x2"
                             }
 
                             StyledText {
@@ -445,6 +468,7 @@ Item {
                             Layout.alignment: Qt.AlignHCenter
                             kind: wideStripCard.modelData
                             gaugeSize: Math.round(64 * root.s)
+                            activeLayout: root.sizeMode === "1x3"
                         }
 
                         StyledText {
@@ -530,6 +554,7 @@ Item {
                                 Layout.alignment: Qt.AlignHCenter
                                 kind: panoTile.modelData
                                 gaugeSize: Math.round(88 * root.s)
+                                activeLayout: root.sizeMode === "2x3"
                             }
 
                             StyledText {
@@ -590,10 +615,13 @@ Item {
         property string kind: "cpu"
         property int gaugeSize: 64
         property bool showPercent: true
+        property bool activeLayout: false
 
         readonly property real pct: root.metricRatio(kind)
         readonly property color col: root.metricColor(kind)
+        readonly property color onCol: root.metricOnColor(kind)
         readonly property bool isShapeMode: root.fillStyle === "shape"
+        readonly property bool shapeLayerActive: root.visible && activeLayout && isShapeMode && !GameMode.enabled && width > 0 && height > 0
         readonly property int shapeEnum: root.metricShape(kind)
 
         implicitWidth: gaugeSize
@@ -602,21 +630,21 @@ Item {
         // Expressive MaterialShape Fill Gauge
         Item {
             anchors.fill: parent
-            visible: gRoot.isShapeMode
+            visible: gRoot.isShapeMode && !GameMode.enabled
 
             MaterialShape {
                 id: gMask
 
                 anchors.fill: parent
                 visible: false
-                layer.enabled: gRoot.isShapeMode && width > 0 && height > 0
+                layer.enabled: gRoot.shapeLayerActive
                 shape: gRoot.shapeEnum
                 color: "#ffffff"
             }
 
             Item {
                 anchors.fill: parent
-                layer.enabled: gRoot.isShapeMode && width > 0 && height > 0
+                layer.enabled: gRoot.shapeLayerActive
                 layer.smooth: true
                 layer.effect: Mask {
                     maskSource: gMask
@@ -649,14 +677,14 @@ Item {
                 visible: gRoot.showPercent
                 text: Math.round(gRoot.pct * 100) + "%"
                 font: Tokens.font.clock.size(Math.max(11, Math.round(gRoot.gaugeSize * 0.24))).weight(Font.Bold).build()
-                color: gRoot.pct > 0.55 ? Colours.palette.m3onPrimary : Colours.palette.m3onSurface
+                color: gRoot.pct > 0.55 ? gRoot.onCol : Colours.palette.m3onSurface
             }
         }
 
-        // Classic Circular Progress Ring Gauge
+        // Classic Circular Progress Ring Gauge (also used when GameMode disables FBO masking)
         Item {
             anchors.fill: parent
-            visible: !gRoot.isShapeMode
+            visible: !gRoot.isShapeMode || GameMode.enabled
 
             CircularProgress {
                 anchors.fill: parent

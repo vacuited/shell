@@ -3,6 +3,8 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Effects
+import Quickshell
+import Caelestia
 import Caelestia.Config
 import qs.components
 import qs.components.controls
@@ -17,19 +19,43 @@ Item {
     property string viewMode: "grid"      // "grid" | "list"
     signal clicked()
 
+    property bool copied: false
+
+    function copyNote(): void {
+        const body = (root.note && root.note.body) ? root.note.body : "";
+        if (!body || body.trim().length === 0)
+            return;
+        Quickshell.clipboardText = body;
+        root.copied = true;
+        copyResetTimer.restart();
+        const title = (root.note && root.note.title && root.note.title.trim().length > 0) ? root.note.title : qsTr("Note");
+        Toaster.toast(qsTr("Copied to clipboard"), title, "content_copy");
+    }
+
+    Timer {
+        id: copyResetTimer
+        interval: 1200
+        repeat: false
+        onTriggered: root.copied = false
+    }
+
     implicitHeight: viewMode === "list" ? 70 : 118
     height: implicitHeight
 
     readonly property bool isList: viewMode === "list"
     readonly property bool hasCustomColor: !!(note && note.color && note.color !== "none")
-    readonly property bool isHovered: stateLayer.containsMouse || rootHoverHandler.hovered
+    readonly property bool isHovered: stateLayer.containsMouse || rootHoverHandler.hovered || copyBtnHover.hovered || copyBtnLayer.containsMouse || bgMouseArea.containsMouse
 
     HoverHandler {
         id: rootHoverHandler
     }
 
-    TapHandler {
-        onTapped: root.clicked()
+    MouseArea {
+        id: bgMouseArea
+        anchors.fill: parent
+        z: -1
+        cursorShape: Qt.PointingHandCursor
+        onClicked: root.clicked()
     }
 
     readonly property color accentColor: {
@@ -168,7 +194,12 @@ Item {
 
             RowLayout {
                 Layout.fillWidth: true
+                Layout.rightMargin: (stackCopyBtn.showBtn && !root.isList) ? (stackCopyBtn.width + Tokens.spacing.extraSmall) : 0
                 spacing: Tokens.spacing.small
+
+                Behavior on Layout.rightMargin {
+                    Anim { type: Anim.DefaultSpatial }
+                }
 
                 StyledText {
                     Layout.fillWidth: true
@@ -251,9 +282,13 @@ Item {
         RowLayout {
             anchors.fill: parent
             anchors.leftMargin: Tokens.padding.medium
-            anchors.rightMargin: Tokens.padding.medium
+            anchors.rightMargin: Tokens.padding.medium + listBadgeRow.implicitWidth + Tokens.spacing.small + (stackCopyBtn.showBtn ? stackCopyBtn.width + Tokens.spacing.small : 0)
             visible: root.isList
             spacing: Tokens.spacing.small
+
+            Behavior on anchors.rightMargin {
+                Anim { type: Anim.DefaultSpatial }
+            }
 
             ColumnLayout {
                 Layout.fillWidth: true
@@ -319,6 +354,7 @@ Item {
             }
 
             RowLayout {
+                id: listBadgeRow
                 anchors.right: parent.right
                 anchors.rightMargin: Tokens.padding.medium
                 anchors.verticalCenter: parent.verticalCenter
@@ -348,6 +384,60 @@ Item {
             color: root.hasCustomColor ? root.accentColor : Colours.palette.m3primary
             z: 10
             onClicked: root.clicked()
+        }
+
+        StyledRect {
+            id: stackCopyBtn
+
+            readonly property bool hasContent: !!(root.note && root.note.body && root.note.body.trim().length > 0)
+            readonly property bool showBtn: hasContent && (root.isHovered || root.copied)
+
+            anchors.right: parent.right
+            anchors.rightMargin: root.isList
+                ? (listBadgeRow.implicitWidth + Tokens.padding.medium + Tokens.spacing.small)
+                : Tokens.padding.small
+            y: root.isList ? Math.round((parent.height - height) / 2) : Tokens.padding.small
+            width: 26
+            height: 26
+            radius: Tokens.rounding.full
+            z: 20
+            visible: opacity > 0.01
+            opacity: showBtn ? 1 : 0
+            scale: showBtn ? 1 : 0.85
+            color: root.copied ? Colours.palette.m3primaryContainer : Colours.tPalette.m3surfaceContainerHighest
+            border.width: 1
+            border.color: root.copied ? Colours.palette.m3primary : Qt.alpha(Colours.palette.m3outlineVariant, 0.5)
+
+            Behavior on opacity {
+                Anim { type: Anim.FastEffects }
+            }
+
+            Behavior on scale {
+                Anim { type: Anim.DefaultSpatial }
+            }
+
+            Behavior on color {
+                CAnim {}
+            }
+
+            HoverHandler {
+                id: copyBtnHover
+            }
+
+            MaterialIcon {
+                anchors.centerIn: parent
+                text: root.copied ? "check" : "content_copy"
+                fontStyle: Tokens.font.icon.small
+                color: root.copied ? Colours.palette.m3onPrimaryContainer : Colours.palette.m3onSurfaceVariant
+            }
+
+            StateLayer {
+                id: copyBtnLayer
+                anchors.fill: parent
+                radius: stackCopyBtn.radius
+                color: root.copied ? Colours.palette.m3onPrimaryContainer : Colours.palette.m3onSurface
+                onClicked: root.copyNote()
+            }
         }
     }
 }

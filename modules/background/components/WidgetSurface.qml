@@ -43,7 +43,7 @@ Item {
     readonly property bool isBlur: surfaceStyle === "blur"
     readonly property bool isFrosted: surfaceStyle === "frosted"
     readonly property bool isGlass: !isMaterial && !isBlur && !isFrosted
-    readonly property bool hasWallpaperPixels: !GameMode.enabled && !weActive && wallpaper !== null && wallpaper.width > 0 && wallpaper.height > 0
+    readonly property bool hasWallpaperPixels: root.visible && !GameMode.enabled && !weActive && wallpaper !== null && wallpaper.width > 0 && wallpaper.height > 0
     readonly property bool canQmlBlur: (isBlur || isFrosted || blur) && hasWallpaperPixels
     readonly property bool blurActive: (isBlur || (isGlass && blur)) && hasWallpaperPixels
     readonly property bool frostedActive: isFrosted && hasWallpaperPixels
@@ -82,7 +82,7 @@ Item {
         // Maintained for callers; origin binding tracks ancestor geometry automatically.
     }
 
-    layer.enabled: !GameMode.enabled && !root.weActive && root.shadowEnabled && root.shadowOpacity > 0
+    layer.enabled: root.visible && !GameMode.enabled && !root.weActive && root.shadowEnabled && root.shadowOpacity > 0
     layer.effect: MultiEffect {
         shadowEnabled: true
         shadowColor: Colours.palette.m3shadow
@@ -107,7 +107,7 @@ Item {
         id: surfaceLayer
 
         anchors.fill: parent
-        layer.enabled: root.shapeMask !== null
+        layer.enabled: root.visible && root.shapeMask !== null && width > 0 && height > 0
         layer.smooth: true
         layer.effect: MultiEffect {
             maskEnabled: true

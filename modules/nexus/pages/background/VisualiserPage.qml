@@ -268,7 +268,7 @@ PageBase {
                 root.visConfig.autoHide = checked;
                 root.targetConfig.save();
             }
-            enabled: root.isEnabled
+            disabled: !root.isEnabled
         }
 
         ToggleRow {
@@ -283,7 +283,7 @@ PageBase {
                 root.visConfig.blur = checked;
                 root.targetConfig.save();
             }
-            enabled: root.isEnabled && Wallpapers.committedWeDir === ""
+            disabled: !(root.isEnabled && Wallpapers.committedWeDir === "")
         }
 
         SelectRow {
@@ -402,7 +402,7 @@ PageBase {
             subtext: qsTr("Floating caps that ease down with gravity")
             checked: root.visOpts.peakCaps ?? true
             onToggled: root.setVisOption("peakCaps", checked)
-            enabled: root.isEnabled
+            disabled: !root.isEnabled
         }
 
         // --- Smooth Wave Options ---
@@ -461,7 +461,7 @@ PageBase {
             subtext: qsTr("Soft vertical light trails below each orb")
             checked: root.visOpts.dotTrails ?? true
             onToggled: root.setVisOption("dotTrails", checked)
-            enabled: root.isEnabled
+            disabled: !root.isEnabled
         }
 
         // --- Ambient Edge Glow Options ---
@@ -484,7 +484,7 @@ PageBase {
             subtext: qsTr("Wrap reactive glow around all four screen edges")
             checked: root.visOpts.glowAllEdges ?? false
             onToggled: root.setVisOption("glowAllEdges", checked)
-            enabled: root.isEnabled
+            disabled: !root.isEnabled
         }
 
         StepperRow {
@@ -493,15 +493,15 @@ PageBase {
             Layout.fillWidth: true
             label: qsTr("Visualiser bars")
             subtext: qsTr("Frequency resolution across all audio visualisers")
-            configNode: root.targetConfig.services
+            configNode: GlobalConfig.services
             propertyName: "visualiserBars"
-            value: root.targetConfig.services.visualiserBars
+            value: GlobalConfig.services.visualiserBars
             from: 10
             to: 120
             stepSize: 2
             onMoved: v => {
-                root.targetConfig.services.visualiserBars = Math.round(v);
-                root.targetConfig.save();
+                GlobalConfig.services.visualiserBars = Math.round(v);
+                GlobalConfig.save();
             }
             enabled: root.isEnabled
         }
@@ -558,7 +558,7 @@ PageBase {
                 root.visConfig.mirrored = checked;
                 root.targetConfig.save();
             }
-            enabled: root.isEnabled && root.activeStyle !== "glow"
+            disabled: !(root.isEnabled && root.activeStyle !== "glow")
         }
 
         SliderRow {
@@ -760,7 +760,7 @@ PageBase {
                 root.visConfig.monstercat = checked;
                 root.targetConfig.save();
             }
-            enabled: root.isEnabled
+            disabled: !root.isEnabled
         }
 
         SelectRow {

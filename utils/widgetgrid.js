@@ -27,8 +27,31 @@ function defaultSizeMode(type) {
     }
 }
 
+function validSizeMode(type, sizeMode) {
+    if (type === "customImage" || type === "sticker" || type === "customText")
+        return "1x1";
+    if (type === "weatherPill")
+        return sizeMode === "1x2" ? "1x2" : "1x1";
+    var allowed = {
+        "atAGlance": ["1x2", "2x1", "2x2", "1x3", "2x3"],
+        "calendar": ["1x1", "1x2", "2x1", "2x2", "2x3"],
+        "weather": ["1x1", "1x2", "2x1", "2x2", "1x3", "2x3"],
+        "timers": ["1x1", "1x2", "2x1", "2x2", "2x3"],
+        "countdown": ["1x1", "1x2", "2x1", "2x2"],
+        "resources": ["1x1", "1x2", "2x1", "2x2", "1x3", "2x3"],
+        "media": ["1x1", "1x2", "2x1", "2x2", "1x3", "2x3"],
+        "battery": ["1x1", "1x2", "2x1", "2x2"],
+        "usercard": ["1x1", "1x2", "2x1", "2x2", "2x3"],
+        "todo": ["1x1", "1x2", "2x1", "2x2", "2x3"],
+        "notes": ["1x1", "1x2", "2x1", "2x2", "2x3"]
+    }[type];
+    if (sizeMode && sizeMode !== "" && (!allowed || allowed.indexOf(sizeMode) >= 0))
+        return sizeMode;
+    return defaultSizeMode(type);
+}
+
 function colsFor(type, sizeMode) {
-    var m = (sizeMode && sizeMode !== "") ? sizeMode : defaultSizeMode(type);
+    var m = validSizeMode(type, sizeMode);
     var parts = m.split("x");
     var c = parseInt(parts[1], 10);
     if (isNaN(c) || c < 1)
@@ -37,7 +60,7 @@ function colsFor(type, sizeMode) {
 }
 
 function rowsFor(type, sizeMode) {
-    var m = (sizeMode && sizeMode !== "") ? sizeMode : defaultSizeMode(type);
+    var m = validSizeMode(type, sizeMode);
     var parts = m.split("x");
     var r = parseInt(parts[0], 10);
     if (isNaN(r) || r < 1)
@@ -105,7 +128,7 @@ function place(entries, workWidth, workHeight, columnsSetting, anchorCorner, ste
         if (!entry || entry.enabled === false)
             continue;
         var wType = canonicalType(entry);
-        var mode = (entry.sizeMode && entry.sizeMode !== "") ? entry.sizeMode : defaultSizeMode(wType);
+        var mode = validSizeMode(wType, entry.sizeMode);
         var w = colsFor(wType, mode);
         var h = rowsFor(wType, mode);
         if (entry.x !== undefined && entry.x >= 0 && entry.y !== undefined && entry.y >= 0) {
@@ -131,7 +154,7 @@ function place(entries, workWidth, workHeight, columnsSetting, anchorCorner, ste
         if (!e || e.enabled === false || slots[e.id])
             continue;
         var t = canonicalType(e);
-        var sz = (e.sizeMode && e.sizeMode !== "") ? e.sizeMode : defaultSizeMode(t);
+        var sz = validSizeMode(t, e.sizeMode);
         var cw = colsFor(t, sz);
         var ch = rowsFor(t, sz);
         var pos = findSlot(occ, cw, ch, colLimit, totalCols, totalRows, anchorCorner || "top-right");

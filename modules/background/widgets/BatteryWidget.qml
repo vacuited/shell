@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 import Quickshell.Services.UPower
 import M3Shapes
 import Caelestia.Config
@@ -24,7 +25,7 @@ Item {
     property real plateOpacity: Config.background.desktopWidgets.opacity
     property var widgetOptions: ({})
 
-    readonly property real s: WidgetMetrics.scale
+    readonly property real s: Math.max(0.7, Math.min(1.5, Config.background.desktopWidgets.scale ?? 1.0))
     readonly property var dev: UPower.displayDevice
     readonly property bool isLaptop: dev?.isLaptopBattery ?? false
     readonly property real pct: Math.max(0, Math.min(1, dev?.percentage ?? 0))
@@ -38,7 +39,7 @@ Item {
     readonly property real desktopMetricRatio: desktopGpuPower > 0 ? Math.min(1, desktopGpuPower / 150) : Math.max(0, Math.min(1, Gpu.percentage))
     readonly property string desktopMainValue: desktopGpuPower > 0 ? (Math.round(desktopGpuPower) + " W") : (Math.round(Gpu.percentage * 100) + "%")
     readonly property string desktopCompactValue: desktopGpuPower > 0 ? (Math.round(desktopGpuPower) + "W") : (Math.round(Gpu.percentage * 100) + "%")
-    readonly property string desktopSubValue: desktopGpuPower > 0 ? (desktopGpuPower.toFixed(1) + " W") : (Gpu.temperature > 0 ? (Math.round(Gpu.temperature) + "°C") : (Gpu.name || "--"))
+    readonly property string desktopSubValue: desktopGpuPower > 0 ? (desktopGpuPower.toFixed(1) + " W") : (Gpu.temperature > 0 ? Units.formatSensorTemp(Gpu.temperature) : (Gpu.name || "--"))
 
     readonly property color accentColor: isLow
         ? Colours.palette.m3error
@@ -76,6 +77,15 @@ Item {
     implicitWidth: WidgetMetrics.widthFor(sizeMode, s)
     implicitHeight: WidgetMetrics.heightFor(sizeMode, "battery", s)
 
+    Loader {
+        active: root.visible && !root.isLaptop && root.desktopGpuPower <= 0 && Gpu.type !== GpuType.None && !GameMode.enabled
+        sourceComponent: Component {
+            ServiceRef {
+                service: Gpu
+            }
+        }
+    }
+
     WidgetCardShell {
         id: shell
 
@@ -111,8 +121,8 @@ Item {
                     CircularProgress {
                         anchors.fill: parent
                         value: root.isLaptop ? root.pct : root.desktopMetricRatio
-                        wavy: root.isCharging
-                        wavePaused: !root.isCharging
+                        wavy: root.visible && root.sizeMode === "1x1" && root.isCharging && !GameMode.enabled
+                        wavePaused: !wavy
                         strokeWidth: Math.max(4, Math.round(5 * root.s))
                         fgColour: root.accentColor
                         bgColour: WidgetMetrics.trackSurface
@@ -143,12 +153,14 @@ Item {
                 }
 
                 StyledText {
-                    Layout.alignment: Qt.AlignHCenter
+                    Layout.fillWidth: true
+                    horizontalAlignment: Text.AlignHCenter
                     text: root.isLaptop
                         ? (root.seconds >= 60 ? root.formatDuration(root.seconds) : root.statusText)
                         : root.statusText
                     font: Tokens.font.label.builders.small.scale(Math.max(0.85, root.s * 0.9)).build()
                     color: root.isCharging || root.isLow ? root.accentColor : Colours.palette.m3onSurfaceVariant
+                    elide: Text.ElideRight
                 }
             }
         }
@@ -168,8 +180,8 @@ Item {
                 CircularProgress {
                     anchors.fill: parent
                     value: root.isLaptop ? root.pct : root.desktopMetricRatio
-                    wavy: root.isCharging
-                    wavePaused: !root.isCharging
+                    wavy: root.visible && root.sizeMode === "1x2" && root.isCharging && !GameMode.enabled
+                    wavePaused: !wavy
                     strokeWidth: Math.max(4, Math.round(6 * root.s))
                     fgColour: root.accentColor
                     bgColour: WidgetMetrics.trackSurface
@@ -209,7 +221,7 @@ Item {
 
                     StyledRect {
                         Layout.preferredHeight: Math.round(22 * root.s)
-                        Layout.preferredWidth: Math.round(statLabel.implicitWidth + Tokens.padding.medium * 2)
+                        Layout.preferredWidth: Math.min(Math.round(124 * root.s), Math.round(statLabel.implicitWidth + Tokens.padding.medium * 2))
                         radius: Math.round(11 * root.s)
                         color: root.accentContainer
 
@@ -217,9 +229,12 @@ Item {
                             id: statLabel
 
                             anchors.centerIn: parent
+                            width: Math.max(0, parent.width - Tokens.padding.medium * 2)
+                            horizontalAlignment: Text.AlignHCenter
                             text: root.statusText
                             font: Tokens.font.label.builders.small.scale(Math.max(0.85, root.s * 0.9)).weight(Font.DemiBold).build()
                             color: root.onAccentContainer
+                            elide: Text.ElideRight
                         }
                     }
 
@@ -233,8 +248,8 @@ Item {
                     Layout.preferredHeight: Math.round(12 * root.s)
                     visible: root.isLaptop
                     value: root.pct
-                    wavy: root.isCharging
-                    wavePaused: !root.isCharging
+                    wavy: root.visible && root.sizeMode === "1x2" && root.isCharging && !GameMode.enabled
+                    wavePaused: !wavy
                     fgColour: root.accentColor
                     bgColour: WidgetMetrics.trackSurface
                 }
@@ -263,9 +278,13 @@ Item {
 
                     StyledText {
                         visible: !root.isLaptop
-                        text: Tr.tr("Dedicated GPU draw")
+                        Layout.fillWidth: true
+                        text: root.desktopGpuPower > 0
+                            ? Tr.tr("Dedicated GPU draw")
+                            : (Gpu.temperature > 0 ? (Units.formatSensorTemp(Gpu.temperature) + " · " + root.profileLabel) : Tr.tr("GPU utilization"))
                         font: Tokens.font.label.small
                         color: Colours.palette.m3onSurfaceVariant
+                        elide: Text.ElideRight
                     }
                 }
             }
@@ -297,8 +316,8 @@ Item {
                     CircularProgress {
                         anchors.fill: parent
                         value: root.isLaptop ? root.pct : root.desktopMetricRatio
-                        wavy: root.isCharging
-                        wavePaused: !root.isCharging
+                        wavy: root.visible && root.sizeMode === "2x1" && root.isCharging && !GameMode.enabled
+                        wavePaused: !wavy
                         strokeWidth: Math.max(5, Math.round(7 * root.s))
                         fgColour: root.accentColor
                         bgColour: WidgetMetrics.trackSurface
@@ -339,8 +358,8 @@ Item {
                 Layout.preferredHeight: Math.round(10 * root.s)
                 visible: root.isLaptop
                 value: root.pct
-                wavy: root.isCharging
-                wavePaused: !root.isCharging
+                wavy: root.visible && root.sizeMode === "2x1" && root.isCharging && !GameMode.enabled
+                wavePaused: !wavy
                 fgColour: root.accentColor
                 bgColour: WidgetMetrics.trackSurface
             }
@@ -357,7 +376,8 @@ Item {
                     spacing: 2
 
                     StyledText {
-                        Layout.alignment: Qt.AlignHCenter
+                        Layout.fillWidth: true
+                        horizontalAlignment: Text.AlignHCenter
                         text: root.statusText
                         font: Tokens.font.label.builders.medium.scale(root.s).weight(Font.DemiBold).build()
                         color: root.accentColor
@@ -365,10 +385,12 @@ Item {
                     }
 
                     StyledText {
-                        Layout.alignment: Qt.AlignHCenter
-                        visible: root.isLaptop
-                        text: (root.rateW > 0.1 && !root.isFull ? ((root.isCharging ? "+" : "-") + root.rateW.toFixed(1) + "W · ") : "")
-                            + (root.seconds >= 60 ? root.formatDuration(root.seconds) : root.profileLabel)
+                        Layout.fillWidth: true
+                        horizontalAlignment: Text.AlignHCenter
+                        text: root.isLaptop
+                            ? ((root.rateW > 0.1 && !root.isFull ? ((root.isCharging ? "+" : "-") + root.rateW.toFixed(1) + "W · ") : "")
+                                + (root.seconds >= 60 ? root.formatDuration(root.seconds) : root.profileLabel))
+                            : (root.desktopSubValue + " · " + root.profileLabel)
                         font: Tokens.font.label.builders.small.scale(Math.max(0.85, root.s * 0.9)).build()
                         color: Colours.palette.m3onSurfaceVariant
                         elide: Text.ElideRight
@@ -404,8 +426,8 @@ Item {
                     CircularProgress {
                         anchors.fill: parent
                         value: root.isLaptop ? root.pct : root.desktopMetricRatio
-                        wavy: root.isCharging
-                        wavePaused: !root.isCharging
+                        wavy: root.visible && root.sizeMode === "2x2" && root.isCharging && !GameMode.enabled
+                        wavePaused: !wavy
                         strokeWidth: Math.max(6, Math.round(8 * root.s))
                         fgColour: root.accentColor
                         bgColour: WidgetMetrics.trackSurface
@@ -440,9 +462,11 @@ Item {
                     }
 
                     StyledText {
+                        Layout.fillWidth: true
                         text: root.statusText
                         font: Tokens.font.title.builders.small.scale(root.s).weight(Font.DemiBold).build()
                         color: root.accentColor
+                        elide: Text.ElideRight
                     }
 
                     StyledText {
@@ -466,18 +490,21 @@ Item {
 
                     ColumnLayout {
                         anchors.centerIn: parent
+                        width: Math.max(0, parent.width - Tokens.padding.small * 2)
                         spacing: 1
 
                         StyledText {
-                            Layout.alignment: Qt.AlignHCenter
+                            Layout.fillWidth: true
+                            horizontalAlignment: Text.AlignHCenter
                             text: root.isLaptop ? ((root.rateW > 0.1 && !root.isFull) ? ((root.isCharging ? "+" : "-") + root.rateW.toFixed(1) + " W") : "--") : root.desktopSubValue
                             font: Tokens.font.label.builders.large.scale(root.s).weight(Font.Bold).build()
                             color: Colours.palette.m3onSurface
+                            elide: Text.ElideRight
                         }
 
                         StyledText {
                             Layout.alignment: Qt.AlignHCenter
-                            text: Tr.tr("Rate")
+                            text: root.isLaptop ? Tr.tr("Rate") : (root.desktopGpuPower > 0 ? Tr.tr("Power") : (Gpu.temperature > 0 ? Tr.tr("Temp") : Tr.tr("GPU")))
                             font: Tokens.font.label.small
                             color: Colours.palette.m3onSurfaceVariant
                         }
@@ -492,18 +519,21 @@ Item {
 
                     ColumnLayout {
                         anchors.centerIn: parent
+                        width: Math.max(0, parent.width - Tokens.padding.small * 2)
                         spacing: 1
 
                         StyledText {
-                            Layout.alignment: Qt.AlignHCenter
+                            Layout.fillWidth: true
+                            horizontalAlignment: Text.AlignHCenter
                             text: root.isLaptop ? root.formatDuration(root.seconds) : root.profileLabel
                             font: Tokens.font.label.builders.large.scale(root.s).weight(Font.Bold).build()
                             color: Colours.palette.m3onSurface
+                            elide: Text.ElideRight
                         }
 
                         StyledText {
                             Layout.alignment: Qt.AlignHCenter
-                            text: root.isCharging ? Tr.tr("To full") : Tr.tr("Remaining")
+                            text: root.isLaptop ? (root.isCharging ? Tr.tr("To full") : Tr.tr("Remaining")) : Tr.tr("Profile")
                             font: Tokens.font.label.small
                             color: Colours.palette.m3onSurfaceVariant
                         }

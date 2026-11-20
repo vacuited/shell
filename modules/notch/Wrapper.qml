@@ -36,7 +36,7 @@ Item {
     readonly property bool hasControls: Config.notch.expandMode !== "none" && ((focusShown && Config.notch.showFocusControls) || (showMedia && Config.notch.showMediaControls))
     readonly property bool persistent: wanted && (Config.notch.showClock || musicShown || focusShown)
 
-    readonly property bool trackActive: (root.playing || root.focusActive) && shown
+    readonly property bool trackActive: (root.playing || (Config.notch.showFocus && root.focusActive)) && shown
 
     readonly property bool shouldBeActive: !fullscreen && Config.notch.enabled && (persistent || trackActive || (expanded && hasControls)) && !screenState.dashboard && !screenState.launcher
     property real offsetScale: shouldBeActive ? 0 : 1

@@ -20,13 +20,14 @@ Item {
     property real plateOpacity: Config.background.desktopWidgets.opacity
     property var widgetOptions: ({})
 
-    readonly property real s: WidgetMetrics.scale
+    readonly property real s: Math.max(0.7, Math.min(1.5, Config.background.desktopWidgets.scale ?? 1.0))
     property int monthOffset: 0
     property int selectedYear: todayYear
     property int selectedMonth: todayMonth
     property int selectedDay: todayDay
 
-    readonly property date nowDate: Time.date
+    readonly property string todayKey: Qt.formatDate(Time.date, "yyyy-MM-dd")
+    readonly property date nowDate: FocusLedger.parseLocalDate(todayKey) ?? new Date()
     readonly property int todayYear: nowDate.getFullYear()
     readonly property int todayMonth: nowDate.getMonth()
     readonly property int todayDay: nowDate.getDate()
@@ -39,9 +40,10 @@ Item {
 
     readonly property date selectedDateObj: new Date(selectedYear, selectedMonth, selectedDay)
     readonly property bool selectedIsToday: selectedYear === todayYear && selectedMonth === todayMonth && selectedDay === todayDay
-    readonly property int dayOfYear: Math.floor((nowDate - new Date(todayYear, 0, 0)) / 86400000)
+    readonly property int dayOfYear: Math.floor((Date.UTC(todayYear, todayMonth, todayDay) - Date.UTC(todayYear, 0, 0)) / 86400000)
 
     readonly property int openTodoCount: {
+        void NotesStore.version;
         const list = NotesStore.todos ?? [];
         let c = 0;
         for (let i = 0; i < list.length; i++) {
@@ -52,6 +54,7 @@ Item {
     }
 
     readonly property var topTodos: {
+        void NotesStore.version;
         const list = NotesStore.getSortedTodos ? NotesStore.getSortedTodos() : (NotesStore.todos ?? []);
         const out = [];
         for (let i = 0; i < list.length && out.length < 3; i++) {
@@ -366,7 +369,7 @@ Item {
 
                             StyledText {
                                 Layout.fillWidth: true
-                                text: tallTodoRow.modelData.text ?? ""
+                                text: tallTodoRow.modelData.title ?? ""
                                 font: Tokens.font.body.builders.small.scale(Math.max(0.85, root.s * 0.9)).build()
                                 color: Colours.palette.m3onSurface
                                 elide: Text.ElideRight
@@ -629,7 +632,7 @@ Item {
 
                     Rectangle {
                         Layout.fillWidth: true
-                        height: 1
+                        Layout.preferredHeight: 1
                         color: Qt.alpha(Colours.palette.m3outlineVariant, 0.45)
                     }
 
@@ -670,7 +673,7 @@ Item {
 
                             StyledText {
                                 Layout.fillWidth: true
-                                text: splitTodoRow.modelData.text ?? ""
+                                text: splitTodoRow.modelData.title ?? ""
                                 font: Tokens.font.body.small
                                 color: Colours.palette.m3onSurface
                                 elide: Text.ElideRight
@@ -693,8 +696,8 @@ Item {
                     StyledRect {
                         visible: !root.selectedIsToday || root.monthOffset !== 0
                         Layout.fillWidth: true
-                        height: 28
-                        radius: 14
+                        Layout.preferredHeight: Math.round(28 * root.s)
+                        radius: Math.round(14 * root.s)
                         color: Colours.palette.m3primaryContainer
 
                         StyledText {

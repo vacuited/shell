@@ -27,13 +27,13 @@ ColumnLayout {
     function getStreamIcon(stream: PwNode): string {
         if (!stream)
             return Quickshell.iconPath("audio-x-generic");
-        const iconName = stream.properties["application.icon-name"];
+        const iconName = stream.properties?.["application.icon-name"];
         if (iconName) {
             const p = Quickshell.iconPath(iconName);
             if (p)
                 return p;
         }
-        const binary = stream.properties["application.process.binary"];
+        const binary = stream.properties?.["application.process.binary"];
         if (binary) {
             const entry = DesktopEntries.heuristicLookup(binary);
             if (entry?.icon) {
@@ -42,7 +42,7 @@ ColumnLayout {
                     return p;
             }
         }
-        const appName = stream.properties["application.name"] || stream.description || stream.name || "";
+        const appName = stream.properties?.["application.name"] || stream.description || stream.name || "";
         if (appName.toLowerCase().includes("wallpaper"))
             return Quickshell.iconPath("preferences-desktop-wallpaper");
         const entry = DesktopEntries.heuristicLookup(appName);
@@ -160,8 +160,9 @@ ColumnLayout {
             Layout.fillHeight: true
             Layout.preferredWidth: Tokens.sizes.osd.sliderWidth
             implicitWidth: Tokens.sizes.osd.sliderWidth
+            acceptedButtons: Qt.NoButton
 
-            onWheel: event => {
+            function onWheel(event: WheelEvent): void {
                 if (event.angleDelta.y > 0)
                     Audio.incrementVolume();
                 else if (event.angleDelta.y < 0)

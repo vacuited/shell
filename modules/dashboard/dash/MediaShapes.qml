@@ -10,6 +10,9 @@ import qs.services
 Item {
     id: root
 
+    property bool forceEnabled: false
+    readonly property bool activeVisuals: root.visible && (root.forceEnabled || Config.dashboard.useMediaShapes) && !GameMode.enabled
+
     readonly property list<int> shapeTiers: [
         MaterialShape.Circle,
         MaterialShape.Cookie4Sided,
@@ -29,8 +32,13 @@ Item {
         Colours.palette.m3error
     ]
 
-    ServiceRef {
-        service: Audio.cava
+    Loader {
+        active: root.activeVisuals
+        sourceComponent: Component {
+            ServiceRef {
+                service: Audio.cava
+            }
+        }
     }
 
     MaterialShape {
@@ -47,7 +55,7 @@ Item {
         }
 
         function morph() {
-            if (Config.dashboard.useMediaShapes && root.visible) {
+            if (root.activeVisuals) {
                 if (Config.dashboard.syncMediaShapesToBeat) {
                     materialShape.shape = root.shapeTiers[Math.floor(Math.random() * root.shapeTiers.length)];
                 } else {
@@ -75,7 +83,7 @@ Item {
         property real speedMultiplier: Config.dashboard.syncMediaShapesToBeat ? (Config.general.mediaGifSpeedAdjustment / 300) : 1.0
 
         Timer {
-            running: root.visible && Config.dashboard.useMediaShapes && (Players.active?.isPlaying ?? false)
+            running: root.activeVisuals && (Players.active?.isPlaying ?? false)
             repeat: true
             interval: (60000 / Math.max(1, Audio.beatTracker.bpm > 0 ? Audio.beatTracker.bpm : 120)) * materialShape.speedMultiplier
             onTriggered: materialShape.morph()

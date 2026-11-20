@@ -300,6 +300,8 @@ Searcher {
     }
 
     onWallpaperModeChanged: {
+        if (_selfSet)
+            return;
         captureRollbackState();
         
         const target = wallpaperMode === "animated" ? lastAnimated : lastStatic;
@@ -325,7 +327,7 @@ Searcher {
     }
 
     onEnableAnimationChanged: {
-        Quickshell.execDetached(["sh", "-c", "mkdir -p '" + Paths.state + "/wallpaper' && echo '" + (enableAnimation ? "1" : "0") + "' > '" + Paths.state + "/wallpaper/enable_animation.txt'"]);
+        Quickshell.execDetached(["sh", "-c", 'mkdir -p "$1/wallpaper" && printf "%s\n" "$2" > "$1/wallpaper/enable_animation.txt"', "sh", Paths.state, enableAnimation ? "1" : "0"]);
     }
 
     function setRandom(): void {
@@ -368,6 +370,7 @@ Searcher {
         previewColourLock = true;
         pendingPreviewClear = false;
 
+        _selfSet = true;
         if (isVideo(targetPath)) {
             lastAnimated = targetPath;
             wallpaperMode = "animated";
@@ -377,6 +380,7 @@ Searcher {
             wallpaperMode = "static";
             Quickshell.execDetached(["sh", "-c", 'mkdir -p "$1" && printf "%s\n" "$2" > "$1/$3"', "sh", Paths.state + "/wallpaper", targetPath, "last_static.txt"]);
         }
+        _selfSet = false;
 
         stopPreview();
 
@@ -418,8 +422,8 @@ Searcher {
         }
 
         if (isTrackingRollback) {
-            wallpaperMode = rollbackMode;
             _selfSet = true;
+            wallpaperMode = rollbackMode;
             actualCurrent = rollbackPath;
             _selfSet = false;
             isTrackingRollback = false;
@@ -568,10 +572,6 @@ Searcher {
             let prevClean = root.cleanPath(root.actualCurrent);
             root._selfSet = true;
             root.actualCurrent = wall;
-            root._selfSet = false;
-            root.pathLoaded = true;
-            root.previewColourLock = false;
-
             if (root.isVideo(root.actualCurrent)) {
                 wallpaperMode = "animated";
                 if (!root.lastAnimated) root.lastAnimated = wall;
@@ -579,6 +579,9 @@ Searcher {
                 wallpaperMode = "static";
                 if (!root.lastStatic) root.lastStatic = wall;
             }
+            root._selfSet = false;
+            root.pathLoaded = true;
+            root.previewColourLock = false;
 
             if (root.weDirLoaded) {
                 root.syncWeDir(isExternal);

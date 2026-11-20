@@ -50,6 +50,25 @@ Item {
     signal hideWidgetRequested()
     signal openNexusRequested()
 
+    function syncTextFields(): void {
+        const txt = String(widgetOptions?.content ?? widgetOptions?.text ?? "");
+        if (customTextField.text !== txt && !customTextField.activeFocus)
+            customTextField.text = txt;
+        const cTitle = String(widgetOptions?.customTitle ?? "");
+        if (customTitleField.text !== cTitle && !customTitleField.activeFocus)
+            customTitleField.text = cTitle;
+        const cDate = String(widgetOptions?.customDate ?? "");
+        if (customDateField.text !== cDate && !customDateField.activeFocus) {
+            customDateField.text = cDate;
+            customDateField.isError = false;
+        }
+    }
+
+    onOpenChanged: syncTextFields()
+    onWidgetIdChanged: syncTextFields()
+    onWidgetOptionsChanged: syncTextFields()
+    Component.onCompleted: syncTextFields()
+
     anchors.fill: parent
     z: 80
     visible: open
@@ -479,8 +498,9 @@ Item {
                         spacing: Tokens.spacing.small
 
                         StyledTextField {
+                            id: customTextField
+
                             Layout.fillWidth: true
-                            text: String(root.widgetOptions?.content ?? root.widgetOptions?.text ?? "")
                             placeholderText: qsTr("Text content...")
                             onTextEdited: root.optionPatched({ content: text })
                         }
@@ -551,7 +571,113 @@ Item {
                             IconButton {
                                 icon: "add"
                                 type: IconButton.Tonal
-                                onClicked: root.optionPatched({ fontSize: Math.min(96, Math.round((root.widgetOptions?.fontSize ?? 28) + 4)) })
+                                onClicked: root.optionPatched({ fontSize: Math.min(140, Math.round((root.widgetOptions?.fontSize ?? 28) + 4)) })
+                            }
+                        }
+                    }
+
+                    // Widget-specific controls: Countdown
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        visible: root.canonicalType === "countdown"
+                        spacing: Tokens.spacing.small
+
+                        StyledText {
+                            visible: (FocusLedger.countdowns || []).length > 0
+                            text: qsTr("Shared Countdown")
+                            font: Tokens.font.label.builders.small.weight(Font.DemiBold).build()
+                            color: Colours.palette.m3onSurfaceVariant
+                        }
+
+                        Flow {
+                            Layout.fillWidth: true
+                            visible: (FocusLedger.countdowns || []).length > 0
+                            spacing: Tokens.spacing.small
+
+                            Repeater {
+                                model: {
+                                    void FocusLedger.revision;
+                                    return FocusLedger.countdowns || [];
+                                }
+
+                                delegate: StyledRect {
+                                    id: cdPickChip
+
+                                    required property var modelData
+                                    readonly property bool hasCustomDate: FocusLedger.parseLocalDate(String(root.widgetOptions?.customDate ?? "").trim()) !== null
+                                    readonly property bool active: !hasCustomDate && String(root.widgetOptions?.countdownId ?? "") === String(modelData?.id ?? "")
+
+                                    width: Math.min(260, Math.round(cdChipTxt.implicitWidth + Tokens.padding.medium * 2))
+                                    height: 26
+                                    radius: 13
+                                    color: active ? Colours.palette.m3primaryContainer : WidgetMetrics.innerSurfaceStrong
+                                    border.width: active ? 1 : 0
+                                    border.color: Colours.palette.m3primary
+
+                                    StyledText {
+                                        id: cdChipTxt
+                                        anchors.centerIn: parent
+                                        width: Math.min(implicitWidth, Math.max(20, parent.width - Tokens.padding.medium * 2))
+                                        text: cdPickChip.modelData?.title ?? ""
+                                        font: Tokens.font.label.small
+                                        color: cdPickChip.active ? Colours.palette.m3onPrimaryContainer : Colours.palette.m3onSurface
+                                        elide: Text.ElideRight
+                                    }
+
+                                    StateLayer {
+                                        onClicked: {
+                                            customTitleField.text = "";
+                                            customDateField.text = "";
+                                            customDateField.isError = false;
+                                            root.optionPatched({
+                                                countdownId: String(cdPickChip.modelData?.id ?? ""),
+                                                customTitle: "",
+                                                customDate: ""
+                                            });
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        StyledText {
+                            text: qsTr("Or Custom Countdown")
+                            font: Tokens.font.label.builders.small.weight(Font.DemiBold).build()
+                            color: Colours.palette.m3onSurfaceVariant
+                        }
+
+                        StyledTextField {
+                            id: customTitleField
+
+                            Layout.fillWidth: true
+                            placeholderText: qsTr("Custom title (e.g. Term Test)")
+                            onTextEdited: root.optionPatched({ customTitle: text })
+                        }
+
+                        StyledTextField {
+                            id: customDateField
+
+                            Layout.fillWidth: true
+                            placeholderText: "YYYY-MM-DD"
+                            maximumLength: 10
+                            emptyIsValid: true
+                            validate: val => FocusLedger.parseLocalDate(val) !== null
+                            errorText: qsTr("Use YYYY-MM-DD")
+                            onTextEdited: {
+                                const trimmed = text.trim();
+                                if (trimmed === "" || FocusLedger.parseLocalDate(trimmed) !== null) {
+                                    isError = false;
+                                    root.optionPatched({ customDate: trimmed });
+                                }
+                            }
+                            onEditingFinished: {
+                                const trimmed = text.trim();
+                                if (trimmed === "" || FocusLedger.parseLocalDate(trimmed) !== null) {
+                                    isError = false;
+                                    root.optionPatched({ customDate: trimmed });
+                                } else {
+                                    isError = true;
+                                }
                             }
                         }
                     }
@@ -618,7 +744,7 @@ Item {
                             }
 
                             Repeater {
-                                model: ["cpu", "ram", "swap", "gpu"]
+                                model: ["cpu", "ram", "gpu", "disk"]
 
                                 delegate: StyledRect {
                                     id: metricChip

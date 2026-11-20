@@ -3,7 +3,9 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import Caelestia
 import Caelestia.Config
+import qs.utils
 
 Singleton {
     id: root
@@ -35,8 +37,8 @@ Singleton {
     property var lastDeletedTodo: null
 
     readonly property FileView stateFile: FileView {
-        path: `${Quickshell.env("HOME")}/.local/state/caelestia/notes.json`
-        watchChanges: true
+        path: `${Paths.state}/notes.json`
+        watchChanges: false
         printErrors: false
         onLoaded: root.loadData(text())
         onLoadFailed: err => {
@@ -50,16 +52,19 @@ Singleton {
     }
 
     readonly property FileView fallbackFile: FileView {
-        path: `${Quickshell.env("HOME")}/.config/caelestia/notes.default.json`
+        path: `${Paths.config}/notes.default.json`
         printErrors: false
         onLoaded: { root.fallbackSettled = true; root.tryFirstRun(); }
         onLoadFailed: { root.fallbackSettled = true; root.tryFirstRun(); }
     }
 
     readonly property FileView backupFile: FileView {
-        path: `${Quickshell.env("HOME")}/.local/state/caelestia/notes.json.bak`
+        path: `${Paths.state}/notes.json.bak`
         printErrors: false
     }
+
+    Component.onCompleted: CUtils.mkdirp(Paths.state)
+    Component.onDestruction: root.flushSave()
 
     Timer {
         id: saveDebounceTimer

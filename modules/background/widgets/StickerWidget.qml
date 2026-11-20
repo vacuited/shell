@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Effects
+import Quickshell
 import M3Shapes
 import Caelestia.Config
 import qs.components
@@ -22,17 +23,34 @@ Item {
     property bool blurEnabled: Config.background.desktopWidgets.blur
     property real plateOpacity: Config.background.desktopWidgets.opacity
     property var widgetOptions: ({})
-    readonly property real s: WidgetMetrics.scale
+    readonly property real s: Math.max(0.7, Math.min(1.5, Config.background.desktopWidgets.scale ?? 1.0))
     readonly property int widgetSize: Math.max(88, Math.round(Number(widgetOptions?.size ?? 196) * s))
     readonly property string imagePath: String(widgetOptions?.path ?? "")
     readonly property bool isAnimatedGif: imagePath.toLowerCase().endsWith(".gif")
-    readonly property string stickerUrl: {
-        if (!imagePath)
-            return "";
-        return imagePath.startsWith("file://") ? imagePath : ("file://" + imagePath);
-    }
+    readonly property string stickerUrl: localPathToFileUrl(imagePath)
+    readonly property bool imageFailed: stickerUrl !== "" && (isAnimatedGif ? stickerGif.status === AnimatedImage.Error : stickerImg.status === Image.Error)
 
     signal optionsUpdated(var patch)
+
+    function localPathToFileUrl(rawPath: string): string {
+        if (!rawPath)
+            return "";
+        if (/^https?:\/\//i.test(rawPath))
+            return rawPath;
+        let p = rawPath;
+        if (p.startsWith("file://")) {
+            try {
+                p = decodeURIComponent(p.slice(7));
+            } catch (e) {
+                p = p.slice(7);
+            }
+        }
+        const expanded = p.replace(/^~(?=\/|$)|(\$({?)HOME(}?))+/, Paths.home).replace(/^root:/, Quickshell.shellDir + "/");
+        const abs = (!expanded.includes("#") && !expanded.includes("?") && !expanded.includes("%"))
+            ? (Paths.absolutePath(expanded) || expanded)
+            : expanded;
+        return "file://" + abs.split("/").map(seg => encodeURIComponent(seg)).join("/");
+    }
 
     function openPicker(): void {
         stickerPicker.open();
@@ -41,7 +59,14 @@ Item {
     function acceptDropUrl(raw: string): void {
         if (!raw)
             return;
-        const clean = raw.startsWith("file://") ? decodeURIComponent(raw.slice(7)) : raw;
+        let clean = raw;
+        if (raw.startsWith("file://")) {
+            try {
+                clean = decodeURIComponent(raw.slice(7));
+            } catch (e) {
+                clean = raw.slice(7);
+            }
+        }
         if (clean)
             optionsUpdated({ path: clean });
     }
@@ -55,7 +80,7 @@ Item {
         title: qsTr("Choose Sticker")
         filterLabel: qsTr("Stickers")
         filters: ["png", "webp", "gif", "svg", "avif", "jpg", "jpeg"]
-        cwd: Paths.pictures
+        cwd: ["Home", "Pictures"]
 
         onAccepted: path => {
             if (path)
@@ -143,9 +168,13 @@ Item {
         }
 
         Image {
+            id: stickerImg
+
             anchors.fill: parent
-            visible: !root.isAnimatedGif
+            visible: !root.isAnimatedGif && !root.imageFailed
             source: !root.isAnimatedGif ? root.stickerUrl : ""
+            sourceSize.width: Math.max(256, Math.round(root.widgetSize * 2))
+            sourceSize.height: Math.max(256, Math.round(root.widgetSize * 2))
             fillMode: Image.PreserveAspectFit
             asynchronous: true
             smooth: true
@@ -153,15 +182,68 @@ Item {
         }
 
         AnimatedImage {
+            id: stickerGif
+
             anchors.fill: parent
-            visible: root.isAnimatedGif
+            visible: root.isAnimatedGif && !root.imageFailed
             source: root.isAnimatedGif ? root.stickerUrl : ""
             fillMode: Image.PreserveAspectFit
             asynchronous: true
-            playing: visible
+            playing: visible && root.visible && !GameMode.enabled
         }
 
-        layer.enabled: !GameMode.enabled && !root.weActive && root.stickerUrl !== "" && width > 0 && height > 0
+        WidgetCardShell {
+            anchors.fill: parent
+            visible: root.imageFailed
+            widgetType: "sticker"
+            sizeMode: "1x1"
+            forceRounded: true
+            wallpaper: root.wallpaper
+            weActive: root.weActive
+            surfaceStyle: root.surfaceStyle
+            blurEnabled: root.blurEnabled
+            plateOpacity: root.plateOpacity
+            scaleFactor: root.s
+
+            ColumnLayout {
+                anchors.centerIn: parent
+                width: Math.max(40, parent.width - emptyShell.contentPadding * 2)
+                spacing: Math.round(6 * root.s)
+
+                MaterialIcon {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: "broken_image"
+                    fontStyle: Tokens.font.icon.large
+                    color: Colours.palette.m3error
+                }
+
+                StyledText {
+                    Layout.fillWidth: true
+                    horizontalAlignment: Text.AlignHCenter
+                    text: qsTr("Sticker missing")
+                    font: Tokens.font.label.builders.medium.weight(Font.DemiBold).build()
+                    color: Colours.palette.m3onSurface
+                    elide: Text.ElideRight
+                }
+
+                StyledText {
+                    Layout.fillWidth: true
+                    horizontalAlignment: Text.AlignHCenter
+                    text: qsTr("Tap to pick another")
+                    font: Tokens.font.label.small
+                    color: Colours.palette.m3onSurfaceVariant
+                    elide: Text.ElideRight
+                }
+            }
+
+            StateLayer {
+                enabled: root.locked && root.imageFailed
+                radius: emptyShell.radius
+                onClicked: root.openPicker()
+            }
+        }
+
+        layer.enabled: !GameMode.enabled && !root.weActive && root.stickerUrl !== "" && !root.imageFailed && width > 0 && height > 0
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowBlur: 0.45

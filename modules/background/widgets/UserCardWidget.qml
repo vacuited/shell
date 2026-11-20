@@ -28,8 +28,18 @@ Item {
     property real plateOpacity: Config.background.desktopWidgets.opacity
     property var widgetOptions: ({})
 
-    readonly property real s: WidgetMetrics.scale
+    readonly property real s: Math.max(0.7, Math.min(1.5, Config.background.desktopWidgets.scale ?? 1.0))
     readonly property bool showActions: (widgetOptions?.showActions ?? true) !== false
+    readonly property string formattedClock: {
+        const h24 = Time.hours;
+        const m = String(Time.minutes).padStart(2, "0");
+        if (Units.twelveHourClock) {
+            const h12 = (h24 % 12) || 12;
+            const ap = h24 >= 12 ? "PM" : "AM";
+            return `${h12}:${m} ${ap}`;
+        }
+        return `${String(h24).padStart(2, "0")}:${m}`;
+    }
     readonly property string avatarPath: {
         const home = Paths.home || Quickshell.env("HOME") || "";
         if (!home)
@@ -44,7 +54,7 @@ Item {
     }
 
     readonly property string greetingText: {
-        const h = Time.date.getHours();
+        const h = Time.hours;
         if (h < 5)
             return Tr.tr("Good night");
         if (h < 12)
@@ -543,7 +553,7 @@ Item {
 
                     StyledText {
                         Layout.fillWidth: true
-                        text: Qt.formatTime(Time.date, "hh:mm ap")
+                        text: root.formattedClock
                         font: Tokens.font.clock.size(Math.round(20 * root.s)).weight(Font.Bold).build()
                         color: Colours.palette.m3onSurface
                         elide: Text.ElideRight

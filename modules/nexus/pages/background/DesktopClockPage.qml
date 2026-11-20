@@ -296,6 +296,8 @@ PageBase {
                 const idx = root.positionItems.indexOf(item);
                 if (idx !== -1) {
                     root.clockConfig.position = root.positionValues[idx];
+                    root.clockConfig.x = -1;
+                    root.clockConfig.y = -1;
                     root.targetConfig.save();
                 }
             }
@@ -682,7 +684,7 @@ PageBase {
             configNode: root.clockConfig.background
             propertyName: "blur"
             checked: root.clockConfig.background.blur
-            enabled: root.clockConfig.background.enabled || root.clockStyle !== "classic"
+            disabled: !(root.clockConfig.background.enabled || root.clockStyle !== "classic")
             onToggled: {
                 root.clockConfig.background.blur = checked;
                 root.targetConfig.save();

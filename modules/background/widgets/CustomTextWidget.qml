@@ -18,7 +18,7 @@ Item {
     property bool blurEnabled: Config.background.desktopWidgets.blur
     property real plateOpacity: Config.background.desktopWidgets.opacity
     property var widgetOptions: ({})
-    readonly property real s: WidgetMetrics.scale
+    readonly property real s: Math.max(0.7, Math.min(1.5, Config.background.desktopWidgets.scale ?? 1.0))
     readonly property string rawText: String(widgetOptions?.content ?? widgetOptions?.text ?? "")
     readonly property string displayText: rawText.trim() !== "" ? rawText : qsTr("Note to self")
     readonly property bool isEmpty: rawText.trim() === ""
@@ -77,17 +77,28 @@ Item {
 
     readonly property int measuredW: Math.min(maxLineWidth, Math.ceil(measureMetrics.advanceWidth) + 8)
     readonly property int shapeMinBox: backdropMode === "shape" ? Math.round(140 * s) : 100
+    readonly property int shapeBoxSize: Math.max(shapeMinBox, measuredW + padH * 2, Math.ceil(wrapMeasure.implicitHeight) + padV * 2)
 
     signal optionsUpdated(var patch)
 
-    implicitWidth: Math.max(shapeMinBox, measuredW + padH * 2)
-    implicitHeight: Math.max(backdropMode === "shape" ? implicitWidth : Math.round(48 * s), Math.ceil(displayLabel.implicitHeight) + padV * 2)
+    implicitWidth: backdropMode === "shape" ? shapeBoxSize : Math.max(shapeMinBox, measuredW + padH * 2)
+    implicitHeight: backdropMode === "shape" ? shapeBoxSize : Math.max(Math.round(48 * s), Math.ceil(displayLabel.implicitHeight) + padV * 2)
 
     TextMetrics {
         id: measureMetrics
 
         font: Tokens.font.clock.size(root.fontSize).weight(Font.Bold).build()
         text: root.displayText
+    }
+
+    StyledText {
+        id: wrapMeasure
+
+        visible: false
+        width: root.maxLineWidth
+        text: root.displayText
+        font: Tokens.font.clock.size(root.fontSize).weight(Font.Bold).build()
+        wrapMode: Text.WordWrap
     }
 
     WidgetCardShell {
@@ -99,7 +110,7 @@ Item {
         sizeMode: "1x1"
         forceRounded: root.backdropMode !== "shape"
         outerShape: root.backdropMode === "shape" ? (root.widgetOptions?.outerShape || "Puffy") : "Rounded"
-        radius: root.backdropMode === "pill" ? Math.round(height / 2) : Tokens.rounding.extraLarge
+        radius: root.backdropMode === "pill" ? Math.min(Math.round(height / 2), Math.round(32 * root.s)) : Tokens.rounding.extraLarge
         wallpaper: root.wallpaper
         weActive: root.weActive
         surfaceStyle: root.surfaceStyle

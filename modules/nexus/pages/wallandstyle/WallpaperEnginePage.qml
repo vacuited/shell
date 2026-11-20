@@ -53,6 +53,48 @@ PageBase {
         }
     ]
 
+    readonly property list<MenuItem> sceneQualityItems: [
+        MenuItem {
+            text: qsTr("Auto")
+            value: "auto"
+        },
+        MenuItem {
+            text: qsTr("Performance (50%)")
+            value: "performance"
+        },
+        MenuItem {
+            text: qsTr("Balanced (67%)")
+            value: "balanced"
+        },
+        MenuItem {
+            text: qsTr("High (85%)")
+            value: "high"
+        },
+        MenuItem {
+            text: qsTr("Native (100%)")
+            value: "native"
+        }
+    ]
+
+    readonly property list<MenuItem> gpuModeItems: [
+        MenuItem {
+            text: qsTr("Auto (Compositor GPU)")
+            value: "auto"
+        },
+        MenuItem {
+            text: qsTr("dGPU on AC, iGPU on Battery")
+            value: "ac_dgpu"
+        },
+        MenuItem {
+            text: qsTr("Dedicated GPU (Scenes)")
+            value: "dgpu"
+        },
+        MenuItem {
+            text: qsTr("Integrated GPU")
+            value: "igpu"
+        }
+    ]
+
     readonly property var rawInstalledItems: {
         if (Skwd.weInstalledItems && Skwd.weInstalledItems.length > 0) {
             return Skwd.weInstalledItems;
@@ -337,7 +379,7 @@ PageBase {
                 readonly property real maxVal: propData && propData.max !== undefined ? Number(propData.max) : 1
                 readonly property real stepVal: propData && propData.step !== undefined ? Number(propData.step) : 0
                 readonly property int decimals: {
-                    if (propData && propData.precision !== undefined)
+                    if (propData && propData.precision !== undefined && propData.precision !== null)
                         return Math.max(0, Math.min(6, Math.round(Number(propData.precision))));
                     if (stepVal >= 1 || (propData && propData.fraction === false))
                         return 0;
@@ -580,10 +622,9 @@ PageBase {
                 type: root.currentMode === 1 ? IconTextButton.Filled : IconTextButton.Tonal
                 horizontalPadding: Tokens.padding.extraLarge
                 verticalPadding: Tokens.padding.medium
-                disabled: !Skwd.steamAvailable
                 onClicked: {
                     root.currentMode = 1;
-                    if (Skwd.workshopResults.length === 0 && !Skwd.workshopSearching) {
+                    if (Skwd.steamAvailable && Skwd.workshopResults.length === 0 && !Skwd.workshopSearching) {
                         root.runWorkshopSearch(1);
                     }
                 }
@@ -717,6 +758,8 @@ PageBase {
                                 return Wallpapers.weWorkshopDir;
                             if (Skwd.resolvedWorkshopDir)
                                 return Skwd.resolvedWorkshopDir + qsTr(" (Auto-detected)");
+                            if (Skwd.probeCompleted)
+                                return qsTr("Not found (set path manually)");
                             return qsTr("Auto-detecting...");
                         }
                         color: Colours.palette.m3outline
@@ -823,7 +866,7 @@ PageBase {
         }
 
         InfoRow {
-            visible: root.currentMode === 0 && (Skwd.availableGpus ? Skwd.availableGpus.length > 0 : false)
+            visible: root.currentMode === 0 && (Skwd.availableGpus ? Skwd.availableGpus.length > 0 : false) && !(Skwd.hasAnyDiscrete && Skwd.hasSafeIntegrated)
             Layout.topMargin: Tokens.spacing.extraSmall / 2 - parent.spacing
             Layout.fillWidth: true
             label: qsTr("Graphics Processor")
@@ -836,10 +879,39 @@ PageBase {
         }
 
         SelectRow {
+            visible: root.currentMode === 0 && Skwd.hasAnyDiscrete && Skwd.hasSafeIntegrated
+            Layout.topMargin: Tokens.spacing.extraSmall / 2 - parent.spacing
+            Layout.fillWidth: true
+            label: qsTr("Graphics Processor")
+            subtext: {
+                if (Skwd.effectiveGpu === "discrete" && Skwd.hasOffloadDiscrete)
+                    return qsTr("Scenes on %1 (SHM); videos on Intel VAAPI").arg(Skwd.discreteGpuName || "dGPU");
+                if (Skwd.effectiveGpu === "discrete")
+                    return qsTr("Active: %1").arg(Skwd.discreteGpuName || "dGPU");
+                return qsTr("Active: %1").arg(Skwd.compositorGpuName || Skwd.integratedGpuName || "Integrated GPU");
+            }
+            menuOnTop: true
+            menuItems: root.gpuModeItems
+            active: {
+                const cur = String(Skwd.gpuMode || "auto");
+                for (let i = 0; i < root.gpuModeItems.length; i++) {
+                    if (String(root.gpuModeItems[i].value) === cur)
+                        return root.gpuModeItems[i];
+                }
+                return root.gpuModeItems[0];
+            }
+            onSelected: item => {
+                if (item)
+                    Skwd.setGpuMode(String(item.value));
+            }
+        }
+
+        SelectRow {
             visible: root.currentMode === 0
             Layout.topMargin: Tokens.spacing.extraSmall / 2 - parent.spacing
             Layout.fillWidth: true
-            label: qsTr("Frame Rate")
+            label: qsTr("Scene Frame Rate")
+            subtext: qsTr("Caps scene FPS; videos decode natively via VAAPI")
             menuOnTop: true
             menuItems: root.fpsItems
             active: {
@@ -856,14 +928,56 @@ PageBase {
             }
         }
 
+        SelectRow {
+            visible: root.currentMode === 0
+            Layout.topMargin: Tokens.spacing.extraSmall / 2 - parent.spacing
+            Layout.fillWidth: true
+            label: qsTr("Scene Resolution")
+            subtext: qsTr("Active render cap: %1px (lower reduces iGPU load)").arg(Skwd.effectiveMaxDim)
+            menuOnTop: true
+            menuItems: root.sceneQualityItems
+            active: {
+                const cur = String(Skwd.sceneQuality || "auto");
+                for (let i = 0; i < root.sceneQualityItems.length; i++) {
+                    if (String(root.sceneQualityItems[i].value) === cur)
+                        return root.sceneQualityItems[i];
+                }
+                return root.sceneQualityItems[0];
+            }
+            onSelected: item => {
+                if (item)
+                    Skwd.setSceneQuality(String(item.value));
+            }
+        }
+
+        ToggleRow {
+            visible: root.currentMode === 0
+            Layout.topMargin: Tokens.spacing.extraSmall / 2 - parent.spacing
+            Layout.fillWidth: true
+            text: qsTr("Disable Particles")
+            checked: Skwd.disableParticles
+            onToggled: Skwd.setDisableParticles(checked)
+        }
+
+        ToggleRow {
+            visible: root.currentMode === 0
+            Layout.topMargin: Tokens.spacing.extraSmall / 2 - parent.spacing
+            Layout.fillWidth: true
+            text: qsTr("Limit Scene Effect Chains")
+            subtext: qsTr("Caps complex scenes to 4 effect chains/passes")
+            checked: Skwd.reduceEffects
+            onToggled: Skwd.setReduceEffects(checked)
+        }
+
         ToggleRow {
             visible: root.currentMode === 0
             Layout.topMargin: Tokens.spacing.extraSmall / 2 - parent.spacing
             Layout.fillWidth: true
             last: true
-            text: qsTr("Disable Particles")
-            checked: Skwd.disableParticles
-            onToggled: Skwd.setDisableParticles(checked)
+            text: qsTr("Compositor Blur over Wallpaper Engine")
+            subtext: qsTr("Off avoids full-screen Hyprland blur passes on iGPU")
+            checked: Skwd.compositorBlur
+            onToggled: Skwd.setCompositorBlur(checked)
         }
 
         // ==========================================
@@ -977,12 +1091,24 @@ PageBase {
                                 anchors.fill: parent
                                 fillMode: Image.PreserveAspectCrop
                                 asynchronous: true
+                                sourceSize: Qt.size(480, 288)
                                 opacity: installedCard.isUnsupported ? 0.45 : 1.0
                                 source: {
+                                    void Skwd.posterRevision;
                                     const md = installedCard.modelData;
-                                    const p = md ? (md.poster || md.thumb || md.preview || "") : "";
+                                    const cachedPoster = md?.path ? Skwd.getCachedPosterPath(md.path) : "";
+                                    const p = cachedPoster || (md ? (md.poster || md.thumb || md.preview || "") : "");
                                     if (!p) return "";
-                                    return p.startsWith("http") || p.startsWith("file://") ? p : "file://" + p;
+                                    const url = p.startsWith("http") || p.startsWith("file://") ? p : "file://" + p;
+                                    return cachedPoster ? `${url}?v=${Skwd.posterRevision}` : url;
+                                }
+                            }
+
+                            StateLayer {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    Wallpapers.setWallpaper(installedCard.modelData.path + "/project.json");
                                 }
                             }
 
@@ -1063,6 +1189,7 @@ PageBase {
 
                             // Unsubscribe button (top-left) when Steam is connected
                             IconButton {
+                                z: 2
                                 anchors.top: parent.top
                                 anchors.left: parent.left
                                 anchors.margins: Tokens.padding.extraSmall
@@ -1077,14 +1204,6 @@ PageBase {
                                     } else {
                                         root.confirmUnsubId = idStr;
                                     }
-                                }
-                            }
-
-                            StateLayer {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    Wallpapers.setWallpaper(installedCard.modelData.path + "/project.json");
                                 }
                             }
                         }
@@ -1501,6 +1620,7 @@ PageBase {
                                 anchors.fill: parent
                                 fillMode: Image.PreserveAspectCrop
                                 asynchronous: true
+                                sourceSize: Qt.size(480, 288)
                                 source: wsCardItem.modelData.preview_url || ""
                             }
 
@@ -1662,6 +1782,7 @@ PageBase {
                     strokeWidth: 4
                     value: 0.5
                     wavy: true
+                    wavePaused: !visible
                 }
 
                 StyledText {

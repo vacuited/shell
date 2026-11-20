@@ -104,7 +104,7 @@ Singleton {
         if (!stream)
             return Tr.trCtx("Unknown", "unknown audio stream");
         // Try application name first, then description, then name
-        return stream.properties["application.name"] || stream.description || stream.name || Tr.trCtx("Unknown application", "unknown application audio stream");
+        return stream.properties?.["application.name"] || stream.description || stream.name || Tr.trCtx("Unknown application", "unknown application audio stream");
     }
 
     function isHiddenStream(stream: PwNode): bool {

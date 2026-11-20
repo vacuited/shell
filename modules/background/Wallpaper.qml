@@ -74,7 +74,11 @@ Item {
         id: coalesceTimer
         interval: 80
         repeat: false
-        onTriggered: root.applySourceChange()
+        onTriggered: {
+            if (!weRevealFadeAnim.running) {
+                root.applySourceChange();
+            }
+        }
     }
 
     onSourceChanged: {
@@ -92,6 +96,11 @@ Item {
         to: 0
         duration: 220
         easing.type: Easing.OutCubic
+        onFinished: {
+            if (root.weSurfaceVisible && root.displaySource !== root.settledSource) {
+                root.applySourceChange();
+            }
+        }
     }
 
     onWeSurfaceVisibleChanged: {
@@ -100,12 +109,12 @@ Item {
             root.prevWasWe = true;
             if (Skwd.usedTransitionFrom) {
                 root.weRevealOpacity = 0;
+                if (displaySource !== settledSource) {
+                    applySourceChange();
+                }
             } else {
                 root.weRevealOpacity = 1;
                 weRevealFadeAnim.start();
-            }
-            if (displaySource !== settledSource) {
-                applySourceChange();
             }
         } else {
             root.weRevealOpacity = 1;

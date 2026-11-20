@@ -35,6 +35,8 @@ Singleton {
     property bool sessionActive: false
     property bool dndEngaged: false
     property int distractionSecs: 0
+    property bool subjectModified: false
+    property bool sessionLoaded: false
 
     readonly property bool isStopwatch: mode === "stopwatch" && phase === "focus"
     readonly property int baseSecs: (phase === "shortBreak" ? shortBreakMins : phase === "longBreak" ? longBreakMins : focusMins) * 60
@@ -95,8 +97,14 @@ Singleton {
         watchChanges: false
         printErrors: false
 
-        onLoaded: root.restoreSnapshot(text())
-        onLoadFailed: err => {}
+        onLoaded: {
+            root.restoreSnapshot(text());
+            root.sessionLoaded = true;
+        }
+        onLoadFailed: err => {
+            if (err === FileViewError.FileNotFound)
+                root.sessionLoaded = true;
+        }
     }
 
     function enterPhase(newPhase: string, autoRun: bool): void {
@@ -111,6 +119,7 @@ Singleton {
             sessionActive = true;
         syncDnd();
         phaseEvent();
+        FocusLedger.flush();
         saveSnapshot();
     }
 
@@ -161,6 +170,8 @@ Singleton {
         running = !running;
         if (running)
             sessionActive = true;
+        else
+            FocusLedger.flush();
         syncDnd();
         phaseEvent();
         saveSnapshot();
@@ -178,23 +189,67 @@ Singleton {
         phaseTotal = fSecs;
         remaining = fSecs;
         syncDnd();
+        FocusLedger.flush();
         saveSnapshot();
     }
 
     function setPhase(p: string): void {
+        if (phase === "longBreak" && p === "focus")
+            cycleCount = 0;
         enterPhase(p, false);
     }
 
     function setMode(m: string): void {
-        if (!canSwitchMode || m === mode)
+        if (!canSwitchMode)
             return;
+        if (m !== "timer" && m !== "stopwatch")
+            return;
+        if (m === mode && !(m === "stopwatch" && phase !== "focus"))
+            return;
+        if (m === "stopwatch")
+            phase = "focus";
         mode = m;
         syncIdle();
         saveSnapshot();
     }
 
     function setSubject(name: string): void {
+        subjectModified = true;
         subject = (subject === name) ? "" : name;
+        FocusLedger.setLastSubject(subject);
+        saveSnapshot();
+    }
+
+    function cycleSubject(): void {
+        const list = Array.from(GlobalConfig.focus.subjects || []);
+        if (list.length === 0)
+            return;
+        list.push("");
+        const idx = list.indexOf(subject);
+        subjectModified = true;
+        subject = list[(idx + 1) % list.length];
+        FocusLedger.setLastSubject(subject);
+        saveSnapshot();
+    }
+
+    function applyPreset(fMins: int, sMins: int): void {
+        const f = clamp(fMins, 5, 180);
+        const s = clamp(sMins, 1, 60);
+        GlobalConfig.focus.focusMins = f;
+        GlobalConfig.focus.shortBreakMins = s;
+        GlobalConfig.save();
+        mode = "timer";
+        running = false;
+        sessionActive = false;
+        phase = "focus";
+        cycleCount = 0;
+        phaseTickSecs = 0;
+        elapsed = 0;
+        distractionSecs = 0;
+        phaseTotal = f * 60;
+        remaining = f * 60;
+        syncDnd();
+        FocusLedger.flush();
         saveSnapshot();
     }
 
@@ -209,8 +264,10 @@ Singleton {
     function reduce(): void {
         if (!sessionActive || isStopwatch)
             return;
-        remaining = Math.max(60, remaining - 300);
-        phaseTotal = Math.max(remaining, phaseTotal - 300);
+        const next = Math.max(60, remaining - 300);
+        const delta = Math.max(0, remaining - next);
+        remaining = next;
+        phaseTotal = Math.max(remaining, phaseTotal - delta);
         saveSnapshot();
     }
 
@@ -270,6 +327,8 @@ Singleton {
     onSessionActiveChanged: syncDnd()
 
     function saveSnapshot(): void {
+        if (!sessionLoaded)
+            return;
         let snap = {
             version: 1,
             sessionActive: root.sessionActive,
@@ -296,7 +355,33 @@ Singleton {
             let snap = JSON.parse(rawText);
             if (typeof snap !== "object" || snap === null)
                 return;
-            if (snap.version !== 1 || !snap.sessionActive)
+            if (snap.version !== 1)
+                return;
+
+            const validSubjects = Array.from(GlobalConfig.focus.subjects || []);
+            const snapSubj = (typeof snap.subject === "string" && (snap.subject === "" || validSubjects.indexOf(snap.subject) !== -1))
+                ? snap.subject
+                : "";
+            if (typeof snap.subject === "string" && snap.subject !== "" && snapSubj === "")
+                FocusLedger.setLastSubject("");
+
+            const savedAt = (typeof snap.savedAt === "number" && isFinite(snap.savedAt)) ? snap.savedAt : 0;
+            const todayStr = Qt.formatDate(new Date(), "yyyy-MM-dd");
+            const savedDateStr = savedAt > 0 ? Qt.formatDate(new Date(savedAt), "yyyy-MM-dd") : "";
+            const ageMs = savedAt > 0 ? (Date.now() - savedAt) : Infinity;
+
+            // Discard stale snapshots or snapshots from a prior local date
+            if (savedAt <= 0 || savedDateStr !== todayStr || ageMs < -60000 || ageMs > 12 * 3600 * 1000) {
+                if (snap.dndEngaged)
+                    PersistentState.doNotDisturb = false;
+                if (!subjectModified)
+                    subject = snapSubj;
+                return;
+            }
+
+            if (!subjectModified)
+                subject = snapSubj;
+            if (!snap.sessionActive)
                 return;
             if (["focus", "shortBreak", "longBreak"].indexOf(snap.phase) === -1)
                 return;
@@ -305,28 +390,70 @@ Singleton {
             if (typeof snap.remaining !== "number" || !isFinite(snap.remaining) || snap.remaining < 0 || snap.remaining > 36000)
                 return;
 
+            const safeInt = v => (typeof v === "number" && isFinite(v)) ? Math.max(0, Math.round(v)) : 0;
+            const staleRun = ageMs > 120000;
+
             mode = snap.mode;
             phase = snap.phase;
-            remaining = snap.remaining;
-            elapsed = snap.elapsed || 0;
-            distractionSecs = snap.distractionSecs || 0;
-            phaseTotal = snap.phaseTotal || baseSecs;
-            phaseTickSecs = snap.phaseTickSecs || 0;
-            cycleCount = snap.cycleCount || 0;
-            subject = snap.subject || "";
+            remaining = safeInt(snap.remaining);
+            elapsed = safeInt(snap.elapsed);
+            distractionSecs = safeInt(snap.distractionSecs);
+            phaseTotal = (typeof snap.phaseTotal === "number" && isFinite(snap.phaseTotal) && snap.phaseTotal > 0)
+                ? Math.max(remaining, Math.round(snap.phaseTotal))
+                : baseSecs;
+            phaseTickSecs = safeInt(snap.phaseTickSecs);
+            cycleCount = safeInt(snap.cycleCount);
             sessionActive = true;
-            dndEngaged = snap.dndEngaged || false;
-            running = !!snap.running;
+            dndEngaged = staleRun ? false : !!snap.dndEngaged;
+            running = staleRun ? false : !!snap.running;
 
-            if (dndEngaged && !(running && phase === "focus")) {
+            if (snap.dndEngaged && !(running && phase === "focus")) {
                 PersistentState.doNotDisturb = false;
                 dndEngaged = false;
             } else {
                 syncDnd();
             }
 
-            Toaster.toast(Tr.tr("Focus session restored"), Tr.tr("Resumed previous focus state."), "history", Toast.Info);
+            Toaster.toast(
+                Tr.tr("Focus session restored"),
+                staleRun ? Tr.tr("Restored previous focus session (paused).") : Tr.tr("Resumed previous focus state."),
+                "history",
+                Toast.Info
+            );
         } catch (e) {}
+    }
+
+    Connections {
+        target: GlobalConfig.focus
+
+        function onAutoDndChanged(): void {
+            root.syncDnd();
+        }
+
+        function onSubjectsChanged(): void {
+            const list = Array.from(GlobalConfig.focus.subjects || []);
+            if (root.subject !== "" && list.indexOf(root.subject) === -1) {
+                root.subject = "";
+                FocusLedger.setLastSubject("");
+                root.saveSnapshot();
+            } else if (FocusLedger.lastSubject !== "" && list.indexOf(FocusLedger.lastSubject) === -1) {
+                FocusLedger.setLastSubject("");
+            }
+        }
+    }
+
+    Connections {
+        target: FocusLedger
+
+        function onReadyChanged(): void {
+            if (FocusLedger.ready && !root.sessionActive && !root.subjectModified && root.subject === "" && FocusLedger.lastSubject !== "") {
+                const list = Array.from(GlobalConfig.focus.subjects || []);
+                if (list.indexOf(FocusLedger.lastSubject) !== -1)
+                    root.subject = FocusLedger.lastSubject;
+                else
+                    FocusLedger.setLastSubject("");
+            }
+        }
     }
 
     Timer {
@@ -334,6 +461,13 @@ Singleton {
         repeat: true
         running: root.running
         onTriggered: {
+            if (FocusLedger.pauseOnSleep && !ScreenTime.screenAwake) {
+                root.running = false;
+                FocusLedger.flush();
+                root.saveSnapshot();
+                Toaster.toast(Tr.tr("Focus paused"), Tr.tr("Timer paused while screen was asleep."), "bedtime", Toast.Info);
+                return;
+            }
             if (root.isStopwatch)
                 root.elapsed++;
             else
@@ -391,6 +525,9 @@ Singleton {
         }
         function setSubject(s: string): void {
             root.setSubject(s);
+        }
+        function cycleSubject(): void {
+            root.cycleSubject();
         }
         function status(): string {
             return JSON.stringify({

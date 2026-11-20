@@ -25,7 +25,7 @@ Item {
     property real plateOpacity: Config.background.desktopWidgets.opacity
     property var widgetOptions: ({})
 
-    readonly property real s: WidgetMetrics.scale
+    readonly property real s: Math.max(0.7, Math.min(1.5, Config.background.desktopWidgets.scale ?? 1.0))
     readonly property var player: Players.recentPlayer ?? Players.active ?? null
     readonly property bool hasPlayer: player !== null && (player.trackTitle ?? "") !== ""
     readonly property string artUrl: player ? Players.getArtUrl(player) : ""
@@ -61,23 +61,33 @@ Item {
     }
 
     function syncLyrics(): void {
-        if (!needsLyrics || !hasPlayer) {
-            if (!hasPlayer)
+        if (!root.visible || !needsLyrics)
+            return;
+        if (!hasPlayer) {
+            if (!Config.background.desktopLyrics.enabled)
                 Lyrics.clearTrack();
             return;
         }
-        Lyrics.setTrack(player.trackArtist ?? "", player.trackTitle ?? "", player.trackAlbum ?? "", Math.round(trackLength));
+        Lyrics.setTrack(player.trackArtist ?? "", player.trackTitle ?? "", player.trackAlbum ?? "", player.length ?? 0);
     }
 
     implicitWidth: WidgetMetrics.widthFor(sizeMode, s)
     implicitHeight: WidgetMetrics.heightFor(sizeMode, "media", s)
     onPlayerChanged: syncLyrics()
     onSizeModeChanged: syncLyrics()
+    onVisibleChanged: if (visible) syncLyrics()
     Component.onCompleted: syncLyrics()
 
     Connections {
         target: root.player
+        ignoreUnknownSignals: true
+        function onPostTrackChanged(): void {
+            root.syncLyrics();
+        }
         function onTrackTitleChanged(): void {
+            root.syncLyrics();
+        }
+        function onTrackArtistChanged(): void {
             root.syncLyrics();
         }
     }
@@ -86,19 +96,10 @@ Item {
     Timer {
         interval: 500
         repeat: true
-        running: root.visible && root.hasPlayer && root.isPlaying
+        running: root.visible && root.hasPlayer && root.isPlaying && !GameMode.enabled
         onTriggered: {
             if (root.player && root.player.positionChanged)
                 root.player.positionChanged();
-        }
-    }
-
-    Loader {
-        active: root.visible && root.needsVisualizer && root.isPlaying
-        sourceComponent: Component {
-            ServiceRef {
-                service: Audio.cava
-            }
         }
     }
 
@@ -153,8 +154,8 @@ Item {
                     CircularProgress {
                         anchors.fill: parent
                         value: root.hasPlayer ? root.progressRatio : 0
-                        wavy: root.isPlaying
-                        wavePaused: !root.isPlaying
+                        wavy: root.visible && root.sizeMode === "1x1" && root.isPlaying && !GameMode.enabled
+                        wavePaused: !wavy
                         strokeWidth: Math.max(3, Math.round(4 * root.s))
                         fgColour: Colours.palette.m3primary
                         bgColour: WidgetMetrics.trackSurface
@@ -166,7 +167,7 @@ Item {
                         width: Math.round((shell.isShaped ? 54 : 62) * root.s)
                         height: Math.round((shell.isShaped ? 54 : 62) * root.s)
                         source: root.artUrl
-                        spinning: root.isPlaying
+                        spinning: root.visible && root.sizeMode === "1x1" && root.isPlaying && !GameMode.enabled
                     }
 
                     StyledRect {
@@ -176,7 +177,7 @@ Item {
                         width: Math.round((shell.isShaped ? 26 : 30) * root.s)
                         height: Math.round((shell.isShaped ? 26 : 30) * root.s)
                         radius: Math.round((shell.isShaped ? 13 : 15) * root.s)
-                        color: Qt.alpha(Colours.palette.m3surface, miniHover.hovered || !root.isPlaying ? 0.85 : 0.35)
+                        color: Qt.alpha(WidgetMetrics.innerSurfaceStrong, miniHover.hovered || !root.isPlaying ? 0.92 : 0.45)
                         opacity: (!root.hasPlayer || !root.isPlaying || miniHover.hovered) ? 1.0 : 0.0
 
                         Behavior on opacity {
@@ -199,7 +200,7 @@ Item {
                     }
 
                     StateLayer {
-                        enabled: root.locked && root.hasPlayer
+                        enabled: root.locked && root.hasPlayer && (root.player?.canTogglePlaying ?? false)
                         radius: width / 2
                         onClicked: root.player?.togglePlaying()
                     }
@@ -228,7 +229,7 @@ Item {
                 Layout.preferredHeight: Math.round(92 * root.s)
                 Layout.alignment: Qt.AlignVCenter
                 source: root.artUrl
-                spinning: root.isPlaying
+                spinning: root.visible && root.sizeMode === "1x2" && root.isPlaying && !GameMode.enabled
             }
 
             ColumnLayout {
@@ -263,11 +264,11 @@ Item {
                     to: 1
                     value: root.progressRatio
                     enabled: root.canSeek && root.locked
-                    wavy: root.isPlaying
-                    animateWave: root.isPlaying
+                    wavy: root.visible && root.sizeMode === "1x2" && root.isPlaying && !GameMode.enabled
+                    animateWave: wavy
                     waveFrequency: 5
                     interactionOnMove: false
-                    onMoved: root.seekToRatio(value)
+                    onReleased: v => root.seekToRatio(v)
                 }
 
                 ButtonRow {
@@ -290,7 +291,7 @@ Item {
                         isRound: true
                         isToggle: true
                         checked: root.isPlaying
-                        disabled: !root.hasPlayer
+                        disabled: !root.hasPlayer || !(root.player?.canTogglePlaying ?? false)
                         onClicked: root.player?.togglePlaying()
                     }
 
@@ -318,7 +319,7 @@ Item {
                 Layout.preferredWidth: Math.round(114 * root.s)
                 Layout.preferredHeight: Math.round(114 * root.s)
                 source: root.artUrl
-                spinning: root.isPlaying
+                spinning: root.visible && root.sizeMode === "2x1" && root.isPlaying && !GameMode.enabled
             }
 
             ColumnLayout {
@@ -365,11 +366,11 @@ Item {
                 to: 1
                 value: root.progressRatio
                 enabled: root.canSeek && root.locked
-                wavy: root.isPlaying
-                animateWave: root.isPlaying
+                wavy: root.visible && root.sizeMode === "2x1" && root.isPlaying && !GameMode.enabled
+                animateWave: wavy
                 waveFrequency: 4
                 interactionOnMove: false
-                onMoved: root.seekToRatio(value)
+                onReleased: v => root.seekToRatio(v)
             }
 
             ButtonRow {
@@ -392,7 +393,7 @@ Item {
                     isRound: true
                     isToggle: true
                     checked: root.isPlaying
-                    disabled: !root.hasPlayer
+                    disabled: !root.hasPlayer || !(root.player?.canTogglePlaying ?? false)
                     onClicked: root.player?.togglePlaying()
                 }
 
@@ -425,8 +426,8 @@ Item {
                     CircularProgress {
                         anchors.fill: parent
                         value: root.hasPlayer ? root.progressRatio : 0
-                        wavy: root.isPlaying
-                        wavePaused: !root.isPlaying
+                        wavy: root.visible && root.sizeMode === "2x2" && root.isPlaying && !GameMode.enabled
+                        wavePaused: !wavy
                         strokeWidth: Math.max(4, Math.round(5 * root.s))
                         fgColour: Colours.palette.m3primary
                         bgColour: WidgetMetrics.trackSurface
@@ -438,7 +439,7 @@ Item {
                         width: Math.round(82 * root.s)
                         height: Math.round(82 * root.s)
                         source: root.artUrl
-                        spinning: root.isPlaying
+                        spinning: root.visible && root.sizeMode === "2x2" && root.isPlaying && !GameMode.enabled
                     }
                 }
 
@@ -479,9 +480,13 @@ Item {
                         Layout.fillWidth: true
                         Layout.preferredHeight: Math.round(28 * root.s)
 
-                        Dash.MediaShapes {
+                        Loader {
                             anchors.fill: parent
-                            visible: root.visible && root.sizeMode === "2x2" && root.showVisualizer && root.isPlaying
+                            active: root.visible && root.sizeMode === "2x2" && root.showVisualizer && root.isPlaying && !GameMode.enabled
+                            sourceComponent: Dash.MediaShapes {
+                                anchors.fill: parent
+                                forceEnabled: true
+                            }
                         }
                     }
                 }
@@ -520,11 +525,11 @@ Item {
                     to: 1
                     value: root.progressRatio
                     enabled: root.canSeek && root.locked
-                    wavy: root.isPlaying
-                    animateWave: root.isPlaying
+                    wavy: root.visible && root.sizeMode === "2x2" && root.isPlaying && !GameMode.enabled
+                    animateWave: wavy
                     waveFrequency: 6
                     interactionOnMove: false
-                    onMoved: root.seekToRatio(value)
+                    onReleased: v => root.seekToRatio(v)
                 }
 
                 RowLayout {
@@ -559,9 +564,9 @@ Item {
                     type: IconButton.Tonal
                     isRound: true
                     isToggle: true
-                    checked: root.player?.shuffle ?? false
-                    disabled: !root.hasPlayer
-                    onClicked: if (root.player) root.player.shuffle = !root.player.shuffle
+                    checked: (root.player?.shuffleSupported ?? false) && (root.player?.shuffle ?? false)
+                    disabled: !root.hasPlayer || !(root.player?.shuffleSupported ?? false)
+                    onClicked: if (root.player && root.player.shuffleSupported) root.player.shuffle = !root.player.shuffle
                 }
 
                 IconButton {
@@ -580,7 +585,7 @@ Item {
                     isRound: true
                     isToggle: true
                     checked: root.isPlaying
-                    disabled: !root.hasPlayer
+                    disabled: !root.hasPlayer || !(root.player?.canTogglePlaying ?? false)
                     onClicked: root.player?.togglePlaying()
                 }
 
@@ -607,7 +612,7 @@ Item {
                 Layout.preferredHeight: Math.round(92 * root.s)
                 Layout.alignment: Qt.AlignVCenter
                 source: root.artUrl
-                spinning: root.isPlaying
+                spinning: root.visible && root.sizeMode === "1x3" && root.isPlaying && !GameMode.enabled
             }
 
             ColumnLayout {
@@ -645,9 +650,13 @@ Item {
                         Layout.preferredWidth: Math.round(72 * root.s)
                         Layout.preferredHeight: Math.round(32 * root.s)
 
-                        Dash.MediaShapes {
+                        Loader {
                             anchors.fill: parent
-                            visible: root.visible && root.sizeMode === "1x3" && root.showVisualizer && root.isPlaying
+                            active: root.visible && root.sizeMode === "1x3" && root.showVisualizer && root.isPlaying && !GameMode.enabled
+                            sourceComponent: Dash.MediaShapes {
+                                anchors.fill: parent
+                                forceEnabled: true
+                            }
                         }
                     }
                 }
@@ -678,11 +687,11 @@ Item {
                         to: 1
                         value: root.progressRatio
                         enabled: root.canSeek && root.locked
-                        wavy: root.isPlaying
-                        animateWave: root.isPlaying
+                        wavy: root.visible && root.sizeMode === "1x3" && root.isPlaying && !GameMode.enabled
+                        animateWave: wavy
                         waveFrequency: 6
                         interactionOnMove: false
-                        onMoved: root.seekToRatio(value)
+                        onReleased: v => root.seekToRatio(v)
                     }
 
                     StyledText {
@@ -715,7 +724,7 @@ Item {
                     isRound: true
                     isToggle: true
                     checked: root.isPlaying
-                    disabled: !root.hasPlayer
+                    disabled: !root.hasPlayer || !(root.player?.canTogglePlaying ?? false)
                     onClicked: root.player?.togglePlaying()
                 }
 
@@ -751,8 +760,8 @@ Item {
                     CircularProgress {
                         anchors.fill: parent
                         value: root.hasPlayer ? root.progressRatio : 0
-                        wavy: root.isPlaying
-                        wavePaused: !root.isPlaying
+                        wavy: root.visible && root.sizeMode === "2x3" && root.isPlaying && !GameMode.enabled
+                        wavePaused: !wavy
                         strokeWidth: Math.max(5, Math.round(6 * root.s))
                         fgColour: Colours.palette.m3primary
                         bgColour: WidgetMetrics.trackSurface
@@ -764,7 +773,7 @@ Item {
                         width: Math.round(118 * root.s)
                         height: Math.round(118 * root.s)
                         source: root.artUrl
-                        spinning: root.isPlaying
+                        spinning: root.visible && root.sizeMode === "2x3" && root.isPlaying && !GameMode.enabled
                     }
                 }
 
@@ -775,10 +784,14 @@ Item {
                     color: WidgetMetrics.innerSurface
                     visible: root.showVisualizer
 
-                    Dash.MediaShapes {
+                    Loader {
                         anchors.fill: parent
                         anchors.margins: 4
-                        visible: root.visible && root.sizeMode === "2x3" && root.showVisualizer && root.isPlaying
+                        active: root.visible && root.sizeMode === "2x3" && root.showVisualizer && root.isPlaying && !GameMode.enabled
+                        sourceComponent: Dash.MediaShapes {
+                            anchors.fill: parent
+                            forceEnabled: true
+                        }
                     }
 
                     StyledText {
@@ -862,11 +875,11 @@ Item {
                     to: 1
                     value: root.progressRatio
                     enabled: root.canSeek && root.locked
-                    wavy: root.isPlaying
-                    animateWave: root.isPlaying
+                    wavy: root.visible && root.sizeMode === "2x3" && root.isPlaying && !GameMode.enabled
+                    animateWave: wavy
                     waveFrequency: 6
                     interactionOnMove: false
-                    onMoved: root.seekToRatio(value)
+                    onReleased: v => root.seekToRatio(v)
                 }
 
                 ButtonRow {
@@ -879,9 +892,9 @@ Item {
                         type: IconButton.Tonal
                         isRound: true
                         isToggle: true
-                        checked: root.player?.shuffle ?? false
-                        disabled: !root.hasPlayer
-                        onClicked: if (root.player) root.player.shuffle = !root.player.shuffle
+                        checked: (root.player?.shuffleSupported ?? false) && (root.player?.shuffle ?? false)
+                        disabled: !root.hasPlayer || !(root.player?.shuffleSupported ?? false)
+                        onClicked: if (root.player && root.player.shuffleSupported) root.player.shuffle = !root.player.shuffle
                     }
 
                     IconButton {
@@ -900,7 +913,7 @@ Item {
                         isRound: true
                         isToggle: true
                         checked: root.isPlaying
-                        disabled: !root.hasPlayer
+                        disabled: !root.hasPlayer || !(root.player?.canTogglePlaying ?? false)
                         onClicked: root.player?.togglePlaying()
                     }
 

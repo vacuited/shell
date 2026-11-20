@@ -89,7 +89,7 @@ void main() {
         distEdge = w - px;
         orthoLen = w;
     } else if (edge == 4) {
-        distEdge = mirrored ? abs(py - h * 0.5) : max(0.0, h * 0.5 - py);
+        distEdge = mirrored ? abs(py - h * 0.5) : (h * 0.5 - py);
     }
 
     float maxReach = orthoLen * heightScale;
@@ -102,7 +102,7 @@ void main() {
         maxReach *= 0.5;
     }
 
-    if (localOrtho > maxReach + 36.0) {
+    if (localOrtho > maxReach + 36.0 || localOrtho < -36.0) {
         fragColor = vec4(0.0);
         return;
     }
@@ -134,6 +134,9 @@ void main() {
     vec3 accumRgb = vec3(0.0);
     float accumAlpha = 0.0;
 
+    float baseAA = smoothstep(-1.0 / dpr, 0.0, localOrtho);
+    float negHaloFade = smoothstep(-36.0, 0.0, localOrtho);
+
     // Sample neighboring slots so large glowing orbs never clip at slot edges
     for (int offset = -1; offset <= 1; ++offset) {
         int i = centerIdx + offset;
@@ -154,18 +157,18 @@ void main() {
 
         float mainR = dotRadiusBase * (0.85 + 0.35 * val + 0.2 * beatEnergy);
         float distMain = length(vec2(spanPos - cx, localOrtho - mainY)) - mainR;
-        float mainDot = clamp(0.5 - distMain * dpr, 0.0, 1.0);
-        float mainHalo = glowAmt > 0.01 ? exp(-max(distMain, 0.0) / (4.0 + 14.0 * glowAmt)) * glowAmt * (0.35 + 0.55 * val) : 0.0;
+        float mainDot = clamp(0.5 - distMain * dpr, 0.0, 1.0) * baseAA;
+        float mainHalo = glowAmt > 0.01 ? exp(-max(distMain, 0.0) / (4.0 + 14.0 * glowAmt)) * glowAmt * (0.35 + 0.55 * val) * negHaloFade : 0.0;
 
         float peakR = mainR * 0.58;
         float distPeak = length(vec2(spanPos - cx, localOrtho - peakY)) - peakR;
-        float peakDot = clamp(0.5 - distPeak * dpr, 0.0, 1.0) * 0.85;
+        float peakDot = clamp(0.5 - distPeak * dpr, 0.0, 1.0) * 0.85 * baseAA;
 
         float trail = 0.0;
-        if (showTrails && localOrtho < mainY) {
+        if (showTrails && localOrtho > 0.0 && localOrtho < mainY) {
             float dx = abs(spanPos - cx);
             float trailW = mainR * 0.42;
-            float radial = smoothstep(trailW, 0.0, dx);
+            float radial = 1.0 - smoothstep(0.0, max(trailW, 0.001), dx);
             float vertFade = clamp(localOrtho / max(mainY, 1.0), 0.0, 1.0);
             trail = radial * vertFade * vertFade * 0.28;
         }

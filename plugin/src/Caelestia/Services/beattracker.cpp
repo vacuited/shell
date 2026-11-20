@@ -54,6 +54,7 @@ void BeatTracker::updateBpm(smpl_t bpm) {
         m_bpm = bpm;
         emit bpmChanged();
     }
+    emit beat(bpm);
 }
 
 } // namespace caelestia::shell::services

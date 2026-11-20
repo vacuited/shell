@@ -23,6 +23,7 @@ PageBase {
         weatherPill: qsTr("Weather pill"),
         timers: qsTr("Timers & focus"),
         pomodoro: qsTr("Timers & focus"),
+        countdown: qsTr("Countdown"),
         resources: qsTr("System resources"),
         media: qsTr("Now playing"),
         todo: qsTr("Todo list"),
@@ -40,6 +41,7 @@ PageBase {
         "weather",
         "weatherPill",
         "timers",
+        "countdown",
         "resources",
         "media",
         "todo",
@@ -50,7 +52,7 @@ PageBase {
         "sticker",
         "customText"
     ]
-    readonly property list<string> multiInstanceTypes: ["resources", "customImage", "sticker", "customText"]
+    readonly property list<string> multiInstanceTypes: ["resources", "countdown", "customImage", "sticker", "customText"]
 
     readonly property list<string> positionValues: ["top-left", "top-right", "bottom-left", "bottom-right"]
     readonly property list<MenuItem> positionItems: [
@@ -103,6 +105,19 @@ PageBase {
                     ? `${base} #${idx + 1} (${tag})`
                     : `${base} (${tag})`;
             }
+            if (t === "countdown") {
+                const customDate = String(item.options?.customDate ?? "").trim();
+                const hasValidCustom = FocusLedger.parseLocalDate(customDate) !== null;
+                const customTitle = String(item.options?.customTitle ?? "").trim();
+                const cdId = String(item.options?.countdownId ?? "");
+                let tag = hasValidCustom ? (customTitle !== "" ? customTitle : customDate) : "";
+                if (tag === "" && cdId !== "") {
+                    const found = (FocusLedger.countdowns || []).find(c => c && c.id === cdId);
+                    if (found) tag = found.title;
+                }
+                const label = same.length > 1 && idx >= 0 ? `${base} #${idx + 1}` : base;
+                return tag !== "" ? `${label} (${tag})` : label;
+            }
             if (same.length > 1 && idx >= 0)
                 return `${base} #${idx + 1}`;
         }
@@ -118,14 +133,34 @@ PageBase {
         return false;
     }
 
+    function hasEntryOverrides(entriesNode: var): bool {
+        if (!entriesNode)
+            return false;
+        if (entriesNode.isOverride("values"))
+            return true;
+        const keys = ["id", "type", "enabled", "col", "row", "right", "x", "y", "style", "sizeMode", "options"];
+        const list = entriesNode.values;
+        for (let i = 0; i < list.length; i++) {
+            const e = list[i];
+            if (!e)
+                continue;
+            for (let k = 0; k < keys.length; k++) {
+                if (e.isOverride(keys[k]))
+                    return true;
+            }
+        }
+        return false;
+    }
+
     readonly property list<string> overriddenScreens: {
         if (root.nState.targetScreen !== "")
             return [];
         const screens = [];
         for (const s of Screens.screens) {
             const dw = GlobalConfig.forScreen(s.name).background.desktopWidgets;
-            void dw.entries.values;
-            if (dw.entries.isOverride("values"))
+            for (const e of dw.entries.values)
+                void [e.id, e.type, e.enabled, e.col, e.row, e.right, e.x, e.y, e.style, e.sizeMode, e.options];
+            if (hasEntryOverrides(dw.entries))
                 screens.push(s.name);
         }
         return screens;
@@ -207,6 +242,8 @@ PageBase {
         StepperRow {
             label: qsTr("Card opacity")
             subtext: qsTr("How opaque the card backgrounds are (%)")
+            configNode: root.widgetsConfig
+            propertyName: "opacity"
             value: Math.round(root.widgetsConfig.opacity * 100)
             from: 10
             to: 100
@@ -248,6 +285,8 @@ PageBase {
             last: true
             label: qsTr("Columns")
             subtext: qsTr("Number of widget columns when unplaced")
+            configNode: root.widgetsConfig
+            propertyName: "columns"
             value: root.widgetsConfig.columns
             from: 1
             to: 6
@@ -293,8 +332,9 @@ PageBase {
 
             IconButton {
                 readonly property bool isOverridden: {
-                    void root.widgetsConfig.entries.values;
-                    return root.nState.targetScreen !== "" && root.widgetsConfig.entries.isOverride("values");
+                    for (const e of root.widgetsConfig.entries.values)
+                        void [e.id, e.type, e.enabled, e.col, e.row, e.right, e.x, e.y, e.style, e.sizeMode, e.options];
+                    return root.nState.targetScreen !== "" && root.hasEntryOverrides(root.widgetsConfig.entries);
                 }
 
                 visible: isOverridden
@@ -413,7 +453,8 @@ PageBase {
                 root.widgetsConfig.entries.insert({
                     id: entryId,
                     type: selectedItem,
-                    enabled: true
+                    enabled: true,
+                    sizeMode: WidgetMetrics.defaultSizeFor(selectedItem)
                 });
                 root.targetConfig.save();
             }
@@ -443,7 +484,7 @@ PageBase {
         readonly property bool isMultiSize: supportedSizes.length > 0
         readonly property bool supportsOuterShape: WidgetMetrics.supportsOuterShape(wType)
             && ((modelData?.sizeMode || WidgetMetrics.defaultSizeFor(wType)) === "1x1" || WidgetMetrics.isAspectResizable(wType))
-        readonly property bool hasExtraOptions: ["customText", "customImage", "sticker", "resources", "media", "atAGlance", "usercard"].includes(wType)
+        readonly property bool hasExtraOptions: ["customText", "customImage", "sticker", "resources", "countdown", "media", "atAGlance", "usercard"].includes(wType)
 
         readonly property list<string> styleValues: ["", "glass", "blur", "frosted", "material"]
         readonly property list<MenuItem> styleItems: [
@@ -491,12 +532,12 @@ PageBase {
             MenuItem { text: qsTr("Wavy ring") }
         ]
 
-        readonly property list<string> focusMetricValues: ["cpu", "ram", "gpu", "swap"]
+        readonly property list<string> focusMetricValues: ["cpu", "ram", "gpu", "disk"]
         readonly property list<MenuItem> focusMetricItems: [
             MenuItem { text: qsTr("CPU") },
             MenuItem { text: qsTr("RAM") },
             MenuItem { text: qsTr("GPU") },
-            MenuItem { text: qsTr("Swap") }
+            MenuItem { text: qsTr("Storage") }
         ]
 
         function setOption(key: string, value: var): void {
@@ -560,7 +601,7 @@ PageBase {
             fallbackText: qsTr("Size")
             menuItems: [...sizeVariants.instances]
             active: {
-                const target = String(card.modelData?.sizeMode ?? WidgetMetrics.defaultSizeFor(card.wType));
+                const target = String(card.modelData?.sizeMode || WidgetMetrics.defaultSizeFor(card.wType));
                 const idx = card.supportedSizes.indexOf(target);
                 return idx >= 0 && idx < sizeSelect.menuItems.length
                     ? sizeSelect.menuItems[idx]
@@ -663,9 +704,9 @@ PageBase {
         StepperRow {
             visible: card.wType === "customText"
             label: qsTr("Font size")
-            value: Math.round(Number(card.opts.fontSize ?? 36))
+            value: Math.round(Number(card.opts.fontSize ?? 28))
             from: 12
-            to: 160
+            to: 140
             stepSize: 2
             onMoved: v => card.setOption("fontSize", Math.round(v))
         }
@@ -745,6 +786,31 @@ PageBase {
             value: String(card.opts.path ?? "")
             placeholderText: qsTr("Click widget or drop PNG")
             onEditingFinished: val => card.setOption("path", val)
+        }
+
+        // Countdown options
+        TextFieldRow {
+            visible: card.wType === "countdown"
+            label: qsTr("Custom title")
+            value: String(card.opts.customTitle ?? "")
+            placeholderText: qsTr("Leave blank to use shared exam")
+            onEditingFinished: val => card.setOption("customTitle", val.trim())
+        }
+
+        TextFieldRow {
+            visible: card.wType === "countdown"
+            last: true
+            label: qsTr("Custom date (YYYY-MM-DD)")
+            value: String(card.opts.customDate ?? "")
+            placeholderText: "YYYY-MM-DD"
+            maximumLength: 10
+            validate: val => FocusLedger.parseLocalDate(val) !== null
+            errorText: qsTr("Use YYYY-MM-DD")
+            onEditingFinished: val => {
+                const t = val.trim();
+                if (t === "" || FocusLedger.parseLocalDate(t) !== null)
+                    card.setOption("customDate", t);
+            }
         }
 
         // Resources options

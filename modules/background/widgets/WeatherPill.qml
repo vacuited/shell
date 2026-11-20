@@ -20,10 +20,10 @@ Item {
     property real plateOpacity: Config.background.desktopWidgets.opacity
     property var widgetOptions: ({})
 
-    readonly property real s: WidgetMetrics.scale
+    readonly property real s: Math.max(0.7, Math.min(1.5, Config.background.desktopWidgets.scale ?? 1.0))
     readonly property var todayForecast: (Weather.forecast && Weather.forecast.length > 0) ? Weather.forecast[0] : null
-    readonly property int maxTemp: todayForecast?.maxTempC ?? 0
-    readonly property int minTemp: todayForecast?.minTempC ?? 0
+    readonly property real maxTemp: todayForecast?.maxTempC ?? 0
+    readonly property real minTemp: todayForecast?.minTempC ?? 0
 
     implicitWidth: WidgetMetrics.widthFor(sizeMode, s)
     implicitHeight: WidgetMetrics.heightFor(sizeMode, "weatherPill", s)
@@ -71,7 +71,12 @@ Item {
             StyledText {
                 text: Weather.cc ? Weather.temp : "--°"
                 font: Tokens.font.clock.size(Math.round(Tokens.font.headline.small.pointSize * root.s)).weight(Font.Bold).build()
+                fontSizeMode: root.sizeMode === "1x1" ? Text.Fit : Text.FixedSize
+                minimumPointSize: Math.max(8, Math.round(10 * root.s))
+                horizontalAlignment: root.sizeMode === "1x1" ? Text.AlignHCenter : Text.AlignLeft
+                elide: Text.ElideRight
                 color: Colours.palette.m3onSurface
+                Layout.fillWidth: root.sizeMode === "1x1"
                 Layout.alignment: Qt.AlignVCenter
             }
 

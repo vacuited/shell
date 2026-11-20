@@ -77,6 +77,8 @@ Variants {
 
             readonly property ShellScreen modelData: scope.modelData
             readonly property alias wallpaperLoader: wallpaper
+            readonly property var monitor: Hypr.monitorFor(win.modelData)
+            readonly property bool workspaceOccupied: !(monitor?.activeWorkspace?.toplevels?.values.every(t => t.lastIpcObject?.floating) ?? true)
 
             screen: modelData
             name: "background"
@@ -289,8 +291,7 @@ Variants {
                 initialY: hasCustomPos ? Config.background.desktopClock.y : anchorY
                 onPositionCommitted: (newX, newY) => {
                     const scr = Config.forScreen(win.modelData.name);
-                    const hasScreenOverride = scr.background.isOverride("desktopClock")
-                        || scr.background.desktopClock.isOverride("x")
+                    const hasScreenOverride = scr.background.desktopClock.isOverride("x")
                         || scr.background.desktopClock.isOverride("y");
                     const target = hasScreenOverride ? scr : GlobalConfig;
                     target.background.desktopClock.x = Math.round(newX);
@@ -308,6 +309,7 @@ Variants {
                         wallpaper: behindClock
                         absX: clockWrapper.x
                         absY: clockWrapper.y
+                        desktopOccluded: win.workspaceOccupied
                     }
                 }
             }
@@ -438,8 +440,7 @@ Variants {
         Loader {
             id: widgetsLoader
 
-            readonly property var monitor: Hypr.monitorFor(win.modelData)
-            readonly property bool occupied: !(monitor?.activeWorkspace?.toplevels?.values.every(t => t.lastIpcObject?.floating) ?? true)
+            readonly property bool occupied: win.workspaceOccupied
             property real occupiedProg: occupied ? 1 : 0
             readonly property real reveal: Config.background.desktopWidgets.hideWithWindows ? 1 - occupiedProg : 1
 

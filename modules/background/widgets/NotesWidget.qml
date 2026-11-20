@@ -22,9 +22,10 @@ Item {
     property real plateOpacity: Config.background.desktopWidgets.opacity
     property var widgetOptions: ({})
 
-    readonly property real s: WidgetMetrics.scale
+    readonly property real s: Math.max(0.7, Math.min(1.5, Config.background.desktopWidgets.scale ?? 1.0))
     property string selectedNoteId: widgetOptions?.noteId ?? ""
     property string mode: "view" // "view" | "edit"
+    property bool _editingHeld: false
     readonly property var swatchKeys: ["none", "primary", "secondary", "tertiary", "pink"]
 
     readonly property var sortedNotes: {
@@ -56,9 +57,18 @@ Item {
 
     readonly property string noteColorKey: activeNote?.color ?? "none"
     readonly property color accentColor: colorForKey(noteColorKey)
-    readonly property bool anyEditorFocused: titleInput.activeFocus || bodyEdit.activeFocus
 
     signal optionsUpdated(var patch)
+
+    function setEditingActive(active: bool): void {
+        if (active === _editingHeld)
+            return;
+        _editingHeld = active;
+        if (active)
+            Visibilities.desktopWidgetEditingCount++;
+        else
+            Visibilities.desktopWidgetEditingCount = Math.max(0, Visibilities.desktopWidgetEditingCount - 1);
+    }
 
     function colorForKey(key: string): color {
         if (key === "primary")
@@ -75,9 +85,12 @@ Item {
     }
 
     function selectNote(id: string): void {
+        if (mode === "edit" && activeNote && activeNote.id !== id)
+            saveEdits();
         selectedNoteId = id;
         optionsUpdated({ noteId: id });
         mode = "view";
+        setEditingActive(false);
     }
 
     function stepNote(delta: int): void {
@@ -89,7 +102,9 @@ Item {
     }
 
     function createAndEditNote(): void {
-        const created = NotesStore.addNote("", "", false, "none", []);
+        if (mode === "edit")
+            saveEdits();
+        const created = NotesStore.addNote("", "", false, "none", ({}));
         if (created && created.id) {
             selectedNoteId = created.id;
             optionsUpdated({ noteId: created.id });
@@ -103,33 +118,45 @@ Item {
         titleInput.text = activeNote.title ?? "";
         bodyEdit.text = activeNote.body ?? "";
         mode = "edit";
+        setEditingActive(root.locked);
         editFocusTimer.restart();
     }
 
     function saveEdits(): void {
         const n = activeNote;
-        if (n)
-            NotesStore.updateNote(n.id, titleInput.text, bodyEdit.text, Boolean(n.pinned), n.color ?? "none", n.listShapes ?? []);
+        if (n) {
+            const tTrim = titleInput.text.trim();
+            const bTrim = bodyEdit.text.trim();
+            if (tTrim === "" && bTrim === "") {
+                NotesStore.deleteNote(n.id);
+            } else {
+                const shapes = (n.listShapes && typeof n.listShapes === "object" && !Array.isArray(n.listShapes)) ? n.listShapes : ({});
+                NotesStore.updateNote(n.id, titleInput.text, bodyEdit.text, Boolean(n.pinned), n.color ?? "none", shapes);
+            }
+        }
         mode = "view";
-        Visibilities.desktopWidgetEditing = false;
+        setEditingActive(false);
     }
 
     function setNoteColor(key: string): void {
         const n = activeNote;
-        if (n)
-            NotesStore.updateNote(n.id, n.title ?? "", n.body ?? "", Boolean(n.pinned), key, n.listShapes ?? []);
+        if (n) {
+            const shapes = (n.listShapes && typeof n.listShapes === "object" && !Array.isArray(n.listShapes)) ? n.listShapes : ({});
+            const nextTitle = mode === "edit" ? titleInput.text : (n.title ?? "");
+            const nextBody = mode === "edit" ? bodyEdit.text : (n.body ?? "");
+            NotesStore.updateNote(n.id, nextTitle, nextBody, Boolean(n.pinned), key, shapes);
+        }
     }
 
     implicitWidth: WidgetMetrics.widthFor(sizeMode, s)
     implicitHeight: WidgetMetrics.heightFor(sizeMode, "notes", s)
-    onAnyEditorFocusedChanged: Visibilities.desktopWidgetEditing = anyEditorFocused
 
     onLockedChanged: {
         if (!locked && mode === "edit")
             saveEdits();
     }
 
-    Component.onDestruction: Visibilities.desktopWidgetEditing = false
+    Component.onDestruction: setEditingActive(false)
 
     Timer {
         id: editFocusTimer
@@ -170,8 +197,10 @@ Item {
                     spacing: 4
 
                     MaterialShape {
-                        width: Math.round(14 * root.s)
-                        height: Math.round(14 * root.s)
+                        Layout.preferredWidth: Math.round(14 * root.s)
+                        Layout.preferredHeight: Math.round(14 * root.s)
+                        implicitSize: Math.round(14 * root.s)
+                        Layout.alignment: Qt.AlignVCenter
                         shape: MaterialShape.Cookie4Sided
                         color: root.accentColor
                     }
@@ -292,8 +321,10 @@ Item {
                                 spacing: 6
 
                                 MaterialShape {
-                                    width: 10
-                                    height: 10
+                                    Layout.preferredWidth: 10
+                                    Layout.preferredHeight: 10
+                                    implicitSize: 10
+                                    Layout.alignment: Qt.AlignVCenter
                                     shape: MaterialShape.Cookie4Sided
                                     color: root.colorForKey(sbRow.modelData.color ?? "none")
                                 }
@@ -349,8 +380,10 @@ Item {
                     spacing: 2
 
                     MaterialShape {
-                        width: Math.round(14 * root.s)
-                        height: Math.round(14 * root.s)
+                        Layout.preferredWidth: Math.round(14 * root.s)
+                        Layout.preferredHeight: Math.round(14 * root.s)
+                        implicitSize: Math.round(14 * root.s)
+                        Layout.alignment: Qt.AlignVCenter
                         shape: MaterialShape.Cookie4Sided
                         color: root.accentColor
                     }
@@ -446,7 +479,7 @@ Item {
                             if (root.activeNote) {
                                 const delId = root.activeNote.id;
                                 root.mode = "view";
-                                Visibilities.desktopWidgetEditing = false;
+                                root.setEditingActive(false);
                                 NotesStore.deleteNote(delId);
                             }
                         }
@@ -468,8 +501,8 @@ Item {
                             required property string modelData
                             readonly property bool selected: root.noteColorKey === modelData
 
-                            width: 20
-                            height: 20
+                            Layout.preferredWidth: 20
+                            Layout.preferredHeight: 20
                             radius: 10
                             color: modelData === "none" ? WidgetMetrics.innerSurfaceStrong : root.colorForKey(modelData)
                             border.width: selected ? 2 : 0

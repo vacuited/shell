@@ -10,6 +10,7 @@ import Caelestia.Config
 
 Scope {
     property alias lock: lock
+    readonly property bool locked: lock.locked
 
     WlSessionLock {
         id: lock
@@ -19,7 +20,7 @@ Scope {
         onUnlock: Audio.playUnlock()
 
         onLockedChanged: {
-            // Nothing needed here anymore since we play sounds explicitly
+            ScreenTime.sessionLocked = lock.locked;
         }
 
         LockSurface {
@@ -111,6 +112,7 @@ Scope {
     }
 
     Component.onCompleted: {
+        ScreenTime.sessionLocked = lock.locked;
         if (GlobalConfig.lock.lockOnStartup) {
             startupLockProc.running = true;
         }

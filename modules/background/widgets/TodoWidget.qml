@@ -22,12 +22,17 @@ Item {
     property real plateOpacity: Config.background.desktopWidgets.opacity
     property var widgetOptions: ({})
 
-    readonly property real s: WidgetMetrics.scale
+    readonly property real s: Math.max(0.7, Math.min(1.5, Config.background.desktopWidgets.scale ?? 1.0))
     property bool adding: false
+    property bool _editingHeld: false
 
     readonly property var sortedTodos: {
         void NotesStore.version;
-        return NotesStore.getSortedTodos();
+        const open = NotesStore.getSortedTodos();
+        const done = (NotesStore.todos ?? []).filter(t => t && t.done)
+            .slice()
+            .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        return open.concat(done);
     }
     readonly property var doneTodos: sortedTodos.filter(t => t.done)
     readonly property int totalCount: sortedTodos.length
@@ -35,16 +40,25 @@ Item {
     readonly property int openCount: Math.max(0, totalCount - doneCount)
     readonly property real completionRatio: totalCount > 0 ? (doneCount / totalCount) : 1.0
 
+    function setEditingActive(active: bool): void {
+        if (active === _editingHeld)
+            return;
+        _editingHeld = active;
+        if (active)
+            Visibilities.desktopWidgetEditingCount++;
+        else
+            Visibilities.desktopWidgetEditingCount = Math.max(0, Visibilities.desktopWidgetEditingCount - 1);
+    }
+
     function submitTodo(field: var): void {
         if (!field)
             return;
         const txt = field.text.trim();
         if (txt !== "") {
-            NotesStore.addTodo(txt, "", "");
+            NotesStore.addTodo(txt, "", false);
             field.text = "";
         }
         adding = false;
-        Visibilities.desktopWidgetEditing = false;
     }
 
     function clearCompleted(): void {
@@ -53,14 +67,18 @@ Item {
             NotesStore.deleteTodo(ids[i]);
     }
 
-    onLockedChanged: {
-        if (!locked) {
-            adding = false;
-            Visibilities.desktopWidgetEditing = false;
-        }
+    onAddingChanged: {
+        setEditingActive(adding && locked);
+        if (adding)
+            addFocusTimer.restart();
     }
 
-    Component.onDestruction: Visibilities.desktopWidgetEditing = false
+    onLockedChanged: {
+        if (!locked)
+            adding = false;
+    }
+
+    Component.onDestruction: setEditingActive(false)
 
     implicitWidth: WidgetMetrics.widthFor(sizeMode, s)
     implicitHeight: WidgetMetrics.heightFor(sizeMode, "todo", s)
@@ -185,12 +203,8 @@ Item {
                     isRound: true
                     onClicked: {
                         root.adding = !root.adding;
-                        if (root.adding)
-                            addFocusTimer.restart();
-                        else {
+                        if (!root.adding)
                             mainInput.text = "";
-                            Visibilities.desktopWidgetEditing = false;
-                        }
                     }
                 }
             }
@@ -227,13 +241,11 @@ Item {
                         font: Tokens.font.body.small
                         verticalAlignment: TextInput.AlignVCenter
                         selectByMouse: true
-                        onActiveFocusChanged: Visibilities.desktopWidgetEditing = activeFocus
                         Keys.onReturnPressed: root.submitTodo(mainInput)
                         Keys.onEnterPressed: root.submitTodo(mainInput)
                         Keys.onEscapePressed: {
                             text = "";
                             root.adding = false;
-                            Visibilities.desktopWidgetEditing = false;
                         }
 
                         StyledText {
@@ -341,8 +353,11 @@ Item {
 
                                 Layout.fillWidth: true
                                 Layout.alignment: Qt.AlignVCenter
-                                text: todoRow.modelData.text ?? ""
-                                font: Tokens.font.body.builders.small.scale(root.s).strikeout(todoRow.done).build()
+                                text: todoRow.modelData.title ?? ""
+                                font.family: Tokens.font.body.small.family
+                                font.pointSize: Math.max(8, Tokens.font.body.small.pointSize * root.s)
+                                font.weight: Tokens.font.body.small.weight
+                                font.strikeout: todoRow.done
                                 color: todoRow.done ? Qt.alpha(Colours.palette.m3onSurfaceVariant, 0.55) : Colours.palette.m3onSurface
                                 wrapMode: Text.WordWrap
                             }
@@ -440,12 +455,8 @@ Item {
                         isRound: true
                         onClicked: {
                             root.adding = !root.adding;
-                            if (root.adding)
-                                addFocusTimer.restart();
-                            else {
+                            if (!root.adding)
                                 panoInput.text = "";
-                                Visibilities.desktopWidgetEditing = false;
-                            }
                         }
                     }
 
@@ -489,13 +500,11 @@ Item {
                             font: Tokens.font.body.small
                             verticalAlignment: TextInput.AlignVCenter
                             selectByMouse: true
-                            onActiveFocusChanged: Visibilities.desktopWidgetEditing = activeFocus
                             Keys.onReturnPressed: root.submitTodo(panoInput)
                             Keys.onEnterPressed: root.submitTodo(panoInput)
                             Keys.onEscapePressed: {
                                 text = "";
                                 root.adding = false;
-                                Visibilities.desktopWidgetEditing = false;
                             }
 
                             StyledText {
@@ -603,8 +612,11 @@ Item {
 
                                     Layout.fillWidth: true
                                     Layout.alignment: Qt.AlignVCenter
-                                    text: pRow.modelData.text ?? ""
-                                    font: Tokens.font.body.builders.small.scale(root.s).strikeout(pRow.done).build()
+                                    text: pRow.modelData.title ?? ""
+                                    font.family: Tokens.font.body.small.family
+                                    font.pointSize: Math.max(8, Tokens.font.body.small.pointSize * root.s)
+                                    font.weight: Tokens.font.body.small.weight
+                                    font.strikeout: pRow.done
                                     color: pRow.done ? Qt.alpha(Colours.palette.m3onSurfaceVariant, 0.55) : Colours.palette.m3onSurface
                                     wrapMode: Text.WordWrap
                                 }

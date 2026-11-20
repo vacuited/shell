@@ -9,7 +9,7 @@ QtObject {
     id: root
 
     // Global scale clamped safely so widgets remain readable and well-proportioned.
-    readonly property real scale: Math.max(0.7, Math.min(1.5, Config.background.desktopWidgets.scale ?? 1.0))
+    readonly property real scale: Math.max(0.7, Math.min(1.5, GlobalConfig.background.desktopWidgets.scale ?? 1.0))
 
     // Scheme-harmonized inner surface tokens (lighter than dark hard-flavour containers).
     readonly property color innerSurface: Colours.light
@@ -143,6 +143,14 @@ QtObject {
             defaultShape: "Circle",
             supportsOuterShape: true
         },
+        "countdown": {
+            label: qsTr("Countdown"),
+            icon: "hourglass_top",
+            defaultSize: "1x1",
+            supportedSizes: ["1x1", "1x2", "2x1", "2x2"],
+            defaultShape: "Cookie9Sided",
+            supportsOuterShape: true
+        },
         "resources": {
             label: qsTr("Resources"),
             icon: "memory",
@@ -246,7 +254,7 @@ QtObject {
 
     function isMultiInstance(type: string): bool {
         const t = normalizeType(type);
-        return t === "resources" || t === "customImage" || t === "sticker" || t === "customText";
+        return t === "resources" || t === "countdown" || t === "customImage" || t === "sticker" || t === "customText";
     }
 
     function defaultSizeFor(type: string): string {

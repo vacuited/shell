@@ -250,20 +250,27 @@ Item {
                     }
 
                     StyledRect {
-                        visible: FocusTimer.phase === "focus" && FocusTimer.subject !== ""
+                        visible: FocusTimer.phase === "focus" && (FocusTimer.subject !== "" || GlobalConfig.focus.subjects.length > 0)
                         Layout.alignment: Qt.AlignVCenter
                         implicitHeight: root.compact ? 18 : 22
                         implicitWidth: Math.min(subjectLabel.implicitWidth + Tokens.padding.small * 2, 110)
                         radius: Tokens.rounding.full
-                        color: Colours.palette.m3secondaryContainer
+                        color: FocusTimer.subject !== "" ? Colours.palette.m3secondaryContainer : Colours.tPalette.m3surfaceContainerHigh
+
+                        StateLayer {
+                            radius: Tokens.rounding.full
+                            color: FocusTimer.subject !== "" ? Colours.palette.m3onSecondaryContainer : Colours.palette.m3onSurface
+                            disabled: !((root.expanded || Config.notch.expandMode !== "click") && GlobalConfig.focus.subjects.length > 0)
+                            onClicked: FocusTimer.cycleSubject()
+                        }
 
                         StyledText {
                             id: subjectLabel
 
                             anchors.centerIn: parent
                             width: Math.min(implicitWidth, 110 - Tokens.padding.small * 2)
-                            text: FocusTimer.subject
-                            color: Colours.palette.m3onSecondaryContainer
+                            text: FocusTimer.subject !== "" ? FocusTimer.subject : Tr.tr("General")
+                            color: FocusTimer.subject !== "" ? Colours.palette.m3onSecondaryContainer : Colours.palette.m3onSurfaceVariant
                             font: Tokens.font.label.builders.small.weight(Font.Medium).build()
                             elide: Text.ElideRight
                             horizontalAlignment: Text.AlignHCenter
@@ -467,6 +474,15 @@ Item {
                         isRound: true
                         shapeMorph: true
                         onClicked: FocusTimer.skipPhase()
+                    }
+
+                    IconButton {
+                        icon: "sell"
+                        type: IconButton.Tonal
+                        isRound: true
+                        shapeMorph: true
+                        visible: FocusTimer.phase === "focus" && GlobalConfig.focus.subjects.length > 0
+                        onClicked: FocusTimer.cycleSubject()
                     }
 
                     IconButton {

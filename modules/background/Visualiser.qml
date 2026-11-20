@@ -20,10 +20,10 @@ Item {
     property real offset: shouldBeActive ? 0 : screen.height * 0.2
 
     readonly property int barExclusiveZone: Visibilities.bars.get(root.screen.name)?.exclusiveZone ?? (Tokens.sizes.bar.innerWidth + Math.max(Tokens.padding.small, Config.border.thickness))
-    readonly property real visualiserSpacing: Tokens.spacing.small * vis.spacing
 
     readonly property bool useGpuPipeline: vis.renderer !== "cpu" || vis.style !== "bars"
     readonly property bool weActive: !!(wallpaper?.item?.weSurfaceVisible || wallpaper?.item?.weRunning || wallpaper?.weSurfaceActive || wallpaper?.weSurfaceVisible)
+    readonly property bool workspaceOccupied: !(Hypr.monitorFor(root.screen)?.activeWorkspace?.toplevels?.values.every(t => t.lastIpcObject?.floating) ?? true)
 
     property color primaryCol: Qt.alpha(resolveM3Color(vis.primaryColorRole), vis.opacity)
     property color secondaryCol: Qt.alpha(resolveM3Color(vis.secondaryColorRole), vis.opacity)
@@ -86,7 +86,7 @@ Item {
         id: wrapper
 
         anchors.fill: parent
-        layer.enabled: true
+        layer.enabled: root.opacity > 0 && root.vis.blur && !root.weActive
 
         Loader {
             asynchronous: true
@@ -102,7 +102,7 @@ Item {
                 }
 
                 ServiceRef {
-                    service: root.vis.beatReactivity > 0.001 ? Audio.beatTracker : null
+                    service: root.useGpuPipeline && root.vis.beatReactivity > 0.001 ? Audio.beatTracker : null
                 }
 
                 Binding {
@@ -118,7 +118,7 @@ Item {
                     }
 
                     target: Audio.beatTracker
-                    enabled: root.vis.beatReactivity > 0.001
+                    enabled: root.useGpuPipeline && root.vis.beatReactivity > 0.001
                 }
 
                 Item {
@@ -191,12 +191,21 @@ Item {
                 }
 
                 FrameAnimation {
+                    property real frameAccum: 0
+                    readonly property real minFrameInterval: (root.weActive || root.workspaceOccupied) ? (1.0 / 30.0) : (1.0 / 60.0)
+
                     running: root.opacity > 0 && (root.useGpuPipeline ? !gpuView.settled : !legacyBars.settled)
+                    onRunningChanged: if (!running) frameAccum = 0
                     onTriggered: {
+                        frameAccum += frameTime;
+                        if (frameAccum < minFrameInterval)
+                            return;
+                        const dt = frameAccum;
+                        frameAccum = 0;
                         if (root.useGpuPipeline) {
-                            gpuView.advance(frameTime);
+                            gpuView.advance(dt);
                         } else {
-                            legacyBars.advance(frameTime);
+                            legacyBars.advance(dt);
                         }
                     }
                 }

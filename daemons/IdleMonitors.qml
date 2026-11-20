@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import Quickshell
+import Quickshell.Hyprland
 import Quickshell.Wayland
 import Quickshell.Services.UPower
 import Caelestia.Config
@@ -34,15 +35,29 @@ Scope {
         else if (action === "unlock")
             lock.lock.locked = false;
         else if (action === "dpms off") {
-            if (!IdleInhibitor.preventSleep)
+            if (!IdleInhibitor.preventSleep) {
                 Hypr.dispatch(Hypr.usingLua ? `hl.dsp.dpms({ action = "disable" })` : action);
+                ScreenTime.setDpmsAsleep(true);
+                dpmsRefreshTimer.restart();
+            }
         }
-        else if (action === "dpms on")
+        else if (action === "dpms on") {
             Hypr.dispatch(Hypr.usingLua ? `hl.dsp.dpms({ action = "enable" })` : action);
+            ScreenTime.setDpmsAsleep(false);
+            dpmsRefreshTimer.restart();
+        }
         else if (typeof action === "string")
             Hypr.dispatch(action);
         else if (!IdleInhibitor.preventSleep && !SessionManager.exec(action))
             Quickshell.execDetached(action);
+    }
+
+    Timer {
+        id: dpmsRefreshTimer
+
+        interval: 200
+        repeat: false
+        onTriggered: Hyprland.refreshMonitors()
     }
 
     Connections {

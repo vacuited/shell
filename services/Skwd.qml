@@ -26,6 +26,9 @@ Singleton {
     property alias gpuMode: weAdapter.gpuMode
     property alias fps: weAdapter.fps
     property alias disableParticles: weAdapter.disableParticles
+    property alias sceneQuality: weAdapter.sceneQuality
+    property alias reduceEffects: weAdapter.reduceEffects
+    property alias compositorBlur: weAdapter.compositorBlur
     property alias transitionEffect: weAdapter.transitionEffect
     property alias sceneProperties: weAdapter.sceneProperties
 
@@ -43,8 +46,12 @@ Singleton {
 
     property var availableGpus: []
     property bool hasSafeDiscrete: false
+    property bool hasOffloadDiscrete: false
     property bool hasSafeIntegrated: true
+    readonly property bool hasAnyDiscrete: root.hasSafeDiscrete || root.hasOffloadDiscrete
     property string compositorGpuName: ""
+    property string discreteGpuName: ""
+    property string integratedGpuName: ""
     property var availableTransitions: [
         { "id": "fade", "label": "Fade", "duration_ms": 500 }
     ]
@@ -85,12 +92,16 @@ Singleton {
 
     readonly property string effectiveGpu: {
         const mode = weAdapter.gpuMode || "auto";
-        if (mode === "dgpu" && root.hasSafeDiscrete)
+        if (mode === "dgpu" && root.hasAnyDiscrete)
+            return "discrete";
+        if (mode === "ac_dgpu" && !UPower.onBattery && root.hasAnyDiscrete)
             return "discrete";
         if (mode === "igpu" && root.hasSafeIntegrated)
             return "integrated";
         return "auto";
     }
+
+    readonly property bool usingDiscreteForScenes: root.effectiveGpu === "discrete" || (root.effectiveGpu === "auto" && root.hasSafeDiscrete)
 
     readonly property int effectiveFps: {
         const f = weAdapter.fps;
@@ -106,6 +117,28 @@ Singleton {
         const nativeHz = maxHz > 0 ? Math.round(maxHz) : 60;
         return UPower.onBattery ? Math.min(nativeHz, 60) : nativeHz;
     }
+
+    readonly property int effectiveVideoFps: UPower.onBattery ? 60 : 0
+
+    readonly property int effectiveMaxDim: {
+        const nativeDim = root.activeDisplayMaxDim;
+        const q = weAdapter.sceneQuality || "auto";
+        let dim = nativeDim;
+        if (q === "performance")
+            dim = Math.round(nativeDim * 0.5);
+        else if (q === "balanced")
+            dim = Math.round(nativeDim * 0.67);
+        else if (q === "high")
+            dim = Math.round(nativeDim * 0.85);
+        else if (q === "native")
+            dim = nativeDim;
+        else
+            dim = root.usingDiscreteForScenes ? nativeDim : Math.min(1280, nativeDim);
+        return Math.max(256, Math.min(16384, Math.round(dim)));
+    }
+
+    readonly property int effectiveMaxEffectChains: weAdapter.reduceEffects ? 4 : 0
+    readonly property int effectiveMaxEffectPasses: weAdapter.reduceEffects ? 4 : 0
 
     readonly property int activeDisplayMaxDim: {
         let maxDim = 0;
@@ -148,8 +181,10 @@ Singleton {
     property bool _pendingForceRestart: false
     property bool _pendingStop: false
     property bool _remotePaused: false
+    property int _pauseRetryCount: 0
     property bool _lastSentMuted: false
     property real _lastSentVolume: -1.0
+    property int _audioRetryCount: 0
     property var _posterQueue: []
     property var _subQueue: []
     property var _dlPending: ({})
@@ -298,14 +333,13 @@ Singleton {
     function sanitizeGpuMode(saveIfChanged: bool): void {
         const cur = String(weAdapter.gpuMode || "auto");
         let next = cur;
-        if (cur === "ac_dgpu") {
+        if (cur !== "auto" && cur !== "ac_dgpu" && cur !== "igpu" && cur !== "dgpu") {
             next = "auto";
-        } else if (cur === "dgpu" && (!root.probeCompleted || !root.hasSafeDiscrete)) {
-            next = "auto";
-        } else if (cur === "igpu" && root.probeCompleted && !root.hasSafeIntegrated) {
-            next = "auto";
-        } else if (cur !== "auto" && cur !== "igpu" && cur !== "dgpu") {
-            next = "auto";
+        } else if (root.probeCompleted) {
+            if ((cur === "ac_dgpu" || cur === "dgpu") && !root.hasAnyDiscrete)
+                next = "auto";
+            else if (cur === "igpu" && !root.hasSafeIntegrated)
+                next = "auto";
         }
         if (next !== cur) {
             weAdapter.gpuMode = next;
@@ -316,10 +350,14 @@ Singleton {
 
     function setGpuMode(v: string): void {
         let val = v || "auto";
-        if (val === "ac_dgpu" || (val === "dgpu" && !root.hasSafeDiscrete) || (val === "igpu" && !root.hasSafeIntegrated))
+        if (val !== "auto" && val !== "ac_dgpu" && val !== "igpu" && val !== "dgpu")
             val = "auto";
-        if (val !== "auto" && val !== "igpu" && val !== "dgpu")
-            val = "auto";
+        if (root.probeCompleted) {
+            if ((val === "ac_dgpu" || val === "dgpu") && !root.hasAnyDiscrete)
+                val = "auto";
+            else if (val === "igpu" && !root.hasSafeIntegrated)
+                val = "auto";
+        }
         if (weAdapter.gpuMode === val)
             return;
         weAdapter.gpuMode = val;
@@ -342,6 +380,43 @@ Singleton {
         persist();
         if (root.shouldBeRunning && !root.engineFailed)
             requestApply(false);
+    }
+
+    function setSceneQuality(v: string): void {
+        const val = (v === "performance" || v === "balanced" || v === "high" || v === "native" || v === "auto") ? v : "auto";
+        if (weAdapter.sceneQuality === val)
+            return;
+        weAdapter.sceneQuality = val;
+        persist();
+    }
+
+    function setReduceEffects(b: bool): void {
+        const val = Boolean(b);
+        if (weAdapter.reduceEffects === val)
+            return;
+        weAdapter.reduceEffects = val;
+        persist();
+    }
+
+    function setCompositorBlur(b: bool): void {
+        const val = Boolean(b);
+        if (weAdapter.compositorBlur === val)
+            return;
+        weAdapter.compositorBlur = val;
+        persist();
+        syncCompositorBlur();
+    }
+
+    function syncCompositorBlur(): void {
+        if (!root.probeCompleted || !root.paperAvailable)
+            return;
+        if (blurProc.running) {
+            blurProc.pendingResync = true;
+            return;
+        }
+        blurProc.pendingResync = false;
+        blurProc.command = ["python3", root.helperScript, "set-blur", "--enabled", weAdapter.compositorBlur ? "1" : "0"];
+        blurProc.running = true;
     }
 
     function setTransitionEffect(v: string): void {
@@ -443,15 +518,20 @@ Singleton {
             "--path", targetPath,
             "--gpu", effGpu,
             "--fps", String(effFps),
+            "--video-fps", String(root.effectiveVideoFps),
             "--disable-particles", weAdapter.disableParticles ? "1" : "0",
-            "--max-dim", String(root.activeDisplayMaxDim),
+            "--max-dim", String(root.effectiveMaxDim),
+            "--max-effect-chains", String(root.effectiveMaxEffectChains),
+            "--max-effect-passes", String(root.effectiveMaxEffectPasses),
+            "--compositor-blur", weAdapter.compositorBlur ? "1" : "0",
             "--mute", root.effectiveMuted ? "1" : "0",
             "--volume", Number(weAdapter.volume).toFixed(3),
             "--force-restart", forceRestart ? "1" : "0"
         ];
 
+        const isHotSwap = (targetPath === root._appliedWeDir && !forceRestart);
         let usedStaticFrom = false;
-        if (Wallpapers.enableAnimation) {
+        if (Wallpapers.enableAnimation && !isHotSwap) {
             cmd.push("--transition", weAdapter.transitionEffect || "fade");
             if (!root.surfaceReady && root._pendingStaticFrom !== "" && isStaticImagePath(root._pendingStaticFrom)) {
                 cmd.push("--transition-from", root._pendingStaticFrom);
@@ -471,7 +551,12 @@ Singleton {
         applyProc.usedTransitionFromArg = usedStaticFrom;
         applyProc.sentMuted = root.effectiveMuted;
         applyProc.sentVolume = weAdapter.volume;
+        applyProc.stdoutText = "";
         applyProc.stderrText = "";
+        applyProc.exited = false;
+        applyProc.stdoutDone = false;
+        applyProc.stderrDone = false;
+        applyProc.lastExitCode = 0;
         applyProc.command = cmd;
         applyProc.running = true;
     }
@@ -484,7 +569,10 @@ Singleton {
         root.surfaceReady = false;
         root.usedTransitionFrom = false;
         root._remotePaused = false;
+        root._pauseRetryCount = 0;
+        root._audioRetryCount = 0;
         root._appliedWeDir = "";
+        pauseRetryTimer.stop();
         audioDebounceTimer.stop();
 
         if (applyProc.running) {
@@ -511,6 +599,10 @@ Singleton {
             return;
 
         pauseProc.targetState = targetPaused;
+        pauseProc.stdoutText = "";
+        pauseProc.exited = false;
+        pauseProc.stdoutDone = false;
+        pauseProc.lastExitCode = 0;
         pauseProc.command = ["python3", root.helperScript, targetPaused ? "pause" : "resume"];
         pauseProc.running = true;
     }
@@ -527,6 +619,10 @@ Singleton {
 
         audioProc.pendingMuted = m;
         audioProc.pendingVolume = v;
+        audioProc.stdoutText = "";
+        audioProc.exited = false;
+        audioProc.stdoutDone = false;
+        audioProc.lastExitCode = 0;
         audioProc.command = [
             "python3", root.helperScript, "audio",
             "--mute", m ? "1" : "0",
@@ -565,6 +661,10 @@ Singleton {
         CUtils.mkdirp(root.posterCacheDir);
         posterProc.currentId = next.id;
         posterProc.destPath = dest;
+        posterProc.stdoutText = "";
+        posterProc.exited = false;
+        posterProc.stdoutDone = false;
+        posterProc.lastExitCode = 0;
         posterProc.command = [
             "python3", root.helperScript, "capture-poster",
             "--source", next.weDir,
@@ -578,10 +678,17 @@ Singleton {
     function runProbe(): void {
         if (probeProc.running)
             return;
-        let cmd = ["python3", root.helperScript, "probe"];
+        let cmd = [
+            "python3", root.helperScript, "probe",
+            "--compositor-blur", weAdapter.compositorBlur ? "1" : "0"
+        ];
         if (weAdapter.workshopDir) {
             cmd.push("--workshop-dir", weAdapter.workshopDir);
         }
+        probeProc.stdoutText = "";
+        probeProc.exited = false;
+        probeProc.stdoutDone = false;
+        probeProc.lastExitCode = 0;
         probeProc.command = cmd;
         probeProc.running = true;
     }
@@ -595,6 +702,10 @@ Singleton {
         if (weAdapter.workshopDir) {
             cmd.push("--workshop-dir", weAdapter.workshopDir);
         }
+        listWeProc.stdoutText = "";
+        listWeProc.exited = false;
+        listWeProc.stdoutDone = false;
+        listWeProc.lastExitCode = 0;
         listWeProc.command = cmd;
         listWeProc.running = true;
     }
@@ -606,6 +717,10 @@ Singleton {
             steamInvProc.pendingRerun = true;
             return;
         }
+        steamInvProc.stdoutText = "";
+        steamInvProc.exited = false;
+        steamInvProc.stdoutDone = false;
+        steamInvProc.lastExitCode = 0;
         steamInvProc.command = ["python3", root.helperScript, "steam-inventory"];
         steamInvProc.running = true;
     }
@@ -627,6 +742,10 @@ Singleton {
             return;
         }
 
+        steamSearchProc.stdoutText = "";
+        steamSearchProc.exited = false;
+        steamSearchProc.stdoutDone = false;
+        steamSearchProc.lastExitCode = 0;
         steamSearchProc.command = ["python3", root.helperScript, "steam-search", payload];
         steamSearchProc.running = true;
     }
@@ -696,6 +815,10 @@ Singleton {
             return;
 
         steamUnsubProc.targetId = sId;
+        steamUnsubProc.stdoutText = "";
+        steamUnsubProc.exited = false;
+        steamUnsubProc.stdoutDone = false;
+        steamUnsubProc.lastExitCode = 0;
         steamUnsubProc.command = ["python3", root.helperScript, "steam-unsub", sId];
         steamUnsubProc.running = true;
     }
@@ -731,29 +854,42 @@ Singleton {
             requestApply(false);
     }
 
+    onEffectiveVideoFpsChanged: {
+        if (root.shouldBeRunning && !root.engineFailed && (root.surfaceReady || applyProc.running))
+            requestApply(false);
+    }
+
+    onEffectiveMaxDimChanged: {
+        if (root.shouldBeRunning && !root.engineFailed && (root.surfaceReady || applyProc.running))
+            requestApply(false);
+    }
+
+    onEffectiveMaxEffectChainsChanged: {
+        if (root.shouldBeRunning && !root.engineFailed && (root.surfaceReady || applyProc.running))
+            requestApply(false);
+    }
+
     onEffectiveMutedChanged: {
-        if (root.shouldBeRunning && root.surfaceReady)
+        if (root.shouldBeRunning && root.surfaceReady) {
+            root._audioRetryCount = 0;
+            audioDebounceTimer.interval = 100;
             audioDebounceTimer.restart();
+        }
     }
 
     onVolumeChanged: {
-        persist();
-        if (root.shouldBeRunning && root.surfaceReady)
+        if (root.shouldBeRunning && root.surfaceReady) {
+            root._audioRetryCount = 0;
+            audioDebounceTimer.interval = 100;
             audioDebounceTimer.restart();
+        }
     }
-
-    onSilentChanged: persist()
-    onMuteBehindWindowsChanged: persist()
-    onMuteOnOtherAudioChanged: persist()
-    onWorkshopDirChanged: persist()
-    onGpuModeChanged: persist()
-    onFpsChanged: persist()
-    onDisableParticlesChanged: persist()
-    onTransitionEffectChanged: persist()
 
     Connections {
         target: WallpaperPauser
         function onPausedChanged(): void {
+            root._pauseRetryCount = 0;
+            pauseRetryTimer.stop();
             root.syncPauseState();
         }
     }
@@ -767,6 +903,13 @@ Singleton {
     }
 
     // Timers
+    Timer {
+        id: pauseRetryTimer
+        interval: 250
+        repeat: false
+        onTriggered: root.syncPauseState()
+    }
+
     Timer {
         id: audioDebounceTimer
         interval: 100
@@ -820,9 +963,12 @@ Singleton {
             property bool muteBehindWindows: false
             property bool muteOnOtherAudio: false
             property string workshopDir: ""
-            property string gpuMode: "auto"
+            property string gpuMode: "ac_dgpu"
             property int fps: 60
             property bool disableParticles: false
+            property string sceneQuality: "auto"
+            property bool reduceEffects: false
+            property bool compositorBlur: false
             property string transitionEffect: "fade"
             property var sceneProperties: ({})
         }
@@ -831,11 +977,17 @@ Singleton {
     // Helper Processes
     Process {
         id: probeProc
-        stdout: StdioCollector {
-            onStreamFinished: {
-                const raw = text ? text.trim() : "";
+        property string stdoutText: ""
+        property bool exited: false
+        property bool stdoutDone: false
+        property int lastExitCode: 0
+
+        function tryFinish(): void {
+            if (!exited || !stdoutDone)
+                return;
+            if (lastExitCode === 0 && stdoutText) {
                 try {
-                    const res = JSON.parse(raw);
+                    const res = JSON.parse(stdoutText);
                     if (res && res.ok) {
                         root.paperAvailable = Boolean(res.paperAvailable);
                         root.steamAvailable = Boolean(res.steamAvailable);
@@ -843,19 +995,33 @@ Singleton {
                         root.resolvedWorkshopDir = String(res.resolvedWorkshopDir || "");
                         root.availableGpus = Array.isArray(res.gpus) ? res.gpus : [];
                         root.hasSafeDiscrete = Boolean(res.hasSafeDiscrete);
+                        root.hasOffloadDiscrete = Boolean(res.hasOffloadDiscrete);
                         root.hasSafeIntegrated = res.hasSafeIntegrated !== undefined ? Boolean(res.hasSafeIntegrated) : true;
                         root.compositorGpuName = String(res.compositorGpu || "");
+                        root.discreteGpuName = String(res.discreteGpuName || "");
+                        root.integratedGpuName = String(res.integratedGpuName || "");
                     }
                 } catch (e) {}
             }
-        }
-        onExited: (exitCode, exitStatus) => {
             root.probeCompleted = true;
             root.sanitizeGpuMode(true);
             root.refreshWeInstalled();
             if (root.steamAvailable)
                 root.refreshSteamInventory();
             root.evaluateLifecycle();
+        }
+
+        stdout: StdioCollector {
+            onStreamFinished: {
+                probeProc.stdoutText = text ? text.trim() : "";
+                probeProc.stdoutDone = true;
+                probeProc.tryFinish();
+            }
+        }
+        onExited: (exitCode, exitStatus) => {
+            probeProc.lastExitCode = exitCode;
+            probeProc.exited = true;
+            probeProc.tryFinish();
         }
     }
 
@@ -877,11 +1043,17 @@ Singleton {
     Process {
         id: listWeProc
         property bool pendingRerun: false
-        stdout: StdioCollector {
-            onStreamFinished: {
-                const raw = text ? text.trim() : "";
+        property string stdoutText: ""
+        property bool exited: false
+        property bool stdoutDone: false
+        property int lastExitCode: 0
+
+        function tryFinish(): void {
+            if (!exited || !stdoutDone)
+                return;
+            if (lastExitCode === 0 && stdoutText) {
                 try {
-                    const res = JSON.parse(raw);
+                    const res = JSON.parse(stdoutText);
                     if (res && res.ok) {
                         if (res.resolvedWorkshopDir)
                             root.resolvedWorkshopDir = String(res.resolvedWorkshopDir);
@@ -908,12 +1080,23 @@ Singleton {
                     }
                 } catch (e) {}
             }
-        }
-        onExited: {
             if (listWeProc.pendingRerun) {
                 listWeProc.pendingRerun = false;
                 root.refreshWeInstalled();
             }
+        }
+
+        stdout: StdioCollector {
+            onStreamFinished: {
+                listWeProc.stdoutText = text ? text.trim() : "";
+                listWeProc.stdoutDone = true;
+                listWeProc.tryFinish();
+            }
+        }
+        onExited: (exitCode, exitStatus) => {
+            listWeProc.lastExitCode = exitCode;
+            listWeProc.exited = true;
+            listWeProc.tryFinish();
         }
     }
 
@@ -926,14 +1109,14 @@ Singleton {
         property real sentVolume: 0.15
         property string stdoutText: ""
         property string stderrText: ""
+        property bool exited: false
+        property bool stdoutDone: false
+        property bool stderrDone: false
+        property int lastExitCode: 0
 
-        stdout: StdioCollector {
-            onStreamFinished: applyProc.stdoutText = text ? text.trim() : ""
-        }
-        stderr: StdioCollector {
-            onStreamFinished: applyProc.stderrText = text ? text.trim() : ""
-        }
-        onExited: (exitCode, exitStatus) => {
+        function tryFinish(): void {
+            if (!exited || !stdoutDone || !stderrDone)
+                return;
             if (root._pendingStop) {
                 root._pendingStop = false;
                 root.requestStop();
@@ -956,30 +1139,58 @@ Singleton {
                     res = JSON.parse(applyProc.stdoutText);
             } catch (e) {}
 
+            const succeeded = (applyProc.lastExitCode === 0 && res && res.ok);
+            if (succeeded) {
+                root._appliedWeDir = applyProc.targetPath;
+            }
+
             if (!root.shouldBeRunning || applyProc.targetPath !== root.desiredWeDir) {
                 root.evaluateLifecycle();
                 return;
             }
 
-            if (exitCode === 0 && res && res.ok) {
+            if (succeeded) {
                 root.engineFailed = false;
                 root.lastError = "";
-                root._appliedWeDir = applyProc.targetPath;
                 root._lastSentMuted = applyProc.sentMuted;
                 root._lastSentVolume = applyProc.sentVolume;
                 root.usedTransitionFrom = applyProc.usedTransitionFromArg;
                 root.surfaceReady = true;
+                root._remotePaused = false;
+                root._pauseRetryCount = 0;
+                root._audioRetryCount = 0;
+                pauseRetryTimer.stop();
 
                 root.syncPauseState();
                 root.syncAudioState();
                 root.queuePosterCapture(applyProc.targetPath);
             } else {
-                const errMsg = (res && res.error) ? String(res.error) : (applyProc.stderrText || ("Wallpaper Engine exited with code " + exitCode));
+                const errMsg = (res && res.error) ? String(res.error) : (applyProc.stderrText || ("Wallpaper Engine exited with code " + applyProc.lastExitCode));
                 root.engineFailed = true;
                 root.lastError = errMsg;
                 root.requestStop();
                 Toaster.toast("Wallpaper Engine", errMsg, "error", Toast.Error);
             }
+        }
+
+        stdout: StdioCollector {
+            onStreamFinished: {
+                applyProc.stdoutText = text ? text.trim() : "";
+                applyProc.stdoutDone = true;
+                applyProc.tryFinish();
+            }
+        }
+        stderr: StdioCollector {
+            onStreamFinished: {
+                applyProc.stderrText = text ? text.trim() : "";
+                applyProc.stderrDone = true;
+                applyProc.tryFinish();
+            }
+        }
+        onExited: (exitCode, exitStatus) => {
+            applyProc.lastExitCode = exitCode;
+            applyProc.exited = true;
+            applyProc.tryFinish();
         }
     }
 
@@ -996,13 +1207,59 @@ Singleton {
     }
 
     Process {
+        id: blurProc
+        property bool pendingResync: false
+        onExited: {
+            if (blurProc.pendingResync) {
+                blurProc.pendingResync = false;
+                root.syncCompositorBlur();
+            }
+        }
+    }
+
+    Process {
         id: pauseProc
         property bool targetState: false
-        onExited: (exitCode, exitStatus) => {
-            if (exitCode === 0)
+        property string stdoutText: ""
+        property bool exited: false
+        property bool stdoutDone: false
+        property int lastExitCode: 0
+
+        function tryFinish(): void {
+            if (!exited || !stdoutDone)
+                return;
+            let res = null;
+            try {
+                if (stdoutText)
+                    res = JSON.parse(stdoutText);
+            } catch (e) {}
+
+            if (lastExitCode === 0 && res && res.ok === true) {
                 root._remotePaused = pauseProc.targetState;
-            if (root.shouldBeRunning && root.surfaceReady && Boolean(WallpaperPauser.paused) !== root._remotePaused)
-                root.syncPauseState();
+                root._pauseRetryCount = 0;
+                pauseRetryTimer.stop();
+                if (root.shouldBeRunning && root.surfaceReady && Boolean(WallpaperPauser.paused) !== root._remotePaused)
+                    root.syncPauseState();
+            } else if (root.shouldBeRunning && root.surfaceReady && Boolean(WallpaperPauser.paused) !== root._remotePaused) {
+                root._pauseRetryCount++;
+                if (root._pauseRetryCount <= 4) {
+                    pauseRetryTimer.interval = 250 * Math.pow(2, root._pauseRetryCount - 1);
+                    pauseRetryTimer.restart();
+                }
+            }
+        }
+
+        stdout: StdioCollector {
+            onStreamFinished: {
+                pauseProc.stdoutText = text ? text.trim() : "";
+                pauseProc.stdoutDone = true;
+                pauseProc.tryFinish();
+            }
+        }
+        onExited: (exitCode, exitStatus) => {
+            pauseProc.lastExitCode = exitCode;
+            pauseProc.exited = true;
+            pauseProc.tryFinish();
         }
     }
 
@@ -1010,15 +1267,52 @@ Singleton {
         id: audioProc
         property bool pendingMuted: false
         property real pendingVolume: 0.15
-        onExited: (exitCode, exitStatus) => {
-            if (exitCode === 0) {
+        property string stdoutText: ""
+        property bool exited: false
+        property bool stdoutDone: false
+        property int lastExitCode: 0
+
+        function tryFinish(): void {
+            if (!exited || !stdoutDone)
+                return;
+            let res = null;
+            try {
+                if (stdoutText)
+                    res = JSON.parse(stdoutText);
+            } catch (e) {}
+
+            if (lastExitCode === 0 && res && res.ok === true) {
                 root._lastSentMuted = audioProc.pendingMuted;
                 root._lastSentVolume = audioProc.pendingVolume;
+                root._audioRetryCount = 0;
+                if (root.shouldBeRunning && root.surfaceReady) {
+                    if (root.effectiveMuted !== root._lastSentMuted || Math.abs(weAdapter.volume - root._lastSentVolume) >= 0.001) {
+                        audioDebounceTimer.interval = 100;
+                        audioDebounceTimer.restart();
+                    }
+                }
+            } else if (root.shouldBeRunning && root.surfaceReady) {
+                if (root.effectiveMuted !== root._lastSentMuted || Math.abs(weAdapter.volume - root._lastSentVolume) >= 0.001) {
+                    root._audioRetryCount++;
+                    if (root._audioRetryCount <= 4) {
+                        audioDebounceTimer.interval = 250 * Math.pow(2, root._audioRetryCount - 1);
+                        audioDebounceTimer.restart();
+                    }
+                }
             }
-            if (root.shouldBeRunning && root.surfaceReady) {
-                if (root.effectiveMuted !== root._lastSentMuted || Math.abs(weAdapter.volume - root._lastSentVolume) >= 0.001)
-                    audioDebounceTimer.restart();
+        }
+
+        stdout: StdioCollector {
+            onStreamFinished: {
+                audioProc.stdoutText = text ? text.trim() : "";
+                audioProc.stdoutDone = true;
+                audioProc.tryFinish();
             }
+        }
+        onExited: (exitCode, exitStatus) => {
+            audioProc.lastExitCode = exitCode;
+            audioProc.exited = true;
+            audioProc.tryFinish();
         }
     }
 
@@ -1027,14 +1321,16 @@ Singleton {
         property string currentId: ""
         property string destPath: ""
         property string stdoutText: ""
+        property bool exited: false
+        property bool stdoutDone: false
+        property int lastExitCode: 0
 
-        stdout: StdioCollector {
-            onStreamFinished: posterProc.stdoutText = text ? text.trim() : ""
-        }
-        onExited: (exitCode, exitStatus) => {
+        function tryFinish(): void {
+            if (!exited || !stdoutDone)
+                return;
             try {
                 const res = posterProc.stdoutText ? JSON.parse(posterProc.stdoutText) : null;
-                if (exitCode === 0 && res && res.ok) {
+                if (posterProc.lastExitCode === 0 && res && res.ok) {
                     const outPath = String(res.poster || posterProc.destPath);
                     if (outPath && CUtils.fileExists(outPath)) {
                         const nextMap = Object.assign({}, root.posterMap || {});
@@ -1047,19 +1343,35 @@ Singleton {
             posterProc.currentId = "";
             root.processNextPoster();
         }
+
+        stdout: StdioCollector {
+            onStreamFinished: {
+                posterProc.stdoutText = text ? text.trim() : "";
+                posterProc.stdoutDone = true;
+                posterProc.tryFinish();
+            }
+        }
+        onExited: (exitCode, exitStatus) => {
+            posterProc.lastExitCode = exitCode;
+            posterProc.exited = true;
+            posterProc.tryFinish();
+        }
     }
 
     Process {
         id: steamInvProc
         property bool pendingRerun: false
         property string stdoutText: ""
-        stdout: StdioCollector {
-            onStreamFinished: steamInvProc.stdoutText = text ? text.trim() : ""
-        }
-        onExited: {
+        property bool exited: false
+        property bool stdoutDone: false
+        property int lastExitCode: 0
+
+        function tryFinish(): void {
+            if (!exited || !stdoutDone)
+                return;
             try {
                 const res = steamInvProc.stdoutText ? JSON.parse(steamInvProc.stdoutText) : null;
-                if (res && res.ok) {
+                if (lastExitCode === 0 && res && res.ok) {
                     root.steamConnected = true;
                     root.steamError = "";
                     root.steamSubscribedIds = Array.isArray(res.subscribed) ? res.subscribed.map(x => String(x)) : [];
@@ -1086,18 +1398,34 @@ Singleton {
                 root.refreshSteamInventory();
             }
         }
+
+        stdout: StdioCollector {
+            onStreamFinished: {
+                steamInvProc.stdoutText = text ? text.trim() : "";
+                steamInvProc.stdoutDone = true;
+                steamInvProc.tryFinish();
+            }
+        }
+        onExited: (exitCode, exitStatus) => {
+            steamInvProc.lastExitCode = exitCode;
+            steamInvProc.exited = true;
+            steamInvProc.tryFinish();
+        }
     }
 
     Process {
         id: steamSearchProc
         property string stdoutText: ""
-        stdout: StdioCollector {
-            onStreamFinished: steamSearchProc.stdoutText = text ? text.trim() : ""
-        }
-        onExited: {
+        property bool exited: false
+        property bool stdoutDone: false
+        property int lastExitCode: 0
+
+        function tryFinish(): void {
+            if (!exited || !stdoutDone)
+                return;
             try {
                 const res = steamSearchProc.stdoutText ? JSON.parse(steamSearchProc.stdoutText) : null;
-                if (res && res.ok) {
+                if (lastExitCode === 0 && res && res.ok) {
                     root.workshopResults = Array.isArray(res.results) ? res.results : [];
                     root.workshopError = "";
                 } else {
@@ -1110,11 +1438,28 @@ Singleton {
             if (root._pendingSearch !== null) {
                 const nextPayload = root._pendingSearch;
                 root._pendingSearch = null;
+                steamSearchProc.stdoutText = "";
+                steamSearchProc.exited = false;
+                steamSearchProc.stdoutDone = false;
+                steamSearchProc.lastExitCode = 0;
                 steamSearchProc.command = ["python3", root.helperScript, "steam-search", nextPayload];
                 steamSearchProc.running = true;
             } else {
                 root.workshopSearching = false;
             }
+        }
+
+        stdout: StdioCollector {
+            onStreamFinished: {
+                steamSearchProc.stdoutText = text ? text.trim() : "";
+                steamSearchProc.stdoutDone = true;
+                steamSearchProc.tryFinish();
+            }
+        }
+        onExited: (exitCode, exitStatus) => {
+            steamSearchProc.lastExitCode = exitCode;
+            steamSearchProc.exited = true;
+            steamSearchProc.tryFinish();
         }
     }
 
@@ -1151,13 +1496,16 @@ Singleton {
         id: steamUnsubProc
         property string targetId: ""
         property string stdoutText: ""
-        stdout: StdioCollector {
-            onStreamFinished: steamUnsubProc.stdoutText = text ? text.trim() : ""
-        }
-        onExited: (exitCode, exitStatus) => {
+        property bool exited: false
+        property bool stdoutDone: false
+        property int lastExitCode: 0
+
+        function tryFinish(): void {
+            if (!exited || !stdoutDone)
+                return;
             try {
                 const res = steamUnsubProc.stdoutText ? JSON.parse(steamUnsubProc.stdoutText) : null;
-                if (exitCode === 0 && res && res.ok) {
+                if (lastExitCode === 0 && res && res.ok) {
                     const sId = steamUnsubProc.targetId;
                     root.steamSubscribedIds = (root.steamSubscribedIds || []).filter(x => String(x) !== sId);
                     const nextMap = Object.assign({}, root.steamInstalledMap || {});
@@ -1170,6 +1518,19 @@ Singleton {
                 }
             } catch (e) {}
             steamUnsubProc.targetId = "";
+        }
+
+        stdout: StdioCollector {
+            onStreamFinished: {
+                steamUnsubProc.stdoutText = text ? text.trim() : "";
+                steamUnsubProc.stdoutDone = true;
+                steamUnsubProc.tryFinish();
+            }
+        }
+        onExited: (exitCode, exitStatus) => {
+            steamUnsubProc.lastExitCode = exitCode;
+            steamUnsubProc.exited = true;
+            steamUnsubProc.tryFinish();
         }
     }
 
