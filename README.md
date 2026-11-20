@@ -25,22 +25,23 @@
 - **Notch Controls Drawer**: Expands with shape-morphing `ButtonRow` media and focus controls, auto-collapses cleanly, and slides seamlessly into the top border when apps enter fullscreen or the dashboard opens.
 - **Smart Compact Mode**: Auto-shrinks when windows are open to save space, or toggle `Always compact` in settings.
 - **Top Edge Dashboard Access**: Fixed hit-testing so hovering the very top edge above or beside the notch still opens the dashboard smoothly without fighting the notch.
-- **Desktop Widgets**: 14 modular snapping widgets (At a Glance, Weather card & pill, Timers, Calendar, Resources, Media, Battery, Todo, Notes, User card, Sticker, Custom image & text) with multi-instance duplication, quick-edit popover, and `1×1` expressive `MaterialShape` silhouettes (`24` shapes).
+- **Desktop Widgets**: 15 modular snapping widgets (At a Glance, Weather card & pill, Timers, Countdown, Calendar, Resources, Media, Battery, Todo, Notes, User card, Sticker, Custom image & text) with multi-instance duplication, quick-edit popover, and `1×1` expressive `MaterialShape` silhouettes (`24` shapes).
 - **Widget Surface Modes**: 4 configurable surface styles (`Glass`, `Blur`, `Frosted` via `ditherglass.frag.qsb`, and `Material`) with padded wallpaper blur and auto-fade when tiled windows open.
-- **Desktop Clocks**: 5 clock styles (`Classic`, `Cookie`, `Pixel`, `Stacked`, and `Smooth`) with per-style shape, orientation, font, and alignment controls in `Nexus > Background elements`.
-- **GPU Audio Visualiser (`VisualiserView`)**: Custom C++ RHI shader renderer with 5 GLSL styles (`Aurora`, `Bars`, `Wave`, `Dots`, `Glow`) and edge or centered stage placement.
+- **Desktop Clocks**: 5 clock styles (`Classic`, `Cookie`, `Pixel`, `Stacked`, and `Smooth`) with per-style shape, orientation, font, and alignment controls in `Nexus > Background elements`, plus automatic `Cookie` spin pause when covered by windows.
+- **GPU Audio Visualiser (`VisualiserView`)**: Custom C++ RHI shader renderer with 5 GLSL styles (`Aurora`, `Bars`, `Wave`, `Dots`, `Glow`), edge or centered stage placement, and adaptive frame pacing (`30 FPS` over Wallpaper Engine or open windows, `60 FPS` on desktop).
 - **Shell Assets Page**: Custom profile picture (`~/.face`), system logo, GIFs (`sessionGif`, `mediaGif`), and empty notification placeholders under `Nexus > Appearance > Shell assets`.
 
 ### Focus Suite & Digital Wellbeing
-- **Multi-Phase Engine**: Countdown timer and stopwatch flow modes with crash freeze recovery, subject tagging, audio chimes, and automatic DND inside a free-floating Caelestia Bento dashboard tab.
-- **Study Ledger & Goals**: Permanent local history with daily goal progress, animated `StreakFlame` with rest day forgiveness, and scope-switchable subject breakdown (`This Week`, `Today`, or past 6 days).
-- **Screen Time & Distraction Shield**: Tracks active window usage (`~/.local/state/caelestia/screentime.json`) with a 7-day bar chart, per-app daily time limits, and Focus Distraction Shield (toast nudges or Strict Shield auto-defocus during study sessions).
-- **Active-Only Notch**: Compact display showing timer countdown and active subject tag during focus, with drawer controls for play, +5m extension, skip, and reset.
-- **Dedicated Nexus Settings**: Full configuration page under `Panels > Dashboard > Focus tab` for cycles, presets, goals, subjects, transition chimes, app limits, and shield rules.
-- **Quick Toggle & IPC**: 1-click toggle in Utilities drawer and full IPC support via `caelestia ipc call pomodoro <toggle|reset|skip|extend|status>`.
+- **Multi-Phase Engine**: Countdown timer and stopwatch flow modes with inline presets (`25m`–`3h`), optional `pauseOnSleep`, crash freeze recovery, subject tagging, audio chimes, and automatic DND inside a free-floating Caelestia Bento dashboard tab.
+- **Study Ledger & Goals**: Permanent local history with daily goal progress, animated `StreakFlame` with rest day forgiveness, 16-week consistency heatmap, Exam Countdowns, scope-switchable subject breakdown (`All Time`, `This Week`, `Today`, or past 6 days), and tap-to-reassign `Untagged` entries.
+- **Screen Time**: Passive active-window usage tracker (`~/.local/state/caelestia/screentime.json`) with a 7-day bar chart, configurable retention, and lock/DPMS/sleep awareness.
+- **Active-Only Notch**: Compact display showing timer countdown and clickable subject tag cycling during focus, with drawer controls for play, +5m extension, skip, and reset.
+- **Dedicated Nexus Settings**: Full configuration page under `Panels > Dashboard > Focus tab` for cycles, presets, goals, subjects, exam countdowns, transition chimes, and screen time retention.
+- **Quick Toggle & IPC**: 1-click toggle in Utilities drawer and full IPC support via `caelestia ipc call pomodoro <toggle|reset|skip|extend|reduce|setMode|setSubject|cycleSubject|status>`.
 
 ### Wallpaper Engine & Visuals
-- **Hybrid `skwd-paper-v2` Engine**: Renders Workshop `scene` and `video` wallpapers via `skwd-paper-v2` (`services/Skwd.qml` + `skwd_helper.py`) with compositor-matched GPU selection, FPS caps, scene property overrides, and live audio controls.
+- **Hybrid `skwd-paper-v2` Engine**: Renders Workshop `scene` and `video` wallpapers via `skwd-paper-v2` (`services/Skwd.qml` + `skwd_helper.py`) with built-in Steam Workshop search/download (`skwd-steam`), scene property overrides, and live audio controls.
+- **Safe Hybrid dGPU Scene Offload & Performance Controls**: Offloads heavy scenes to a discrete GPU via `wl_shm` (`SKWD_VK_DEVICE=discrete` + `SKWD_VK_SCENE_SHM=1`) on AC while switching back to the iGPU on battery, keeps WE videos on native VAAPI decode, and exposes FPS caps, scene resolution scaling, particle/effect-chain limits, and dynamic Hyprland compositor blur toggling (`caelestia-bg-blur`).
 - **Two-Tier Pause & Game Mode**: Pauses playback in place when covered or on battery, tears down cleanly (`0 MiB` VRAM) in Game Mode, and displays captured high-res PNG posters (`we-posters/`) when paused or switching out.
 - **Seamless Transitions**: Uses GPU-side `skwd-paper-v2` transitions for Workshop wallpapers and native 9-shape `MaterialShape` reveal morphs for static and local video wallpapers.
 - **GPU-Cached Thumbnails (`.ktx`)**: Uses `Caelestia.Multimedia` BC3 texture cache for instant lag-free wallpaper scrolling.
@@ -104,7 +105,7 @@ cd shell
 ./install.sh
 ```
 
-Checks dependencies and installs missing ones (pacman + yay/paru, bootstraps `yay` if needed), pulls in the [vacuited CLI](https://github.com/vacuited/cli) if `caelestia` is missing, builds the plugin, and deploys the QML to `~/.config/quickshell/caelestia`. Existing configs that differ are backed up first. Options: `--yes`, `--skip-deps`, `--skip-cli`, `--hardware`, `--no-hardware`, `--dry-run`. On other distros it verifies prerequisites and lists what is missing.
+Checks dependencies and installs missing ones (pacman + yay/paru, bootstraps `yay` if needed), pulls in the [vacuited CLI](https://github.com/vacuited/cli) if `caelestia` is missing, builds the plugin, and deploys the QML to `~/.config/quickshell/caelestia`. Existing configs that differ are backed up first. Options: `-y`/`--yes`, `--skip-deps`, `--skip-cli`, `--update-cli`, `--with-optional`, `--qml-only`, `--clean`, `--no-backup`, `--hardware`, `--no-hardware`, `--uninstall`, `--dry-run`. On other distros it verifies prerequisites and lists what is missing.
 
 ### Manual Build
 
