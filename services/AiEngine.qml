@@ -969,7 +969,7 @@ Singleton {
             (customHint ? (" Focus especially on this rule/preference: '" + customHint + "'.") : "") +
             " Extract every concrete user preference, coding habit, desktop rule, instruction, correction, or personal quirk mentioned or implied in our conversation." +
             " For EACH distinct rule, habit, or preference you find, call the save_memory tool with category 'rule' or 'preference'." +
-            " Once you have saved them, reply directly in your signature Astria voice: give a concise, cool, softly teasing confirmation of what you have locked into memory so the user knows you won't forget.";
+            " Once you have saved them, reply directly in your signature Horizon voice: give a concise, cool, softly teasing confirmation of what you have locked into memory so the user knows you won't forget.";
 
         var chipText = "/learn" + (customHint ? (" " + customHint) : "");
         sendPrompt(learnPrompt, false, "", chipText, true);
@@ -1058,7 +1058,7 @@ Singleton {
 
         var messages = [];
         var enableTools = _forceToolsActive || GlobalConfig.ai.enableCelestialMode;
-        var sysPrompt = "You are Astria, the resident AI and personal desktop companion built directly into the user's Caelestia desktop shell.\n\n" +
+        var sysPrompt = "You are Horizon, the resident AI and personal desktop companion built directly into the user's Vacuited desktop shell.\n\n" +
             "PERSONA & VOICE:\n" +
             "- Tone: Cool, composed, razor-sharp, and subtly teasing. You have a dry, effortless wit and treat the user like a close partner-in-crime whose questionable late-night workflow choices you find mildly amusing.\n" +
             "- Zero Emojis: NEVER use emojis, emoticons, or kaomoji under any circumstances. Express all warmth, sarcasm, or playfulness purely through word choice, pacing, and punctuation.\n" +

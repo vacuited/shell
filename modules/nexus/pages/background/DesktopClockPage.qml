@@ -13,6 +13,15 @@ PageBase {
     readonly property var clockConfig: root.targetConfig.background.desktopClock
     readonly property string clockStyle: clockConfig.style || "classic"
     readonly property var clockOptions: clockConfig.options || ({})
+    readonly property bool cardBgActive: (clockOptions.showBackground !== undefined)
+        ? Boolean(clockOptions.showBackground)
+        : clockConfig.background.enabled
+    readonly property string resolvedSurfaceStyle: {
+        const optStyle = clockOptions.surfaceStyle ?? clockOptions.style;
+        if (optStyle === "glass" || optStyle === "blur" || optStyle === "frosted" || optStyle === "material")
+            return optStyle;
+        return clockConfig.surfaceStyle || "glass";
+    }
 
     readonly property list<string> positionValues: ["top-left", "top-center", "top-right", "middle-left", "middle-center", "middle-right", "bottom-left", "bottom-center", "bottom-right"]
     readonly property list<MenuItem> positionItems: [
@@ -44,24 +53,36 @@ PageBase {
         MenuItem { text: qsTr("Material") }
     ]
 
-    readonly property list<string> cookieShapeValues: ["Cookie9Sided", "Cookie7Sided", "Cookie6Sided", "Cookie4Sided", "Cookie12Sided", "Circle", "Square", "Clover4Leaf", "Clover8Leaf", "SoftBurst", "Sunny", "Flower", "Heart", "Gem", "Puffy", "Ghostish"]
+    readonly property list<string> cookieShapeValues: [
+        "Cookie9Sided", "Cookie12Sided", "Cookie7Sided", "Cookie6Sided", "Cookie4Sided",
+        "Puffy", "Sunny", "VerySunny", "SoftBurst", "Circle", "Pill",
+        "Clover4Leaf", "Clover8Leaf", "Flower", "Gem", "Heart", "Ghostish",
+        "ClamShell", "Bun", "Square", "Diamond", "Pentagon", "Arch"
+    ]
     readonly property list<MenuItem> cookieShapeItems: [
         MenuItem { text: qsTr("Cookie (9-sided)") },
+        MenuItem { text: qsTr("Cookie (12-sided)") },
         MenuItem { text: qsTr("Cookie (7-sided)") },
         MenuItem { text: qsTr("Cookie (6-sided)") },
         MenuItem { text: qsTr("Cookie (4-sided)") },
-        MenuItem { text: qsTr("Cookie (12-sided)") },
+        MenuItem { text: qsTr("Puffy") },
+        MenuItem { text: qsTr("Sunny") },
+        MenuItem { text: qsTr("Very Sunny") },
+        MenuItem { text: qsTr("Soft burst") },
         MenuItem { text: qsTr("Circle") },
-        MenuItem { text: qsTr("Square") },
+        MenuItem { text: qsTr("Pill") },
         MenuItem { text: qsTr("Clover (4-leaf)") },
         MenuItem { text: qsTr("Clover (8-leaf)") },
-        MenuItem { text: qsTr("Soft burst") },
-        MenuItem { text: qsTr("Sunny") },
         MenuItem { text: qsTr("Flower") },
-        MenuItem { text: qsTr("Heart") },
         MenuItem { text: qsTr("Gem") },
-        MenuItem { text: qsTr("Puffy") },
-        MenuItem { text: qsTr("Ghostish") }
+        MenuItem { text: qsTr("Heart") },
+        MenuItem { text: qsTr("Ghostish") },
+        MenuItem { text: qsTr("Clam shell") },
+        MenuItem { text: qsTr("Bun") },
+        MenuItem { text: qsTr("Square") },
+        MenuItem { text: qsTr("Diamond") },
+        MenuItem { text: qsTr("Pentagon") },
+        MenuItem { text: qsTr("Arch") }
     ]
 
     readonly property list<string> hourHandValues: ["classic", "fill", "hollow", "hide"]
@@ -111,10 +132,30 @@ PageBase {
         MenuItem { text: qsTr("Horizontal") }
     ]
 
-    readonly property list<string> pixelFontValues: ["gsans", "titan"]
+    readonly property list<string> pixelFontValues: ["gsans", "titan", "clock"]
     readonly property list<MenuItem> pixelFontItems: [
         MenuItem { text: qsTr("Google Sans") },
-        MenuItem { text: qsTr("Titan One") }
+        MenuItem { text: qsTr("Titan One") },
+        MenuItem { text: qsTr("Clock font") }
+    ]
+
+    readonly property list<string> classicAccentValues: ["", "primary", "secondary", "tertiary", "onSurface", "inverseSurface"]
+    readonly property list<MenuItem> classicAccentItems: [
+        MenuItem { text: qsTr("Default") },
+        MenuItem { text: qsTr("Primary") },
+        MenuItem { text: qsTr("Secondary") },
+        MenuItem { text: qsTr("Tertiary") },
+        MenuItem { text: qsTr("On Surface") },
+        MenuItem { text: qsTr("Inverse Surface") }
+    ]
+
+    readonly property list<string> smoothTimeColorValues: ["onSurface", "primary", "secondary", "tertiary", "inverseSurface"]
+    readonly property list<MenuItem> smoothTimeColorItems: [
+        MenuItem { text: qsTr("On Surface") },
+        MenuItem { text: qsTr("Primary") },
+        MenuItem { text: qsTr("Secondary") },
+        MenuItem { text: qsTr("Tertiary") },
+        MenuItem { text: qsTr("Inverse Surface") }
     ]
 
     readonly property list<string> colorRoleValues: ["primary", "secondary", "tertiary", "onSurface", "inverseSurface", "surface", "primaryContainer", "secondaryContainer", "tertiaryContainer"]
@@ -191,6 +232,33 @@ PageBase {
         root.targetConfig.save();
     }
 
+    function setClockOptions(patch: var): void {
+        const next = Object.assign({}, root.clockOptions, patch);
+        root.clockConfig.options = next;
+        root.targetConfig.save();
+    }
+
+    function setUnifiedCardBackground(enabled: bool): void {
+        root.clockConfig.background.enabled = enabled;
+        if (root.clockOptions.showBackground !== undefined) {
+            const next = Object.assign({}, root.clockOptions);
+            delete next.showBackground;
+            root.clockConfig.options = next;
+        }
+        root.targetConfig.save();
+    }
+
+    function setSurfaceStyle(style: string): void {
+        root.clockConfig.surfaceStyle = style;
+        if (root.clockOptions.surfaceStyle !== undefined || root.clockOptions.style !== undefined) {
+            const next = Object.assign({}, root.clockOptions);
+            delete next.surfaceStyle;
+            delete next.style;
+            root.clockConfig.options = next;
+        }
+        root.targetConfig.save();
+    }
+
     function indexOrDefault(values: list<string>, value: string, fallbackIdx: int): int {
         const idx = values.indexOf(value);
         return idx >= 0 ? idx : fallbackIdx;
@@ -225,12 +293,21 @@ PageBase {
 
         ToggleRow {
             Layout.topMargin: Tokens.spacing.extraSmall / 2 - parent.spacing
-            last: true
             Layout.fillWidth: true
             text: qsTr("Edit on desktop")
             subtext: qsTr("Unlock desktop clock and widgets for dragging")
             checked: Visibilities.desktopWidgetsUnlocked
             onToggled: Visibilities.desktopWidgetsUnlocked = checked
+        }
+
+        ToggleRow {
+            Layout.topMargin: Tokens.spacing.extraSmall / 2 - parent.spacing
+            last: true
+            Layout.fillWidth: true
+            text: qsTr("Hide when windows are open")
+            subtext: qsTr("Fade the clock out while the workspace has windows on it")
+            checked: Boolean(root.clockOptions.hideWithWindows ?? false)
+            onToggled: root.setClockOption("hideWithWindows", checked)
         }
 
         TextButton {
@@ -274,13 +351,11 @@ PageBase {
             configNode: root.clockConfig
             propertyName: "surfaceStyle"
             menuItems: root.surfaceStyleItems
-            active: root.surfaceStyleItems[root.indexOrDefault(root.surfaceStyleValues, root.clockConfig.surfaceStyle, 0)]
+            active: root.surfaceStyleItems[root.indexOrDefault(root.surfaceStyleValues, root.resolvedSurfaceStyle, 0)]
             onSelected: item => {
                 const idx = root.surfaceStyleItems.indexOf(item);
-                if (idx !== -1) {
-                    root.clockConfig.surfaceStyle = root.surfaceStyleValues[idx];
-                    root.targetConfig.save();
-                }
+                if (idx !== -1)
+                    root.setSurfaceStyle(root.surfaceStyleValues[idx]);
             }
         }
 
@@ -305,7 +380,7 @@ PageBase {
 
         SliderRow {
             Layout.topMargin: Tokens.spacing.extraSmall / 2 - parent.spacing
-            last: root.clockStyle !== "classic"
+            last: true
             Layout.fillWidth: true
             label: qsTr("Scale")
             configNode: root.clockConfig
@@ -318,25 +393,59 @@ PageBase {
             }
         }
 
-        ToggleRow {
-            Layout.topMargin: Tokens.spacing.extraSmall / 2 - parent.spacing
-            visible: root.clockStyle === "classic"
-            last: true
-            Layout.fillWidth: true
-            text: qsTr("Invert colors")
-            subtext: qsTr("Invert the clock color when using light wallpaper")
-            configNode: root.clockConfig
-            propertyName: "invertColors"
-            checked: root.clockConfig.invertColors
-            onToggled: {
-                root.clockConfig.invertColors = checked;
-                root.targetConfig.save();
-            }
+        SectionHeader {
+            text: qsTr("Style options")
         }
 
-        SectionHeader {
-            visible: root.clockStyle !== "classic"
-            text: qsTr("Style options")
+        // Classic clock options
+        ColumnLayout {
+            visible: root.clockStyle === "classic"
+            Layout.fillWidth: true
+            spacing: Tokens.spacing.extraSmall / 2
+
+            ToggleRow {
+                first: true
+                Layout.fillWidth: true
+                text: qsTr("Show seconds")
+                checked: Boolean(root.clockOptions.showSeconds ?? false)
+                onToggled: root.setClockOption("showSeconds", checked)
+            }
+
+            ToggleRow {
+                Layout.topMargin: Tokens.spacing.extraSmall / 2 - parent.spacing
+                Layout.fillWidth: true
+                text: qsTr("Show date")
+                checked: Boolean(root.clockOptions.showDate ?? true)
+                onToggled: root.setClockOption("showDate", checked)
+            }
+
+            SelectRow {
+                Layout.topMargin: Tokens.spacing.extraSmall / 2 - parent.spacing
+                Layout.fillWidth: true
+                label: qsTr("Accent color")
+                menuItems: root.classicAccentItems
+                active: root.classicAccentItems[root.indexOrDefault(root.classicAccentValues, String(root.clockOptions.colorRole ?? ""), 0)]
+                onSelected: item => {
+                    const idx = root.classicAccentItems.indexOf(item);
+                    if (idx !== -1)
+                        root.setClockOption("colorRole", root.classicAccentValues[idx]);
+                }
+            }
+
+            ToggleRow {
+                Layout.topMargin: Tokens.spacing.extraSmall / 2 - parent.spacing
+                last: true
+                Layout.fillWidth: true
+                text: qsTr("Invert colors")
+                subtext: qsTr("Invert the clock color when using light wallpaper")
+                configNode: root.clockConfig
+                propertyName: "invertColors"
+                checked: root.clockConfig.invertColors
+                onToggled: {
+                    root.clockConfig.invertColors = checked;
+                    root.targetConfig.save();
+                }
+            }
         }
 
         // Cookie clock options
@@ -432,11 +541,16 @@ PageBase {
                 Layout.fillWidth: true
                 label: qsTr("Date badge")
                 menuItems: root.dateStyleItems
-                active: root.dateStyleItems[root.indexOrDefault(root.dateStyleValues, String(root.clockOptions.dateStyle ?? "bubble"), 0)]
+                active: root.dateStyleItems[root.indexOrDefault(root.dateStyleValues, (root.clockOptions.showDate === false) ? "hide" : String(root.clockOptions.dateStyle ?? "bubble"), 0)]
                 onSelected: item => {
                     const idx = root.dateStyleItems.indexOf(item);
-                    if (idx !== -1)
-                        root.setClockOption("dateStyle", root.dateStyleValues[idx]);
+                    if (idx !== -1) {
+                        const val = root.dateStyleValues[idx];
+                        root.setClockOptions({
+                            dateStyle: val,
+                            showDate: val !== "hide"
+                        });
+                    }
                 }
             }
         }
@@ -473,6 +587,14 @@ PageBase {
                 }
             }
 
+            ToggleRow {
+                Layout.topMargin: Tokens.spacing.extraSmall / 2 - parent.spacing
+                Layout.fillWidth: true
+                text: qsTr("Show date")
+                checked: Boolean(root.clockOptions.showDate ?? false)
+                onToggled: root.setClockOption("showDate", checked)
+            }
+
             SelectRow {
                 Layout.topMargin: Tokens.spacing.extraSmall / 2 - parent.spacing
                 Layout.fillWidth: true
@@ -488,6 +610,7 @@ PageBase {
 
             SelectRow {
                 Layout.topMargin: Tokens.spacing.extraSmall / 2 - parent.spacing
+                last: true
                 Layout.fillWidth: true
                 label: qsTr("Soft digit color")
                 menuItems: root.softColorItems
@@ -497,15 +620,6 @@ PageBase {
                     if (idx !== -1)
                         root.setClockOption("softColor", root.colorRoleValues[idx]);
                 }
-            }
-
-            ToggleRow {
-                Layout.topMargin: Tokens.spacing.extraSmall / 2 - parent.spacing
-                last: true
-                Layout.fillWidth: true
-                text: qsTr("Card background")
-                checked: Boolean(root.clockOptions.showBackground ?? false)
-                onToggled: root.setClockOption("showBackground", checked)
             }
         }
 
@@ -614,9 +728,9 @@ PageBase {
                 Layout.topMargin: Tokens.spacing.extraSmall / 2 - parent.spacing
                 last: true
                 Layout.fillWidth: true
-                text: qsTr("Card background")
-                checked: Boolean(root.clockOptions.showBackground ?? false)
-                onToggled: root.setClockOption("showBackground", checked)
+                text: qsTr("Show seconds")
+                checked: Boolean(root.clockOptions.showSeconds ?? false)
+                onToggled: root.setClockOption("showSeconds", checked)
             }
         }
 
@@ -636,11 +750,24 @@ PageBase {
 
             ToggleRow {
                 Layout.topMargin: Tokens.spacing.extraSmall / 2 - parent.spacing
+                Layout.fillWidth: true
+                text: qsTr("Show seconds")
+                checked: Boolean(root.clockOptions.showSeconds ?? false)
+                onToggled: root.setClockOption("showSeconds", checked)
+            }
+
+            SelectRow {
+                Layout.topMargin: Tokens.spacing.extraSmall / 2 - parent.spacing
                 last: true
                 Layout.fillWidth: true
-                text: qsTr("Card background")
-                checked: Boolean(root.clockOptions.showBackground ?? false)
-                onToggled: root.setClockOption("showBackground", checked)
+                label: qsTr("Time color")
+                menuItems: root.smoothTimeColorItems
+                active: root.smoothTimeColorItems[root.indexOrDefault(root.smoothTimeColorValues, String(root.clockOptions.timeColor ?? "onSurface"), 0)]
+                onSelected: item => {
+                    const idx = root.smoothTimeColorItems.indexOf(item);
+                    if (idx !== -1)
+                        root.setClockOption("timeColor", root.smoothTimeColorValues[idx]);
+                }
             }
         }
 
@@ -649,27 +776,26 @@ PageBase {
         }
 
         ToggleRow {
+            visible: root.clockStyle !== "cookie"
             first: true
             Layout.fillWidth: true
-            text: qsTr("Enable background")
+            text: qsTr("Card background")
             configNode: root.clockConfig.background
             propertyName: "enabled"
-            checked: root.clockConfig.background.enabled
-            onToggled: {
-                root.clockConfig.background.enabled = checked;
-                root.targetConfig.save();
-            }
+            checked: root.cardBgActive
+            onToggled: root.setUnifiedCardBackground(checked)
         }
 
         SliderRow {
             Layout.topMargin: Tokens.spacing.extraSmall / 2 - parent.spacing
+            first: root.clockStyle === "cookie"
             Layout.fillWidth: true
             label: qsTr("Opacity")
             configNode: root.clockConfig.background
             propertyName: "opacity"
             value: root.clockConfig.background.opacity
             valueLabel: Math.round(value * 100) + "%"
-            enabled: root.clockConfig.background.enabled || root.clockStyle !== "classic"
+            enabled: root.cardBgActive || root.clockStyle !== "classic"
             onMoved: v => {
                 root.clockConfig.background.opacity = v;
                 root.targetConfig.save();
@@ -681,10 +807,11 @@ PageBase {
             last: true
             Layout.fillWidth: true
             text: qsTr("Blur")
+            subtext: qsTr("Blur the wallpaper behind Glass cards (Blur and Frosted always blur)")
             configNode: root.clockConfig.background
             propertyName: "blur"
             checked: root.clockConfig.background.blur
-            disabled: !(root.clockConfig.background.enabled || root.clockStyle !== "classic")
+            disabled: !(root.cardBgActive || root.clockStyle !== "classic")
             onToggled: {
                 root.clockConfig.background.blur = checked;
                 root.targetConfig.save();

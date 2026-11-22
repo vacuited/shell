@@ -17,6 +17,7 @@ Item {
     required property real absY
     property real clockScale: 1.0
     property string surfaceStyle: "glass"
+    property bool cardBackground: false
     property var options: ({})
 
     readonly property bool weActive: wallpaper?.weSurfaceActive ?? wallpaper?.weSurfaceVisible ?? false
@@ -29,16 +30,20 @@ Item {
     readonly property string fontOpt: String(options?.font ?? "gsans")
     readonly property string softColorOpt: String(options?.softColor ?? "primary")
     readonly property string boldColorOpt: String(options?.boldColor ?? "inverseSurface")
-    readonly property bool showBackground: Boolean(options?.showBackground ?? false)
+    readonly property bool showBackground: (options?.showBackground !== undefined)
+        ? Boolean(options.showBackground)
+        : cardBackground
+    readonly property bool showDate: Boolean(options?.showDate ?? false)
 
     readonly property bool isVertical: orientationOpt === "vertical"
     readonly property bool is12Hour: Units.twelveHourClock
     readonly property bool useTitan: fontOpt === "titan"
+    readonly property bool useClockFont: fontOpt === "clock"
 
     readonly property int digitsWidth: isVertical ? 276 : 420
     readonly property int baseWidth: isVertical ? 276 : (is12Hour ? 496 : 420)
     readonly property int glyphBoxHeight: isVertical ? 252 : 150
-    readonly property int baseHeight: isVertical ? (is12Hour ? 296 : 252) : 150
+    readonly property int baseHeight: (isVertical ? (is12Hour ? 296 : 252) : 150) + (showDate ? (isVertical ? 36 : 34) : 0)
     readonly property int padH: showBackground ? Tokens.padding.largeIncreased : 0
     readonly property int padV: showBackground ? Tokens.padding.large : 0
 
@@ -46,6 +51,9 @@ Item {
     readonly property string hourStr: (is12Hour ? (hour24 % 12 === 0 ? 12 : hour24 % 12) : hour24).toString().padStart(2, "0")
     readonly property string minuteStr: Time.minutes.toString().padStart(2, "0")
     readonly property string meridian: (hour24 >= 12 ? "PM" : "AM")
+    readonly property string todayKey: Qt.formatDate(Time.date, "yyyy-MM-dd")
+    readonly property date todayDate: FocusLedger.parseLocalDate(todayKey) ?? new Date()
+    readonly property string dateString: Qt.formatDate(todayDate, "ddd, MMM d")
     readonly property string glyphTopLeft: hourStr.charAt(0)
     readonly property string glyphTopRight: hourStr.charAt(1)
     readonly property string glyphBottomLeft: minuteStr.charAt(0)
@@ -54,6 +62,7 @@ Item {
     readonly property color tintSoft: roleColor(softColorOpt, Colours.palette.m3primary)
     readonly property color tintBold: roleColor(boldColorOpt, Colours.palette.m3inverseSurface)
     readonly property string sansFont: Tokens.font.body.large.family || "GoogleSansFlex"
+    readonly property string clockFont: GlobalConfig.appearance.font.clock || sansFont
     readonly property string displayFont: Qt.fontFamilies().includes("Titan One") ? "Titan One" : sansFont
 
     readonly property real fringeSize: isVertical ? digitsWidth * 0.026 : glyphBoxHeight * 0.03
@@ -438,6 +447,19 @@ Item {
             font.pixelSize: Math.round(root.isVertical ? root.digitsWidth * 0.16 : root.glyphBoxHeight * 0.36)
             renderType: Text.QtRendering
         }
+
+        Text {
+            z: 4
+            visible: root.showDate
+            anchors.horizontalCenter: parent.horizontalCenter
+            y: root.baseHeight - height - 2
+            text: root.dateString
+            color: root.tintSoft
+            font.family: root.sansFont
+            font.pixelSize: 20
+            font.weight: Font.DemiBold
+            renderType: Text.QtRendering
+        }
     }
 
     component GlyphTile: Text {
@@ -446,9 +468,10 @@ Item {
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
         renderType: Text.QtRendering
-        font.family: root.useTitan ? root.displayFont : root.sansFont
+        font.family: root.useTitan ? root.displayFont : (root.useClockFont ? root.clockFont : root.sansFont)
         font.pixelSize: root.glyphSize
-        font.variableAxes: root.useTitan ? ({}) : ({
+        font.bold: root.useClockFont
+        font.variableAxes: (root.useTitan || root.useClockFont) ? ({}) : ({
             "wght": 1000
         })
     }

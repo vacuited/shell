@@ -38,6 +38,7 @@ VerticalFadeFlickable {
                     if (!page.developerOnly || GlobalConfig.general.developerMode) {
                         arr.push({
                             originalIndex: i,
+                            key: page.key,
                             label: page.label,
                             icon: page.icon,
                             description: page.description,
@@ -193,6 +194,16 @@ VerticalFadeFlickable {
                             font: Tokens.font.label.small
                             elide: Text.ElideRight
                         }
+                    }
+
+                    StyledRect {
+                        visible: item.modelData.key === "updates" && Updates.hasAnyUpdate
+                        Layout.fillWidth: false
+                        Layout.alignment: Qt.AlignVCenter
+                        implicitWidth: 8
+                        implicitHeight: 8
+                        radius: Tokens.rounding.full
+                        color: Colours.palette.m3primary
                     }
                 }
             }

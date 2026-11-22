@@ -27,6 +27,11 @@ StackView {
 
     Component.onCompleted: {
         openSubPage(0, true);
+        if (nState.pendingSubPageIdx > 0) {
+            const idx = nState.pendingSubPageIdx;
+            nState.pendingSubPageIdx = -1;
+            nState.subPageIdxStack.push(idx);
+        }
         for (const page of nState.subPageIdxStack)
             openSubPage(page, true);
     }

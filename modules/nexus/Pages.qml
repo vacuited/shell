@@ -41,7 +41,10 @@ Item {
         objectName: "PageContainer"
         anchors.fill: parent
         layer.enabled: opacity < 1
-        Component.onCompleted: root.loadPage(root.nState.currentPageIdx)
+        Component.onCompleted: {
+            root.lastPageIdx = root.nState.currentPageIdx;
+            root.loadPage(root.nState.currentPageIdx);
+        }
     }
 
     Connections {

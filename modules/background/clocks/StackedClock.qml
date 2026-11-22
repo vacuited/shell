@@ -18,6 +18,7 @@ Item {
     required property real absY
     property real clockScale: 1.0
     property string surfaceStyle: "glass"
+    property bool cardBackground: false
     property var options: ({})
 
     readonly property bool weActive: wallpaper?.weSurfaceActive ?? wallpaper?.weSurfaceVisible ?? false
@@ -32,7 +33,10 @@ Item {
     readonly property string timeColorOpt: String(options?.timeColor ?? "primary")
     readonly property string labelColorOpt: String(options?.labelColor ?? "onSurface")
     readonly property bool showDate: Boolean(options?.showDate ?? true)
-    readonly property bool showBackground: Boolean(options?.showBackground ?? false)
+    readonly property bool showSeconds: Boolean(options?.showSeconds ?? false)
+    readonly property bool showBackground: (options?.showBackground !== undefined)
+        ? Boolean(options.showBackground)
+        : cardBackground
     readonly property int fontSize: Math.max(12, Math.round(Number(options?.fontSize ?? 84) * clockScale))
     readonly property int labelFontSize: Math.max(10, Math.round(Number(options?.labelFontSize ?? 42) * clockScale))
     readonly property int padH: showBackground ? Math.round(Tokens.padding.largeIncreased * clockScale) : 0
@@ -48,6 +52,7 @@ Item {
         return (h % 12 || 12).toString().padStart(2, "0");
     }
     readonly property string displayMinutes: Time.minutes.toString().padStart(2, "0")
+    readonly property string displaySeconds: Time.seconds.toString().padStart(2, "0")
     readonly property string meridian: (Time.hours >= 12 ? "PM" : "AM")
     readonly property string dayName: Qt.formatDate(todayDate, "ddd").toLowerCase()
     readonly property string dayNumber: ordinal(todayDate.getDate())
@@ -263,7 +268,9 @@ Item {
         }
 
         Text {
-            text: root.displayHours + ":" + root.displayMinutes
+            text: root.showSeconds
+                ? (root.displayHours + ":" + root.displayMinutes + ":" + root.displaySeconds)
+                : (root.displayHours + ":" + root.displayMinutes)
             color: root.timeColor
             renderType: Text.QtRendering
             font.family: root.sansFont

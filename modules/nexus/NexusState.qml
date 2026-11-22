@@ -8,6 +8,7 @@ QtObject {
     property bool animatingContainer
     property int currentPageIdx
     property list<int> subPageIdxStack
+    property int pendingSubPageIdx: -1
     property bool searchOpen
     property bool justUnlockedDevMode: false
     property string targetScreen: ""

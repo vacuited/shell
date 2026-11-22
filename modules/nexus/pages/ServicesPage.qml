@@ -11,7 +11,7 @@ import qs.modules.nexus.common
 PageBase {
     id: root
 
-    // Lyrics backends, ordered to match config::LyricsBackend (Auto, Local, LRCLIB, NetEase)
+    // Lyrics backends, ordered to match config::LyricsBackend (Auto, Local, Boidu, LyricsPlus, NetEase, LRCLIB)
     readonly property list<MenuItem> lyricsItems: [
         MenuItem {
             text: Tr.trCtx("Auto", "lyrics backend")
@@ -20,10 +20,16 @@ PageBase {
             text: Tr.trCtx("Local", "lyrics backend")
         },
         MenuItem {
-            text: "LRCLIB"
+            text: "Boidu"
+        },
+        MenuItem {
+            text: "LyricsPlus"
         },
         MenuItem {
             text: "NetEase"
+        },
+        MenuItem {
+            text: "LRCLIB"
         }
     ]
 

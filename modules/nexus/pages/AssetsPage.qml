@@ -44,7 +44,6 @@ PageBase {
 
         AssetRow {
             first: true
-            last: true
             label: Tr.tr("System logo")
             subtext: Tr.tr("Shown in the bar, dashboard and on the lock screen")
             option: "logo"
@@ -53,6 +52,14 @@ PageBase {
             previewSource: SysInfo.osLogo
             write: v => GlobalConfig.general.logo = v
             reset: () => GlobalConfig.general.resetOption("logo")
+        }
+
+        ToggleRow {
+            last: true
+            text: qsTr("Use distro logo")
+            subtext: qsTr("Show your OS icon instead of the Vacuited logo")
+            checked: GlobalConfig.general.logo === "distro"
+            onToggled: GlobalConfig.general.logo = checked ? "distro" : ""
         }
 
         // Animated images

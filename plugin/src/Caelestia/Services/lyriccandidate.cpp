@@ -2,14 +2,18 @@
 
 namespace caelestia::shell::services {
 
-LyricCandidate::LyricCandidate(
-    LyricsBackend backend, QString id, QString title, QString artist, QString album, qreal duration)
+LyricCandidate::LyricCandidate(LyricsBackend backend, QString id, QString title, QString artist, QString album,
+    qreal duration, QString syncType, bool hasTranslation, bool hasRomanization, QString providerDetail)
     : m_backend(backend)
     , m_id(std::move(id))
     , m_title(std::move(title))
     , m_artist(std::move(artist))
     , m_album(std::move(album))
-    , m_duration(duration) {}
+    , m_duration(duration)
+    , m_syncType(syncType.isEmpty() ? QStringLiteral("line") : std::move(syncType))
+    , m_hasTranslation(hasTranslation)
+    , m_hasRomanization(hasRomanization)
+    , m_providerDetail(std::move(providerDetail)) {}
 
 LyricsBackend LyricCandidate::backend() const {
     return m_backend;
@@ -33,6 +37,22 @@ QString LyricCandidate::album() const {
 
 qreal LyricCandidate::duration() const {
     return m_duration;
+}
+
+QString LyricCandidate::syncType() const {
+    return m_syncType;
+}
+
+bool LyricCandidate::hasTranslation() const {
+    return m_hasTranslation;
+}
+
+bool LyricCandidate::hasRomanization() const {
+    return m_hasRomanization;
+}
+
+QString LyricCandidate::providerDetail() const {
+    return m_providerDetail;
 }
 
 bool LyricCandidate::isValid() const {

@@ -151,7 +151,7 @@ PageBase {
 
         ToggleRow {
             first: true
-            text: qsTr("System & Caelestia Control")
+            text: qsTr("System & Vacuited Control")
             subtext: qsTr("Allow media control (playerctl) and caelestia shell CLI execution")
             checked: AiTools.enableSystemControl
             onToggled: {

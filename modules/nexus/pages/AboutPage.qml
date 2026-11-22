@@ -7,6 +7,7 @@ import Caelestia.I18n
 import qs.components
 import qs.services
 import qs.utils
+import qs.modules.nexus
 import qs.modules.nexus.common
 
 PageBase {
@@ -65,9 +66,12 @@ PageBase {
                 property int clicks: 0
 
                 VoidLogo {
+                    id: aboutLogo
+
                     Layout.alignment: Qt.AlignHCenter
-                    Layout.preferredWidth: implicitWidth
-                    Layout.preferredHeight: implicitHeight
+                    Layout.preferredWidth: 164
+                    Layout.preferredHeight: 164
+                    interactive: true
                 }
 
                 StyledText {
@@ -88,14 +92,6 @@ PageBase {
 
                 StyledText {
                     Layout.alignment: Qt.AlignHCenter
-                    text: qsTr("Derived from MiDnight")
-                    color: Colours.palette.m3outline
-                    font: Tokens.font.label.small
-                    opacity: 0.7
-                }
-
-                StyledText {
-                    Layout.alignment: Qt.AlignHCenter
                     text: CUtils.version ? `v${CUtils.version}` : "…"
                     color: Colours.palette.m3onSurfaceVariant
                     font: Tokens.font.body.medium
@@ -103,6 +99,7 @@ PageBase {
                     MouseArea {
                         anchors.fill: parent
                         onClicked: {
+                            aboutLogo.surge();
                             if (GlobalConfig.general.developerMode) {
                                 Toaster.toast(qsTr("Developer Options"), qsTr("No need, you are already a developer."), "construction");
                                 return;
@@ -121,6 +118,33 @@ PageBase {
                     }
                 }
             }
+        }
+
+        // Update status
+        NavRow {
+            first: true
+            last: true
+            Layout.topMargin: Tokens.spacing.small
+            icon: Updates.updating ? "sync" : Updates.hasAnyUpdate ? "system_update" : Updates.baselineMissing ? "sync_problem" : "check_circle"
+            iconLabel.color: Updates.hasAnyUpdate ? Colours.palette.m3primary : Colours.palette.m3onSurfaceVariant
+            text: {
+                if (Updates.updating)
+                    return Updates.phase || qsTr("Updating Vacuited...");
+                if (Updates.checking)
+                    return qsTr("Checking for updates...");
+                if (Updates.hasAnyUpdate)
+                    return qsTr("Updates available (%1 commit%2)").arg(Updates.totalUpdateCommits).arg(Updates.totalUpdateCommits === 1 ? "" : "s");
+                if (Updates.baselineMissing)
+                    return qsTr("Updates — baseline not synced");
+                return qsTr("Vacuited is up to date");
+            }
+            subtext: {
+                const s = Updates.shellInfo?.installedShort ? `Shell ${Updates.shellInfo.installedShort}` : "";
+                const c = Updates.cliInfo?.installedShort ? `CLI ${Updates.cliInfo.installedShort}` : "";
+                const parts = [s, c].filter(x => x);
+                return parts.length > 0 ? parts.join(" · ") : qsTr("Open Nexus > Updates");
+            }
+            onClicked: root.nState.currentPageIdx = PageRegistry.indexOfKey("updates")
         }
 
         // System
@@ -164,12 +188,20 @@ PageBase {
         InfoRow {
             first: true
             label: Tr.trCtx("Shell", "the caelestia shell itself, not a unix shell")
-            value: CUtils.version || "…"
+            value: {
+                const ver = CUtils.version || "…";
+                const sha = Updates.shellInfo?.installedShort ?? "";
+                return sha ? `${ver} (${sha})` : ver;
+            }
         }
 
         InfoRow {
             label: Tr.trCtx("CLI", "the caelestia command line tool")
-            value: root.cliVersion || "…"
+            value: {
+                const ver = root.cliVersion || "…";
+                const sha = Updates.cliInfo?.installedShort ?? "";
+                return sha ? `${ver} (${sha})` : ver;
+            }
         }
 
         InfoRow {

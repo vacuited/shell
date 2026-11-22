@@ -71,15 +71,16 @@ Singleton {
             root.osId = fd("ID");
             root.osIdLike = fd("ID_LIKE").split(" ");
 
-            const logo = Quickshell.iconPath(fd("LOGO"), true);
-            if (GlobalConfig.general.logo === "caelestia") {
+            const distroLogo = Quickshell.iconPath(fd("LOGO"), true);
+            const cfg = (GlobalConfig.general.logo || "").trim();
+            if (cfg === "" || cfg === "vacuited" || cfg === "caelestia") {
                 root.osLogo = Qt.resolvedUrl(`${Quickshell.shellDir}/assets/logo.svg`);
                 root.isDefaultLogo = true;
-            } else if (GlobalConfig.general.logo) {
-                root.osLogo = Quickshell.iconPath(GlobalConfig.general.logo, true) || "file://" + Paths.absolutePath(GlobalConfig.general.logo);
-                root.isDefaultLogo = false;
-            } else if (logo) {
-                root.osLogo = logo;
+            } else if (cfg === "distro") {
+                root.osLogo = distroLogo || Qt.resolvedUrl(`${Quickshell.shellDir}/assets/logo.svg`);
+                root.isDefaultLogo = !distroLogo;
+            } else {
+                root.osLogo = Quickshell.iconPath(cfg, true) || "file://" + Paths.absolutePath(cfg);
                 root.isDefaultLogo = false;
             }
         }

@@ -343,7 +343,7 @@ ColumnLayout {
                         TextArea {
                             id: inputArea
                             verticalAlignment: TextInput.AlignVCenter
-                            placeholderText: qsTr("Ask Astria... (/ for commands)")
+                            placeholderText: qsTr("Ask Horizon... (/ for commands)")
                             color: Colours.palette.m3onSurface
                             placeholderTextColor: Colours.palette.m3outline
                             font: Tokens.font.body.small

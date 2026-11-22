@@ -194,11 +194,12 @@ Item {
                 details: detailsStr,
                 state: stateStr,
                 large_image: "https://raw.githubusercontent.com/vacuited/shell/main/assets/logo.png",
+                large_text: "Vacuited Shell",
                 small_image: "",
                 startTimestamp: root.shellStartTime,
                 buttons: [
-                    { label: "Website", url: "https://github.com/vacuited/shell" },
-                    { label: "GitHub", url: "https://github.com/caelestia-dots/" }
+                    { label: "Vacuited Shell", url: "https://github.com/vacuited/shell" },
+                    { label: "Vacuited", url: "https://github.com/vacuited" }
                 ]
             });
             return;

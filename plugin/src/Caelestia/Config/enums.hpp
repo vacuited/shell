@@ -20,7 +20,7 @@ namespace caelestia::shell::config {
 
 ENUM(BarWorkspaceDisplay, Shapes, Text, Icons)
 ENUM(BarWorkspaceCapitalisation, Preserve, Upper, Lower)
-ENUM(LyricsBackend, Auto, Local, LRCLIB, NetEase)
+ENUM(LyricsBackend, Auto, Local, Boidu, LyricsPlus, NetEase, LRCLIB)
 ENUM(GpuType, Auto, Nvidia, Generic, None)
 ENUM(NotifsFullscreen, On, Off)
 ENUM(TemperatureUnit, Auto, Celsius, Fahrenheit, Kelvin)

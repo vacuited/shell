@@ -54,7 +54,7 @@ StyledRect {
 
             MonoText {
                 Layout.fillWidth: true
-                text: "caelestiafetch.sh"
+                text: "vacuitedfetch.sh"
                 elide: Text.ElideRight
             }
 
@@ -64,7 +64,7 @@ StyledRect {
                 Layout.preferredHeight: 0
                 active: !iconLoader.active
 
-                sourceComponent: SysInfo.isDefaultLogo ? caelestiaLogo : distroIcon
+                sourceComponent: SysInfo.isDefaultLogo ? vacuitedLogoSmall : distroIcon
             }
         }
 
@@ -79,7 +79,7 @@ StyledRect {
                 Layout.fillHeight: true
                 active: root.width > Tokens.sizes.lock.largeLogoWidth
 
-                sourceComponent: SysInfo.isDefaultLogo ? caelestiaLogo : distroIcon
+                sourceComponent: SysInfo.isDefaultLogo ? vacuitedLogoLarge : distroIcon
             }
 
             ColumnLayout {
@@ -159,10 +159,19 @@ StyledRect {
     }
 
     Component {
-        id: caelestiaLogo
+        id: vacuitedLogoSmall
 
         Logo {
             width: height
+        }
+    }
+
+    Component {
+        id: vacuitedLogoLarge
+
+        VoidLogo {
+            width: height
+            interactive: false
         }
     }
 

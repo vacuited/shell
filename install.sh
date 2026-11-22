@@ -877,6 +877,15 @@ if [ "$DRY_RUN" -eq 0 ]; then
     fi
     [ -f "$QS_DEST/shell.qml" ] || die "Deploy check failed: $QS_DEST/shell.qml missing."
     log "Install verified."
+
+    if [ "$GIT_REV" = "unknown" ]; then
+        detect_git_meta
+    fi
+    if [ "$GIT_REV" != "unknown" ] && command -v python3 >/dev/null 2>&1; then
+        _rec_args=(--component shell --repo-dir "$SCRIPT_DIR" --version "$VERSION")
+        [ "$QML_ONLY" -eq 0 ] && _rec_args+=(--plugin-rebuilt)
+        python3 "$SCRIPT_DIR/assets/scripts/vacuited_updater.py" record-install "${_rec_args[@]}" >/dev/null 2>&1 || true
+    fi
 fi
 
 if command -v systemctl >/dev/null 2>&1; then

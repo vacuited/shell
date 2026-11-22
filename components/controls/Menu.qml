@@ -34,6 +34,20 @@ MouseArea {
     property MenuItem active: items[0] ?? null
     property bool expanded
     property real maxHeight: 320
+    readonly property Item boundsItem: {
+        let node = root.attachTo;
+        let lastBeforePanels = null;
+        while (node && node.parent) {
+            if (node.parent.utilitiesShortcutActive !== undefined) {
+                if (node === node.parent.panels && lastBeforePanels)
+                    return lastBeforePanels;
+                return root.parent;
+            }
+            lastBeforePanels = node;
+            node = node.parent;
+        }
+        return root.parent;
+    }
 
     signal itemSelected(item: MenuItem)
 
@@ -55,6 +69,7 @@ MouseArea {
         return node || root.parent;
     }
     anchors.fill: parent
+    z: expanded ? 2 : (opacity > 0 ? 1 : 0)
 
     enabled: expanded
     hoverEnabled: expanded
@@ -79,16 +94,87 @@ MouseArea {
     Elevation {
         id: menu
 
+        readonly property real edgePad: Tokens.padding.small
+        readonly property real gapY: Math.abs(root.marginY)
+        readonly property bool isAttachTop: root.attachSideY === Menu.Side.Top || root.attachSideY === Menu.Top
+        readonly property bool isThisBottom: root.thisSideY === Menu.Side.Bottom || root.thisSideY === Menu.Bottom
+        readonly property bool isDropdownY: isAttachTop === isThisBottom
+        readonly property bool prefersUp: isThisBottom
+        readonly property real desiredHeight: Math.min(root.maxHeight, column.implicitHeight + Tokens.padding.extraSmall * 2)
+
+        readonly property var layoutMetrics: {
+            CUtils.dependency(watcher.transform); // mapToItem is not reactive so this forces updates
+            const p = root.parent;
+            const item = root.attachTo;
+            if (!p || !item)
+                return {
+                    valid: false,
+                    left: 0,
+                    top: 0,
+                    right: 0,
+                    bottom: 0,
+                    attachTop: 0,
+                    attachBottom: 0
+                };
+
+            const bItem = (root.boundsItem && root.boundsItem.width > 0 && root.boundsItem.height > 0) ? root.boundsItem : p;
+            const bw = bItem.width;
+            const bh = bItem.height;
+            const topLeft = bItem === p ? Qt.point(0, 0) : bItem.mapToItem(p, 0, 0);
+            const bottomRight = bItem === p ? Qt.point(bw, bh) : bItem.mapToItem(p, bw, bh);
+            const aTop = item.mapToItem(p, 0, 0).y;
+            const aBottom = item.mapToItem(p, 0, item.height).y;
+
+            const left = Math.min(topLeft.x, bottomRight.x);
+            const right = Math.max(topLeft.x, bottomRight.x);
+            const top = Math.min(topLeft.y, bottomRight.y);
+            const bottom = Math.max(topLeft.y, bottomRight.y);
+
+            return {
+                valid: (bottom - top) > edgePad * 2 && (right - left) > edgePad * 2,
+                left: left,
+                top: top,
+                right: right,
+                bottom: bottom,
+                attachTop: Math.min(aTop, aBottom),
+                attachBottom: Math.max(aTop, aBottom)
+            };
+        }
+
+        readonly property real spaceBelow: Math.max(0, layoutMetrics.bottom - edgePad - (layoutMetrics.attachBottom + gapY))
+        readonly property real spaceAbove: Math.max(0, (layoutMetrics.attachTop - gapY) - (layoutMetrics.top + edgePad))
+
+        readonly property bool openUp: {
+            if (!isDropdownY || !layoutMetrics.valid)
+                return prefersUp;
+            if (prefersUp)
+                return desiredHeight <= spaceAbove || spaceAbove >= spaceBelow;
+            return desiredHeight > spaceBelow && spaceAbove > spaceBelow;
+        }
+
+        readonly property real availableHeight: {
+            if (!layoutMetrics.valid)
+                return desiredHeight;
+            const containerHeight = Math.max(0, layoutMetrics.bottom - layoutMetrics.top - edgePad * 2);
+            if (!isDropdownY)
+                return containerHeight;
+            const sideSpace = openUp ? spaceAbove : spaceBelow;
+            const minUsable = Math.min(desiredHeight, containerHeight, 120);
+            return Math.max(sideSpace, minUsable);
+        }
+
         x: {
             CUtils.dependency(watcher.transform); // mapToItem is not reactive so this forces updates
             const item = root.attachTo;
+            if (!item || !root.parent)
+                return 0;
             let off = (root.attachSideX === Menu.Side.Left || root.attachSideX === Menu.Left) ? 0 : item.width;
             if (root.thisSideX === Menu.Side.Right || root.thisSideX === Menu.Right)
                 off -= width;
             let posX = item.mapToItem(root.parent, off, 0).x + root.marginX;
-            if (root.parent && root.parent.width > 0) {
-                const maxAllowedX = root.parent.width - width - Tokens.padding.small;
-                const minAllowedX = Tokens.padding.small;
+            if (layoutMetrics.valid) {
+                const minAllowedX = layoutMetrics.left + edgePad;
+                const maxAllowedX = layoutMetrics.right - width - edgePad;
                 if (maxAllowedX >= minAllowedX)
                     posX = Math.max(minAllowedX, Math.min(posX, maxAllowedX));
             }
@@ -97,21 +183,35 @@ MouseArea {
         y: {
             CUtils.dependency(watcher.transform); // mapToItem is not reactive so this forces updates
             const item = root.attachTo;
-            let off = (root.attachSideY === Menu.Side.Top || root.attachSideY === Menu.Top) ? 0 : item.height;
-            if (root.thisSideY === Menu.Side.Bottom || root.thisSideY === Menu.Bottom)
-                off -= height;
-            return item.mapToItem(root.parent, 0, off).y + root.marginY;
+            if (!item || !root.parent)
+                return 0;
+            let posY;
+            if (isDropdownY) {
+                posY = openUp ? (layoutMetrics.attachTop - gapY - height) : (layoutMetrics.attachBottom + gapY);
+            } else {
+                let off = isAttachTop ? 0 : item.height;
+                if (isThisBottom)
+                    off -= height;
+                posY = item.mapToItem(root.parent, 0, off).y + root.marginY;
+            }
+            if (layoutMetrics.valid) {
+                const minAllowedY = layoutMetrics.top + edgePad;
+                const maxAllowedY = layoutMetrics.bottom - height - edgePad;
+                if (maxAllowedY >= minAllowedY)
+                    posY = Math.max(minAllowedY, Math.min(posY, maxAllowedY));
+            }
+            return posY;
         }
 
         radius: Tokens.rounding.large
         level: 2
 
         implicitWidth: Math.max(200, column.implicitWidth + Tokens.padding.extraSmall * 2)
-        implicitHeight: Math.min(root.maxHeight, column.implicitHeight + Tokens.padding.extraSmall * 2)
+        implicitHeight: Math.min(desiredHeight, availableHeight)
 
         transform: Scale {
             yScale: root.expanded ? 1 : 0.1
-            origin.y: (root.thisSideY === Menu.Side.Bottom || root.thisSideY === Menu.Bottom) ? menu.height : 0
+            origin.y: menu.openUp ? menu.height : 0
 
             Behavior on yScale {
                 Anim {}

@@ -27,8 +27,8 @@ Item {
         model: AiEngine.chatHistory
         boundsBehavior: Flickable.StopAtBounds
 
-        // Empty State (Logo + Personalized Greeting + Pill Starters)
-        LilithMascot {
+        // Empty State (Logo + Personalized Greeting)
+        HorizonMascot {
             anchors.centerIn: parent
             opacity: AiEngine.chatHistory.count === 0 && !AiEngine.isTyping && !AiEngine.isThinking ? 1.0 : 0.0
             visible: opacity > 0

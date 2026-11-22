@@ -3,7 +3,6 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
-import Quickshell.Io
 import Caelestia.Config
 import qs.components
 import qs.components.containers
@@ -44,9 +43,17 @@ Variants {
 
             readonly property int lyricsBarZone: Visibilities.bars.get(win.modelData.name)?.exclusiveZone ?? (Tokens.sizes.bar.innerWidth + Math.max(Tokens.padding.small, Config.border.thickness))
             readonly property int lyricsBaseMargin: Tokens.padding.large * 2
+            readonly property bool hasCustomPos: Config.background.desktopLyrics.x >= 0 && Config.background.desktopLyrics.y >= 0
+            readonly property real minX: Config.bar.position === "left" ? lyricsBaseMargin + lyricsBarZone : lyricsBaseMargin
+            readonly property real maxX: Math.max(minX, win.width - (Config.bar.position === "right" ? lyricsBaseMargin + lyricsBarZone : lyricsBaseMargin) - width)
+            readonly property real minY: Config.bar.position === "top" ? lyricsBaseMargin + lyricsBarZone : lyricsBaseMargin
+            readonly property real maxY: Math.max(minY, win.height - (Config.bar.position === "bottom" ? lyricsBaseMargin + lyricsBarZone : lyricsBaseMargin) - height)
 
             asynchronous: true
             active: Config.background.desktopLyrics.enabled && Config.background.desktopLyrics.overlay && !(GameMode.enabled && GlobalConfig.utilities.gameMode.disableDesktopLyrics)
+
+            x: hasCustomPos ? Math.round(Math.max(minX, Math.min(maxX, Config.background.desktopLyrics.x))) : 0
+            y: hasCustomPos ? Math.round(Math.max(minY, Math.min(maxY, Config.background.desktopLyrics.y))) : 0
 
             anchors.margins: lyricsBaseMargin
             anchors.leftMargin: Config.bar.position === "left" ? lyricsBaseMargin + lyricsBarZone : lyricsBaseMargin
@@ -65,8 +72,11 @@ Variants {
                 return 0;
             }
 
-            state: Config.background.desktopLyrics.position
+            state: hasCustomPos ? "custom" : Config.background.desktopLyrics.position
             states: [
+                State {
+                    name: "custom"
+                },
                 State {
                     name: "top-left"
 
@@ -155,10 +165,13 @@ Variants {
             }
 
             sourceComponent: DesktopLyrics {
-                screen: modelData
+                screen: win.modelData
                 wallpaper: null
                 absX: lyricsLoader.x
                 absY: lyricsLoader.y
+                editUnlocked: false
+                popoverOpen: false
+                customWidth: Config.background.desktopLyrics.width
             }
         }
     }

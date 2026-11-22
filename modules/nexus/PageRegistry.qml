@@ -79,7 +79,7 @@ QtObject {
             key: "updates",
             label: Tr.tr("Updates"),
             icon: "update",
-            description: Tr.tr("System updates"),
+            description: qsTr("Vacuited shell & CLI updates"),
             category: "system"
         },
         {

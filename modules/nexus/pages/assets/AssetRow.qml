@@ -66,8 +66,10 @@ ConnectedRect {
         if (root.fileManaged)
             return root.filePresent ? Paths.shortenHome(root.targetPath) : Tr.tr("None");
 
-        if (root.value === root.defaultValue)
+        if (root.value === root.defaultValue || root.value === "vacuited" || root.value === "caelestia")
             return Tr.tr("Shell default");
+        if (root.value === "distro")
+            return Tr.tr("Distro icon");
         if (!root.value)
             return Tr.tr("None");
         return Paths.shortenHome(root.value);

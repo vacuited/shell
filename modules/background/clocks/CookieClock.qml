@@ -29,7 +29,12 @@ Item {
     readonly property bool isTranslucentBlur: isBlur || isFrosted
     readonly property bool surfaceHidden: QsWindow.window ? !QsWindow.window.visible : false
 
-    readonly property int cookieShape: resolveShape(String(options?.shape ?? "Cookie9Sided"))
+    readonly property int cookieShape: {
+        const resolved = WidgetMetrics.resolveShapeEnum(String(options?.shape ?? "Cookie9Sided"), "Cookie9Sided");
+        return resolved >= 0 ? resolved : MaterialShape.Cookie9Sided;
+    }
+    readonly property real visualScale: spinFitScale
+    readonly property real visualRotation: cookieRotator.ambientRotation
     readonly property bool constantlyRotate: Boolean(options?.constantlyRotate ?? false)
     readonly property string hourHandStyle: String(options?.hourHandStyle ?? "classic")
     readonly property string minuteHandStyle: String(options?.minuteHandStyle ?? "classic")
@@ -68,47 +73,6 @@ Item {
     readonly property string displayFont: Qt.fontFamilies().includes("Titan One") ? "Titan One" : (Tokens.font.body.large.family || "Sans Serif")
     readonly property bool shouldSpin: constantlyRotate && !surfaceHidden && !desktopOccluded && !GameMode.enabled
     readonly property real spinFitScale: constantlyRotate ? 0.80 : 1.0
-
-    function resolveShape(name: string): int {
-        const shapes = {
-            "Circle": MaterialShape.Circle,
-            "Square": MaterialShape.Square,
-            "Slanted": MaterialShape.Slanted,
-            "Arch": MaterialShape.Arch,
-            "Fan": MaterialShape.Fan,
-            "Arrow": MaterialShape.Arrow,
-            "SemiCircle": MaterialShape.SemiCircle,
-            "Oval": MaterialShape.Oval,
-            "Pill": MaterialShape.Pill,
-            "Triangle": MaterialShape.Triangle,
-            "Diamond": MaterialShape.Diamond,
-            "ClamShell": MaterialShape.ClamShell,
-            "Pentagon": MaterialShape.Pentagon,
-            "Gem": MaterialShape.Gem,
-            "Sunny": MaterialShape.Sunny,
-            "VerySunny": MaterialShape.VerySunny,
-            "Cookie4Sided": MaterialShape.Cookie4Sided,
-            "Cookie6Sided": MaterialShape.Cookie6Sided,
-            "Cookie7Sided": MaterialShape.Cookie7Sided,
-            "Cookie9Sided": MaterialShape.Cookie9Sided,
-            "Cookie12Sided": MaterialShape.Cookie12Sided,
-            "Ghostish": MaterialShape.Ghostish,
-            "Clover4Leaf": MaterialShape.Clover4Leaf,
-            "Clover8Leaf": MaterialShape.Clover8Leaf,
-            "Burst": MaterialShape.Burst,
-            "SoftBurst": MaterialShape.SoftBurst,
-            "Boom": MaterialShape.Boom,
-            "SoftBoom": MaterialShape.SoftBoom,
-            "Flower": MaterialShape.Flower,
-            "Puffy": MaterialShape.Puffy,
-            "PuffyDiamond": MaterialShape.PuffyDiamond,
-            "PixelCircle": MaterialShape.PixelCircle,
-            "PixelTriangle": MaterialShape.PixelTriangle,
-            "Bun": MaterialShape.Bun,
-            "Heart": MaterialShape.Heart
-        };
-        return shapes[name] ?? MaterialShape.Cookie9Sided;
-    }
 
     implicitWidth: Math.round(baseSize * clockScale)
     implicitHeight: Math.round(baseSize * clockScale)
@@ -181,6 +145,8 @@ Item {
     }
 
     WidgetSurface {
+        id: cookieSurface
+
         anchors.fill: parent
         wallpaper: root.wallpaper
         absX: root.absX
@@ -193,6 +159,18 @@ Item {
         shadowOpacity: Config.background.desktopClock.shadow.opacity
         shadowBlur: Config.background.desktopClock.shadow.blur
         shapeMask: cookieMask
+    }
+
+    MaterialShape {
+        anchors.centerIn: parent
+        width: Math.round(parent.width * root.spinFitScale)
+        height: Math.round(parent.height * root.spinFitScale)
+        implicitSize: Math.max(1, Math.round(parent.width * root.spinFitScale))
+        shape: root.cookieShape
+        color: "transparent"
+        strokeColor: cookieSurface.resolvedRimColor
+        strokeWidth: 1
+        rotation: cookieRotator.ambientRotation
     }
 
     Item {

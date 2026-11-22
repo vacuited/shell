@@ -31,7 +31,7 @@ Item {
             { id: "notifications", label: qsTr("Notifications"), icon: "notifications" }
         ];
         if (root.aiAvailable) {
-            list.push({ id: "ai", label: qsTr("Astria"), icon: "smart_toy" });
+            list.push({ id: "ai", label: qsTr("Horizon"), icon: "vacuited_logo" });
         }
         if (GlobalConfig.sidebar.showNews !== false) {
             list.push({ id: "news", label: qsTr("News"), icon: "newspaper" });
@@ -226,8 +226,22 @@ Item {
                                         anchors.centerIn: parent
                                         spacing: Tokens.spacing.small
 
+                                        Logo {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            visible: tabBtn.modelData.icon === "vacuited_logo"
+                                            implicitWidth: 16
+                                            implicitHeight: 16
+                                            mono: true
+                                            monoColour: tabBtn.active
+                                                ? Colours.palette.m3onPrimary
+                                                : (tabState.containsMouse ? Colours.palette.m3onSurface : Colours.palette.m3onSurfaceVariant)
+
+                                            Behavior on monoColour { CAnim {} }
+                                        }
+
                                         MaterialIcon {
                                             anchors.verticalCenter: parent.verticalCenter
+                                            visible: tabBtn.modelData.icon !== "vacuited_logo"
                                             text: tabBtn.modelData.icon
                                             color: tabBtn.active
                                                 ? Colours.palette.m3onPrimary

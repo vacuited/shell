@@ -147,7 +147,7 @@ Item {
 
         Loader {
             anchors.centerIn: parent
-            sourceComponent: SysInfo.isDefaultLogo ? caelestiaLogo : osLogo
+            sourceComponent: SysInfo.isDefaultLogo ? vacuitedLogo : osLogo
         }
     }
 
@@ -164,13 +164,12 @@ Item {
     }
 
     Component {
-        id: caelestiaLogo
+        id: vacuitedLogo
 
         Logo {
             implicitWidth: Tokens.sizes.dashboard.logoSize
             implicitHeight: Tokens.sizes.dashboard.logoSize
-            topColour: Colours.palette.m3primary
-            bottomColour: Colours.palette.m3onPrimaryContainer
+            lightSurface: Colours.palette.m3primaryContainer.hslLightness > 0.55
         }
     }
 
