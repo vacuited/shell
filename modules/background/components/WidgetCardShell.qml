@@ -39,6 +39,33 @@ Item {
     readonly property int topPadding: contentInsets.top
     readonly property int bottomPadding: contentInsets.bottom
     readonly property int sidePadding: contentInsets.left
+    readonly property int safeInnerBox: Math.max(24, Math.round(Math.min(width - sidePadding * 2, height - topPadding - bottomPadding)))
+
+    // Surface-aware inner surface & container tinting (translucent on glass/blur/frosted, opaque on material).
+    readonly property bool isMaterial: surface.isMaterial
+    readonly property bool isTranslucent: !isMaterial
+    readonly property color innerSurface: isMaterial
+        ? Colours.palette.m3surfaceContainerHigh
+        : (Colours.light
+            ? Qt.alpha(Colours.palette.m3surfaceContainerHigh, 0.58)
+            : Qt.tint(Qt.alpha(Colours.palette.m3secondaryContainer, 0.34), Qt.alpha(Colours.palette.m3surfaceBright, 0.12)))
+    readonly property color innerSurfaceStrong: isMaterial
+        ? Colours.palette.m3surfaceContainerHighest
+        : (Colours.light
+            ? Qt.alpha(Colours.palette.m3surfaceContainerHighest, 0.72)
+            : Qt.tint(Qt.alpha(Colours.palette.m3secondaryContainer, 0.50), Qt.alpha(Colours.palette.m3primary, 0.08)))
+    readonly property color innerBorder: Qt.alpha(Colours.palette.m3outlineVariant, isMaterial ? 0.52 : (Colours.light ? 0.34 : 0.40))
+    readonly property color trackSurface: Qt.alpha(Colours.palette.m3onSurface, isMaterial ? 0.16 : 0.20)
+    readonly property color primaryContainerTint: containerTone(Colours.palette.m3primaryContainer, false)
+    readonly property color primaryAccentTint: containerTone(Colours.palette.m3primary, true)
+    readonly property color secondaryContainerTint: containerTone(Colours.palette.m3secondaryContainer, false)
+    readonly property color tertiaryContainerTint: containerTone(Colours.palette.m3tertiaryContainer, false)
+
+    function containerTone(baseColor: color, strong: bool): color {
+        if (isMaterial)
+            return baseColor;
+        return Qt.alpha(baseColor, strong ? (Colours.light ? 0.80 : 0.70) : (Colours.light ? 0.64 : 0.48));
+    }
 
     default property alias contentData: contentSlot.data
     property alias backdropData: surfaceOverlaySlot.data
@@ -90,5 +117,6 @@ Item {
         id: contentSlot
 
         anchors.fill: parent
+        clip: !root.isShaped
     }
 }

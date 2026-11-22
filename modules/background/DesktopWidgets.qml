@@ -170,6 +170,8 @@ Item {
     function openQuickPopover(cardItem: var): void {
         if (!cardItem)
             return;
+        hostCanvas?.closeClockPopover?.();
+        hostCanvas?.closeLyricsPopover?.();
         if (editingWidgetId === cardItem.widgetId && editingCard === cardItem) {
             closeQuickPopover();
             return;
@@ -325,6 +327,7 @@ Item {
         widgetId: root.editingCard?.widgetId ?? ""
         widgetType: root.editingCard?.widgetType ?? ""
         sizeMode: root.editingCard?.resolvedSizeMode ?? "1x1"
+        itemScale: root.editingCard?.itemScale ?? 1.0
         supportedSizes: root.editingCard?.supportedSizes ?? []
         surfaceStyle: root.editingCard?.entry?.style ?? ""
         glassBlurEnabled: root.widgetConfig.blur
@@ -340,6 +343,7 @@ Item {
 
         onClosed: root.closeQuickPopover()
         onSizeModeSelected: mode => root.editingCard?.commitSizeMode(mode)
+        onItemScaleSelected: nextScale => root.editingCard?.commitItemScale(nextScale)
         onSurfaceStyleSelected: style => root.editingCard?.commitSurfaceStyle(style)
         onToggleGlassBlur: {
             const scr = root.targetScreenName();
@@ -398,7 +402,7 @@ Item {
                 root.saveConfig();
             }
         }
-        onOpenNexusRequested: WindowFactory.create()
+        onOpenNexusRequested: WindowFactory.openPage ? WindowFactory.openPage(PageRegistry.indexOfKey("background"), 5) : WindowFactory.create()
     }
 
     component WidgetCard: WidgetWrapper {
@@ -417,13 +421,15 @@ Item {
             ? entry.style
             : (root.widgetConfig.surfaceStyle || "glass")
         readonly property string resolvedSizeMode: {
-            const allowed = WidgetMetrics.supportedSizesFor(widgetType);
             const raw = (entry && entry.sizeMode && entry.sizeMode !== "") ? entry.sizeMode : WidgetMetrics.defaultSizeFor(widgetType);
-            if (allowed && allowed.length > 0 && allowed.indexOf(raw) < 0)
-                return WidgetMetrics.defaultSizeFor(widgetType);
-            return raw;
+            return WidgetMetrics.fallbackSizeFor(widgetType, raw);
         }
         readonly property var entryOptions: (entry && entry.options) ? entry.options : ({})
+        readonly property bool isFreeformWidget: WidgetMetrics.isAspectResizable(card.widgetType)
+        readonly property real itemScale: isFreeformWidget ? 1.0 : WidgetMetrics.clampItemScale(Number(entryOptions?.scale ?? 1.0))
+        readonly property real effectiveScale: Math.max(0.55, Math.min(2.2, root.widgetScale * itemScale))
+        readonly property real baseWidthAtGlobalScale: WidgetMetrics.widthFor(card.resolvedSizeMode, root.widgetScale)
+        readonly property real baseHeightAtGlobalScale: WidgetMetrics.heightFor(card.resolvedSizeMode, card.widgetType, root.widgetScale)
 
         function mergeOptions(patch: var, save: bool): void {
             const target = root.writableEntryFor(widgetId);
@@ -438,10 +444,35 @@ Item {
             const target = root.writableEntryFor(widgetId);
             if (!target || !nextMode)
                 return;
+            let changed = false;
             if (target.sizeMode !== nextMode) {
                 target.sizeMode = nextMode;
-                root.saveConfig();
+                changed = true;
             }
+            if (target.options && target.options.scale !== undefined) {
+                const nextOpts = Object.assign({}, target.options);
+                delete nextOpts.scale;
+                target.options = nextOpts;
+                changed = true;
+            }
+            if (changed)
+                root.saveConfig();
+        }
+
+        function commitItemScale(rawScale: real): void {
+            if (card.isFreeformWidget)
+                return;
+            const nextScale = WidgetMetrics.clampItemScale(rawScale);
+            const target = root.writableEntryFor(widgetId);
+            if (!target)
+                return;
+            const nextOpts = Object.assign({}, target.options || ({}));
+            if (Math.abs(nextScale - 1.0) < 0.005)
+                delete nextOpts.scale;
+            else
+                nextOpts.scale = nextScale;
+            target.options = nextOpts;
+            root.saveConfig();
         }
 
         function commitSurfaceStyle(style: string): void {
@@ -460,15 +491,25 @@ Item {
         initialY: hasCustomPos ? entry.y : slot.y
         sizeMode: card.resolvedSizeMode
         supportedSizes: WidgetMetrics.supportedSizesFor(card.widgetType)
-        resizeMode: WidgetMetrics.isAspectResizable(card.widgetType) ? "diagonal" : "discrete"
-        resizable: WidgetMetrics.isAspectResizable(card.widgetType) || (supportedSizes?.length ?? 0) > 1
+        resizeMode: "diagonal"
+        resizable: card.isFreeformWidget || (supportedSizes?.length ?? 0) > 0
         showSettingsHandle: true
         settingsActive: root.editingWidgetId === card.widgetId
         outlineShape: WidgetMetrics.resolveShapeEnum(WidgetMetrics.effectiveShapeKey(card.widgetType, card.resolvedSizeMode, card.entryOptions?.outerShape ?? ""), "Rounded")
-        minWidth: WidgetMetrics.isAspectResizable(card.widgetType) ? Math.round(96 * root.widgetScale) : WidgetMetrics.widthFor("1x1", root.widgetScale)
-        minHeight: WidgetMetrics.isAspectResizable(card.widgetType) ? Math.round(48 * root.widgetScale) : WidgetMetrics.heightFor("1x1", card.widgetType, root.widgetScale)
-        implicitWidth: widgetContent ? widgetContent.implicitWidth : WidgetMetrics.widthFor(card.resolvedSizeMode, root.widgetScale)
-        implicitHeight: widgetContent ? widgetContent.implicitHeight : WidgetMetrics.heightFor(card.resolvedSizeMode, card.widgetType, root.widgetScale)
+        minWidth: card.isFreeformWidget
+            ? Math.round(96 * root.widgetScale)
+            : Math.round(card.baseWidthAtGlobalScale * WidgetMetrics.minWidgetScale)
+        minHeight: card.isFreeformWidget
+            ? Math.round(48 * root.widgetScale)
+            : Math.round(card.baseHeightAtGlobalScale * WidgetMetrics.minWidgetScale)
+        maxWidth: card.isFreeformWidget ? 0 : Math.round(card.baseWidthAtGlobalScale * WidgetMetrics.maxWidgetScale)
+        maxHeight: card.isFreeformWidget ? 0 : Math.round(card.baseHeightAtGlobalScale * WidgetMetrics.maxWidgetScale)
+        snapTargetWidth: card.isFreeformWidget ? 0 : card.baseWidthAtGlobalScale
+        customResizeBadge: card.isFreeformWidget
+            ? ""
+            : WidgetMetrics.formatScaleLabel(WidgetMetrics.snapItemScale(card.ghostWidth / Math.max(1, card.baseWidthAtGlobalScale)))
+        implicitWidth: widgetContent ? widgetContent.implicitWidth : WidgetMetrics.widthFor(card.resolvedSizeMode, card.effectiveScale)
+        implicitHeight: widgetContent ? widgetContent.implicitHeight : WidgetMetrics.heightFor(card.resolvedSizeMode, card.widgetType, card.effectiveScale)
         width: implicitWidth
         height: implicitHeight
 
@@ -481,6 +522,12 @@ Item {
             root.saveConfig();
         }
 
+        onResizeFinished: finalWidth => {
+            if (card.isFreeformWidget)
+                return;
+            const nextScale = WidgetMetrics.snapItemScale(finalWidth / Math.max(1, card.baseWidthAtGlobalScale));
+            card.commitItemScale(nextScale);
+        }
         onSizeModeCommitted: newMode => card.commitSizeMode(newMode)
         onSettingsRequested: root.openQuickPopover(card)
     }
@@ -496,6 +543,7 @@ Item {
             weActive: root.weActive
             locked: glanceCard.locked
             sizeMode: glanceCard.resolvedSizeMode
+            widgetScale: glanceCard.effectiveScale
             surfaceStyle: glanceCard.resolvedSurfaceStyle
             widgetOptions: glanceCard.entryOptions
         }
@@ -512,6 +560,7 @@ Item {
             weActive: root.weActive
             locked: calCard.locked
             sizeMode: calCard.resolvedSizeMode
+            widgetScale: calCard.effectiveScale
             surfaceStyle: calCard.resolvedSurfaceStyle
             widgetOptions: calCard.entryOptions
         }
@@ -528,6 +577,7 @@ Item {
             weActive: root.weActive
             locked: weatherCard.locked
             sizeMode: weatherCard.resolvedSizeMode
+            widgetScale: weatherCard.effectiveScale
             surfaceStyle: weatherCard.resolvedSurfaceStyle
             widgetOptions: weatherCard.entryOptions
         }
@@ -544,6 +594,7 @@ Item {
             weActive: root.weActive
             locked: pillCard.locked
             sizeMode: pillCard.resolvedSizeMode
+            widgetScale: pillCard.effectiveScale
             surfaceStyle: pillCard.resolvedSurfaceStyle
             widgetOptions: pillCard.entryOptions
         }
@@ -560,6 +611,7 @@ Item {
             weActive: root.weActive
             locked: timersCard.locked
             sizeMode: timersCard.resolvedSizeMode
+            widgetScale: timersCard.effectiveScale
             surfaceStyle: timersCard.resolvedSurfaceStyle
             widgetOptions: timersCard.entryOptions
         }
@@ -576,6 +628,7 @@ Item {
             weActive: root.weActive
             locked: countdownCard.locked
             sizeMode: countdownCard.resolvedSizeMode
+            widgetScale: countdownCard.effectiveScale
             surfaceStyle: countdownCard.resolvedSurfaceStyle
             widgetOptions: countdownCard.entryOptions
         }
@@ -592,6 +645,7 @@ Item {
             weActive: root.weActive
             locked: resCard.locked
             sizeMode: resCard.resolvedSizeMode
+            widgetScale: resCard.effectiveScale
             surfaceStyle: resCard.resolvedSurfaceStyle
             widgetOptions: resCard.entryOptions
         }
@@ -608,6 +662,7 @@ Item {
             weActive: root.weActive
             locked: mediaCard.locked
             sizeMode: mediaCard.resolvedSizeMode
+            widgetScale: mediaCard.effectiveScale
             surfaceStyle: mediaCard.resolvedSurfaceStyle
             widgetOptions: mediaCard.entryOptions
         }
@@ -624,6 +679,7 @@ Item {
             weActive: root.weActive
             locked: todoCard.locked
             sizeMode: todoCard.resolvedSizeMode
+            widgetScale: todoCard.effectiveScale
             surfaceStyle: todoCard.resolvedSurfaceStyle
             widgetOptions: todoCard.entryOptions
         }
@@ -640,6 +696,7 @@ Item {
             weActive: root.weActive
             locked: notesCard.locked
             sizeMode: notesCard.resolvedSizeMode
+            widgetScale: notesCard.effectiveScale
             surfaceStyle: notesCard.resolvedSurfaceStyle
             widgetOptions: notesCard.entryOptions
             onOptionsUpdated: patch => notesCard.mergeOptions(patch, true)
@@ -657,6 +714,7 @@ Item {
             weActive: root.weActive
             locked: userCard.locked
             sizeMode: userCard.resolvedSizeMode
+            widgetScale: userCard.effectiveScale
             surfaceStyle: userCard.resolvedSurfaceStyle
             widgetOptions: userCard.entryOptions
         }
@@ -674,6 +732,7 @@ Item {
             weActive: root.weActive
             locked: batCard.locked
             sizeMode: batCard.resolvedSizeMode
+            widgetScale: batCard.effectiveScale
             surfaceStyle: batCard.resolvedSurfaceStyle
             widgetOptions: batCard.entryOptions
         }

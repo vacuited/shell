@@ -97,7 +97,7 @@ PageBase {
             const same = widgetsConfig.entries.values.filter(e => typeFor(e) === t);
             const idx = same.findIndex(e => e.id === item.id);
             if (t === "resources") {
-                const sz = item.sizeMode || WidgetMetrics.defaultSizeFor("resources");
+                const sz = WidgetMetrics.fallbackSizeFor("resources", String(item.sizeMode || ""));
                 const tag = sz === "1x1"
                     ? String(item.options?.focusMetric ?? "cpu").toUpperCase()
                     : sz;
@@ -483,7 +483,7 @@ PageBase {
         readonly property var supportedSizes: WidgetMetrics.supportedSizesFor(wType)
         readonly property bool isMultiSize: supportedSizes.length > 0
         readonly property bool supportsOuterShape: WidgetMetrics.supportsOuterShape(wType)
-            && ((modelData?.sizeMode || WidgetMetrics.defaultSizeFor(wType)) === "1x1" || WidgetMetrics.isAspectResizable(wType))
+            && (WidgetMetrics.fallbackSizeFor(wType, String(modelData?.sizeMode || "")) === "1x1" || WidgetMetrics.isAspectResizable(wType))
         readonly property bool hasExtraOptions: ["customText", "customImage", "sticker", "resources", "countdown", "media", "atAGlance", "usercard"].includes(wType)
 
         readonly property list<string> styleValues: ["", "glass", "blur", "frosted", "material"]
@@ -596,12 +596,11 @@ PageBase {
             id: sizeSelect
 
             visible: card.isMultiSize
-            last: !card.supportsOuterShape && !card.hasExtraOptions
             label: qsTr("Size")
             fallbackText: qsTr("Size")
             menuItems: [...sizeVariants.instances]
             active: {
-                const target = String(card.modelData?.sizeMode || WidgetMetrics.defaultSizeFor(card.wType));
+                const target = WidgetMetrics.fallbackSizeFor(card.wType, String(card.modelData?.sizeMode || ""));
                 const idx = card.supportedSizes.indexOf(target);
                 return idx >= 0 && idx < sizeSelect.menuItems.length
                     ? sizeSelect.menuItems[idx]
@@ -611,6 +610,11 @@ PageBase {
                 const idx = sizeSelect.menuItems.indexOf(item);
                 if (idx >= 0 && idx < card.supportedSizes.length && card.modelData) {
                     card.modelData.sizeMode = card.supportedSizes[idx];
+                    if (card.modelData.options && card.modelData.options.scale !== undefined) {
+                        const next = Object.assign({}, card.modelData.options);
+                        delete next.scale;
+                        card.modelData.options = next;
+                    }
                     root.targetConfig.save();
                 }
             }
@@ -625,6 +629,28 @@ PageBase {
 
                     text: WidgetMetrics.formatSizeLabel(modelData)
                 }
+            }
+        }
+
+        StepperRow {
+            visible: card.isMultiSize
+            last: !card.supportsOuterShape && !card.hasExtraOptions
+            label: qsTr("Scale (%)")
+            value: Math.round(WidgetMetrics.clampItemScale(Number(card.opts.scale ?? 1.0)) * 100)
+            from: 70
+            to: 160
+            stepSize: 5
+            onMoved: v => {
+                const nextScale = WidgetMetrics.clampItemScale(v / 100);
+                if (!card.modelData)
+                    return;
+                const next = Object.assign({}, card.modelData.options || ({}));
+                if (Math.abs(nextScale - 1.0) < 0.005)
+                    delete next.scale;
+                else
+                    next.scale = nextScale;
+                card.modelData.options = next;
+                root.targetConfig.save();
             }
         }
 

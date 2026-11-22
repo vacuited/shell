@@ -19,9 +19,16 @@ Item {
     property string sizeMode: "1x1"
     property var supportedSizes: []
     property int outlineShape: -1
+    property real outlineScale: 1.0
+    property real outlineRotation: 0.0
     property real widgetScale: WidgetMetrics.scale
     property int minWidth: 60
     property int minHeight: 40
+    property int maxWidth: 0
+    property int maxHeight: 0
+    property real snapTargetWidth: 0
+    property real snapTargetTolerance: 10
+    property string customResizeBadge: ""
     property int gridSize: 24
     property bool snapToGrid: false
     property bool smartSnap: true
@@ -291,7 +298,11 @@ Item {
     }
 
     MaterialShape {
-        anchors.fill: parent
+        anchors.centerIn: parent
+        width: Math.round(parent.width * root.outlineScale)
+        height: Math.round(parent.height * root.outlineScale)
+        implicitSize: Math.max(1, Math.round(Math.min(parent.width, parent.height) * root.outlineScale))
+        rotation: root.outlineRotation
         z: 18
         visible: root.outlineShape >= 0 && !root.locked && (wrapperHover.hovered || root.dragging || root.resizing || root.settingsActive)
         shape: root.outlineShape >= 0 ? root.outlineShape : MaterialShape.Circle
@@ -359,9 +370,11 @@ Item {
                 id: ghostBadgeText
 
                 anchors.centerIn: parent
-                text: ghostPreview.isDiscrete
-                    ? WidgetMetrics.formatSizeLabel(root.previewSizeMode)
-                    : (Math.round(ghostPreview.targetW) + "×" + Math.round(ghostPreview.targetH))
+                text: root.customResizeBadge !== ""
+                    ? root.customResizeBadge
+                    : (ghostPreview.isDiscrete
+                        ? WidgetMetrics.formatSizeLabel(root.previewSizeMode)
+                        : (Math.round(ghostPreview.targetW) + "×" + Math.round(ghostPreview.targetH)))
                 font: Tokens.font.label.builders.medium.weight(Font.Bold).build()
                 color: Colours.palette.m3onPrimaryContainer
             }
@@ -573,8 +586,10 @@ Item {
                 const dx = p.x - startGlobalX;
                 const dy = p.y - startGlobalY;
                 const origin = root.parent ? root.parent.mapToItem(root.canvas ?? root.parent, 0, 0) : Qt.point(0, 0);
-                const maxEdgeW = Math.max(root.minWidth, root.safeRight - (root.x + origin.x));
-                const maxEdgeH = Math.max(root.minHeight, root.safeBottom - (root.y + origin.y));
+                const rawMaxEdgeW = Math.max(root.minWidth, root.safeRight - (root.x + origin.x));
+                const rawMaxEdgeH = Math.max(root.minHeight, root.safeBottom - (root.y + origin.y));
+                const maxEdgeW = root.maxWidth > 0 ? Math.min(rawMaxEdgeW, root.maxWidth) : rawMaxEdgeW;
+                const maxEdgeH = root.maxHeight > 0 ? Math.min(rawMaxEdgeH, root.maxHeight) : rawMaxEdgeH;
                 const totalSafeW = Math.max(root.minWidth, root.safeRight - root.safeLeft);
                 const totalSafeH = Math.max(root.minHeight, root.safeBottom - root.safeTop);
 
@@ -593,6 +608,8 @@ Item {
                     const scaleH = rawH / Math.max(1, startHeight);
                     const chosenScale = Math.abs(dx) >= Math.abs(dy) ? scaleW : scaleH;
                     let candW = Math.max(root.minWidth, Math.min(maxEdgeW, startWidth * chosenScale));
+                    if (root.snapTargetWidth > 0 && Math.abs(candW - root.snapTargetWidth) <= root.snapTargetTolerance && root.snapTargetWidth >= root.minWidth && root.snapTargetWidth <= maxEdgeW)
+                        candW = root.snapTargetWidth;
                     let candH = candW / aspect;
                     if (candH > maxEdgeH) {
                         candH = maxEdgeH;

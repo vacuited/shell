@@ -16,6 +16,7 @@ Item {
     property string widgetId: ""
     property string widgetType: ""
     property string sizeMode: "1x1"
+    property real itemScale: 1.0
     property var supportedSizes: []
     property string surfaceStyle: ""
     property bool glassBlurEnabled: true
@@ -42,6 +43,7 @@ Item {
 
     signal closed()
     signal sizeModeSelected(string mode)
+    signal itemScaleSelected(real nextScale)
     signal surfaceStyleSelected(string style)
     signal toggleGlassBlur()
     signal optionPatched(var patch)
@@ -198,7 +200,10 @@ Item {
                             }
 
                             StyledText {
-                                text: WidgetMetrics.formatSizeLabel(root.sizeMode) + " · " + (root.surfaceStyle === "" ? qsTr("Default (%1)").arg(root.globalSurfaceStyle) : root.surfaceStyle)
+                                text: WidgetMetrics.formatSizeLabel(root.sizeMode)
+                                    + (Math.abs(root.itemScale - 1.0) >= 0.005 ? (" · " + WidgetMetrics.formatScaleLabel(root.itemScale)) : "")
+                                    + " · "
+                                    + (root.surfaceStyle === "" ? qsTr("Default (%1)").arg(root.globalSurfaceStyle) : root.surfaceStyle)
                                 font: Tokens.font.label.small
                                 color: Colours.palette.m3onSurfaceVariant
                                 Layout.fillWidth: true
@@ -257,6 +262,59 @@ Item {
                                         onClicked: root.sizeModeSelected(sizeChip.modelData)
                                     }
                                 }
+                            }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: Tokens.spacing.extraSmall
+
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: qsTr("Scale")
+                                font: Tokens.font.label.small
+                                color: Colours.palette.m3onSurfaceVariant
+                            }
+
+                            IconButton {
+                                icon: "remove"
+                                type: IconButton.Tonal
+                                disabled: root.itemScale <= WidgetMetrics.minWidgetScale + 0.005
+                                onClicked: root.itemScaleSelected(WidgetMetrics.clampItemScale(root.itemScale - 0.05))
+                            }
+
+                            StyledRect {
+                                id: scaleResetPill
+
+                                readonly property bool isCustomScale: Math.abs(root.itemScale - 1.0) >= 0.005
+
+                                Layout.preferredWidth: Math.max(54, Math.round(scaleResetText.implicitWidth + Tokens.padding.medium * 2))
+                                height: 28
+                                radius: 14
+                                color: isCustomScale ? Colours.palette.m3primaryContainer : WidgetMetrics.innerSurfaceStrong
+                                border.width: isCustomScale ? 1 : 0
+                                border.color: Colours.palette.m3primary
+
+                                StyledText {
+                                    id: scaleResetText
+
+                                    anchors.centerIn: parent
+                                    text: WidgetMetrics.formatScaleLabel(root.itemScale)
+                                    font: Tokens.font.label.builders.small.weight(Font.DemiBold).build()
+                                    color: scaleResetPill.isCustomScale ? Colours.palette.m3onPrimaryContainer : Colours.palette.m3onSurface
+                                }
+
+                                StateLayer {
+                                    enabled: scaleResetPill.isCustomScale
+                                    onClicked: root.itemScaleSelected(1.0)
+                                }
+                            }
+
+                            IconButton {
+                                icon: "add"
+                                type: IconButton.Tonal
+                                disabled: root.itemScale >= WidgetMetrics.maxWidgetScale - 0.005
+                                onClicked: root.itemScaleSelected(WidgetMetrics.clampItemScale(root.itemScale + 0.05))
                             }
                         }
                     }

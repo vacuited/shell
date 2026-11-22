@@ -18,6 +18,7 @@ Item {
     property bool weActive: false
     property bool locked: true
     property string sizeMode: "1x1"
+    property real widgetScale: WidgetMetrics.scale
     property string surfaceStyle: ""
     property bool blurEnabled: Config.background.desktopWidgets.blur
     property real plateOpacity: Config.background.desktopWidgets.opacity
@@ -25,7 +26,8 @@ Item {
 
     property string selectedTab: FocusTimer.isStopwatch ? "stopwatch" : "focus"
 
-    readonly property real s: Math.max(0.7, Math.min(1.5, Config.background.desktopWidgets.scale ?? 1.0))
+    readonly property real s: Math.max(0.55, Math.min(2.2, widgetScale > 0 ? widgetScale : WidgetMetrics.scale))
+    readonly property string effectiveSize: WidgetMetrics.fallbackSizeFor("timers", sizeMode)
     readonly property bool focusActive: !FocusTimer.isStopwatch
     readonly property bool stopwatchActive: FocusTimer.isStopwatch
     readonly property bool isTabRunning: selectedTab === "stopwatch"
@@ -43,7 +45,10 @@ Item {
     readonly property int focusDurationMins: Math.round((FocusTimer.sessionActive ? FocusTimer.phaseTotal : FocusTimer.durationSecs) / 60)
     readonly property string stateLabel: selectedTab === "stopwatch"
         ? ((stopwatchActive && FocusTimer.running) ? Tr.tr("Running") : Tr.tr("Stopwatch"))
-        : (focusActive ? FocusTimer.phaseLabel : Tr.tr("Focus"))
+        : (focusActive ? (FocusTimer.running ? (FocusTimer.phase === "focus" ? Tr.tr("Focusing") : Tr.tr("Break")) : (FocusTimer.sessionActive ? Tr.tr("Paused") : Tr.tr("Focus"))) : Tr.tr("Focus"))
+    readonly property string compactStateLabel: selectedTab === "stopwatch"
+        ? ((stopwatchActive && FocusTimer.running) ? Tr.tr("Run") : Tr.tr("Watch"))
+        : (focusActive ? (FocusTimer.phase === "focus" ? (FocusTimer.running ? Tr.tr("Focus") : (FocusTimer.sessionActive ? Tr.tr("Paused") : Tr.tr("Ready"))) : Tr.tr("Break")) : Tr.tr("Ready"))
     readonly property bool canControlTab: (selectedTab === "focus" && (focusActive || FocusTimer.canSwitchMode))
         || (selectedTab === "stopwatch" && (stopwatchActive || FocusTimer.canSwitchMode))
 
@@ -82,8 +87,8 @@ Item {
         selectedTab = "focus";
     }
 
-    implicitWidth: WidgetMetrics.widthFor(sizeMode, s)
-    implicitHeight: WidgetMetrics.heightFor(sizeMode, "timers", s)
+    implicitWidth: WidgetMetrics.widthFor(effectiveSize, s)
+    implicitHeight: WidgetMetrics.heightFor(effectiveSize, "timers", s)
 
     Connections {
         target: FocusTimer
@@ -97,7 +102,7 @@ Item {
 
         anchors.fill: parent
         widgetType: "timers"
-        sizeMode: root.sizeMode
+        sizeMode: root.effectiveSize
         outerShape: root.widgetOptions?.outerShape ?? ""
         wallpaper: root.wallpaper
         weActive: root.weActive
@@ -106,56 +111,82 @@ Item {
         plateOpacity: root.plateOpacity
         scaleFactor: root.s
 
-        // 1x1 Expressive Focus Ring Tile (tap to start/pause)
-        Item {
+        Loader {
+            id: layoutLoader
+
             anchors.fill: parent
-            anchors.topMargin: shell.topPadding
-            anchors.bottomMargin: shell.bottomPadding
-            anchors.leftMargin: shell.sidePadding
-            anchors.rightMargin: shell.sidePadding
-            visible: root.sizeMode === "1x1"
+            sourceComponent: {
+                switch (root.effectiveSize) {
+                case "1x2":
+                    return layout1x2;
+                case "2x2":
+                    return layout2x2;
+                default:
+                    return layout1x1;
+                }
+            }
+        }
+    }
+
+    // 1x1 Expressive Focus Ring Tile (tap to start/pause)
+    Component {
+        id: layout1x1
+
+        Item {
+            readonly property int ringStroke: Math.max(4, Math.round(6 * root.s))
+
+            clip: true
 
             Item {
+                id: ringBox
+
                 anchors.centerIn: parent
-                width: Math.min(parent.width, parent.height)
+                width: Math.max(40, shell.safeInnerBox)
                 height: width
 
                 CircularProgress {
                     anchors.fill: parent
                     value: root.ringProgress
-                    wavy: root.visible && root.sizeMode === "1x1" && root.isTabRunning && !GameMode.enabled
+                    wavy: root.visible && root.effectiveSize === "1x1" && root.isTabRunning && !GameMode.enabled
                     wavePaused: !wavy
-                    strokeWidth: Math.max(5, Math.round(7 * root.s))
+                    strokeWidth: Math.max(4, Math.round(6 * root.s))
                     fgColour: root.accentColor
-                    bgColour: WidgetMetrics.trackSurface
-                    implicitSize: width
+                    bgColour: shell.trackSurface
+                    implicitSize: Math.max(40, shell.safeInnerBox)
                 }
 
                 ColumnLayout {
                     anchors.centerIn: parent
+                    width: Math.max(24, ringBox.width - Math.max(4, Math.round(6 * root.s)) * 2 - Math.round(10 * root.s))
                     spacing: 1
 
                     StyledText {
-                        Layout.alignment: Qt.AlignHCenter
+                        Layout.fillWidth: true
+                        Layout.minimumWidth: 0
+                        horizontalAlignment: Text.AlignHCenter
                         text: root.mainDisplay
-                        font: Tokens.font.clock.size(Math.round((shell.isShaped ? 18 : 22) * root.s)).weight(Font.Bold).build()
+                        font: Tokens.font.clock.size(Math.max(11, Math.round((shell.isShaped ? 17 : 21) * root.s))).weight(Font.Bold).build()
                         color: Colours.palette.m3onSurface
+                        elide: Text.ElideRight
                     }
 
                     RowLayout {
                         Layout.alignment: Qt.AlignHCenter
-                        spacing: 3
+                        Layout.maximumWidth: parent.width
+                        spacing: Math.max(2, Math.round(2 * root.s))
 
                         MaterialIcon {
                             text: root.isTabRunning ? "pause" : "play_arrow"
-                            fontStyle: Tokens.font.icon.builders.small.scale(0.85 * root.s).build()
+                            fontStyle: Tokens.font.icon.builders.small.scale(WidgetMetrics.safeFontScale(root.s, 0.82)).build()
                             color: root.accentColor
                         }
 
                         StyledText {
-                            text: root.stateLabel
-                            font: Tokens.font.label.builders.small.scale(Math.max(0.8, root.s * 0.85)).build()
+                            Layout.minimumWidth: 0
+                            text: root.compactStateLabel
+                            font: Tokens.font.label.builders.small.scale(WidgetMetrics.safeFontScale(root.s, 0.84)).weight(Font.Medium).build()
                             color: Colours.palette.m3onSurfaceVariant
+                            elide: Text.ElideRight
                         }
                     }
                 }
@@ -167,46 +198,61 @@ Item {
                 }
             }
         }
+    }
 
-        // 1x2 Wide Timer Control Strip
+    // 1x2 Wide Timer Control Strip
+    Component {
+        id: layout1x2
+
         RowLayout {
             anchors.fill: parent
             anchors.margins: shell.contentPadding
-            visible: root.sizeMode === "1x2"
-            spacing: Math.round(Tokens.spacing.medium * root.s)
+            spacing: Math.max(6, Math.round(Tokens.spacing.medium * root.s))
 
             Item {
-                Layout.preferredWidth: Math.round(98 * root.s)
-                Layout.preferredHeight: Math.round(98 * root.s)
+                id: wideRing
+
+                readonly property int ringStroke: Math.max(4, Math.round(6 * root.s))
+
+                Layout.fillWidth: false
+                Layout.preferredWidth: Math.round(96 * root.s)
+                Layout.preferredHeight: Math.round(96 * root.s)
                 Layout.alignment: Qt.AlignVCenter
 
                 CircularProgress {
                     anchors.fill: parent
                     value: root.ringProgress
-                    wavy: root.visible && root.sizeMode === "1x2" && root.isTabRunning && !GameMode.enabled
+                    wavy: root.visible && root.effectiveSize === "1x2" && root.isTabRunning && !GameMode.enabled
                     wavePaused: !wavy
-                    strokeWidth: Math.max(4, Math.round(6 * root.s))
+                    strokeWidth: wideRing.ringStroke
                     fgColour: root.accentColor
-                    bgColour: WidgetMetrics.trackSurface
-                    implicitSize: width
+                    bgColour: shell.trackSurface
+                    implicitSize: Math.round(96 * root.s)
                 }
 
                 ColumnLayout {
                     anchors.centerIn: parent
+                    width: Math.max(24, wideRing.width - wideRing.ringStroke * 2 - Math.round(8 * root.s))
                     spacing: 0
 
                     StyledText {
-                        Layout.alignment: Qt.AlignHCenter
+                        Layout.fillWidth: true
+                        Layout.minimumWidth: 0
+                        horizontalAlignment: Text.AlignHCenter
                         text: root.mainDisplay
-                        font: Tokens.font.clock.size(Math.round(20 * root.s)).weight(Font.Bold).build()
+                        font: Tokens.font.clock.size(Math.max(12, Math.round(19 * root.s))).weight(Font.Bold).build()
                         color: Colours.palette.m3onSurface
+                        elide: Text.ElideRight
                     }
 
                     StyledText {
-                        Layout.alignment: Qt.AlignHCenter
-                        text: root.stateLabel
-                        font: Tokens.font.label.builders.small.scale(0.8).build()
+                        Layout.fillWidth: true
+                        Layout.minimumWidth: 0
+                        horizontalAlignment: Text.AlignHCenter
+                        text: root.compactStateLabel
+                        font: Tokens.font.label.builders.small.scale(WidgetMetrics.safeFontScale(root.s, 0.8)).build()
                         color: root.accentColor
+                        elide: Text.ElideRight
                     }
                 }
 
@@ -219,57 +265,68 @@ Item {
 
             ColumnLayout {
                 Layout.fillWidth: true
+                Layout.minimumWidth: 0
                 Layout.fillHeight: true
-                spacing: Math.round(Tokens.spacing.small * root.s)
+                spacing: Math.max(3, Math.round(Tokens.spacing.small * root.s))
 
                 ButtonRow {
                     Layout.fillWidth: true
-                    spacing: Tokens.spacing.extraSmall
+                    spacing: Math.max(2, Math.round(Tokens.spacing.extraSmall * root.s))
 
-                    TextButton {
+                    WidgetTextButton {
                         fillWidth: true
                         text: Tr.tr("Focus")
                         isRound: true
+                        translucent: shell.isTranslucent
+                        scaleFactor: root.s * 0.92
                         type: root.selectedTab === "focus" ? TextButton.Filled : TextButton.Tonal
-                        verticalPadding: Tokens.padding.extraSmall
-                        horizontalPadding: Tokens.padding.small
+                        verticalPadding: Math.max(3, Math.round(Tokens.padding.extraSmall * root.s))
+                        horizontalPadding: Math.max(4, Math.round(Tokens.padding.small * root.s))
                         onClicked: root.selectedTab = "focus"
                     }
 
-                    TextButton {
+                    WidgetTextButton {
                         fillWidth: true
                         text: Tr.tr("Watch")
                         isRound: true
+                        translucent: shell.isTranslucent
+                        scaleFactor: root.s * 0.92
                         type: root.selectedTab === "stopwatch" ? TextButton.Filled : TextButton.Tonal
-                        verticalPadding: Tokens.padding.extraSmall
-                        horizontalPadding: Tokens.padding.small
+                        verticalPadding: Math.max(3, Math.round(Tokens.padding.extraSmall * root.s))
+                        horizontalPadding: Math.max(4, Math.round(Tokens.padding.small * root.s))
                         onClicked: root.selectedTab = "stopwatch"
                     }
                 }
 
                 RowLayout {
                     Layout.fillWidth: true
+                    Layout.minimumWidth: 0
                     visible: root.selectedTab === "focus"
-                    spacing: 4
+                    spacing: Math.max(2, Math.round(4 * root.s))
 
                     StyledText {
                         Layout.fillWidth: true
+                        Layout.minimumWidth: 0
                         text: `${root.focusDurationMins} min` + (FocusTimer.completedSessions > 0 ? ` · #${FocusTimer.completedSessions + 1}` : "")
-                        font: Tokens.font.label.small
+                        font: Tokens.font.label.builders.small.scale(WidgetMetrics.safeFontScale(root.s, 0.92)).build()
                         color: Colours.palette.m3onSurfaceVariant
                         elide: Text.ElideRight
                     }
 
-                    IconButton {
+                    WidgetIconButton {
                         icon: "remove"
                         type: IconButton.Text
+                        translucent: shell.isTranslucent
+                        scaleFactor: root.s * 0.9
                         disabled: !root.focusActive
                         onClicked: root.stepDuration(-5)
                     }
 
-                    IconButton {
+                    WidgetIconButton {
                         icon: "add"
                         type: IconButton.Text
+                        translucent: shell.isTranslucent
+                        scaleFactor: root.s * 0.9
                         disabled: !root.focusActive
                         onClicked: root.stepDuration(5)
                     }
@@ -281,484 +338,351 @@ Item {
 
                 ButtonRow {
                     Layout.fillWidth: true
-                    spacing: Tokens.spacing.extraSmall
+                    spacing: Math.max(2, Math.round(Tokens.spacing.extraSmall * root.s))
 
-                    IconButton {
+                    WidgetIconButton {
                         fillWidth: true
                         icon: root.isTabRunning ? "pause" : "play_arrow"
                         type: IconButton.Filled
                         isRound: true
                         isToggle: true
                         checked: root.isTabRunning
+                        translucent: shell.isTranslucent
+                        scaleFactor: root.s
                         disabled: !root.canControlTab
                         onClicked: root.toggleCurrentTab()
                     }
 
-                    IconButton {
+                    WidgetIconButton {
                         fillWidth: true
                         visible: root.selectedTab === "focus"
                         icon: "skip_next"
                         type: IconButton.Tonal
                         isRound: true
+                        translucent: shell.isTranslucent
+                        scaleFactor: root.s
                         disabled: !root.focusActive || !FocusTimer.sessionActive
                         onClicked: FocusTimer.skipPhase()
                     }
 
-                    IconButton {
+                    WidgetIconButton {
                         fillWidth: true
                         icon: "replay"
                         type: IconButton.Tonal
                         isRound: true
+                        translucent: shell.isTranslucent
+                        scaleFactor: root.s
                         disabled: !root.canControlTab
                         onClicked: FocusTimer.reset()
                     }
                 }
             }
         }
+    }
 
-        // 2x1 Tall Tower Focus Card
+    // 2x2 Complete Focus + Today + Presets Card
+    Component {
+        id: layout2x2
+
         ColumnLayout {
             anchors.fill: parent
             anchors.margins: shell.contentPadding
-            visible: root.sizeMode === "2x1"
-            spacing: Math.round(Tokens.spacing.small * root.s)
-
-            ButtonRow {
-                Layout.fillWidth: true
-                spacing: Tokens.spacing.extraSmall
-
-                TextButton {
-                    fillWidth: true
-                    text: Tr.tr("Focus")
-                    isRound: true
-                    type: root.selectedTab === "focus" ? TextButton.Filled : TextButton.Tonal
-                    verticalPadding: Tokens.padding.extraSmall
-                    horizontalPadding: Tokens.padding.extraSmall
-                    onClicked: root.selectedTab = "focus"
-                }
-
-                TextButton {
-                    fillWidth: true
-                    text: Tr.tr("Watch")
-                    isRound: true
-                    type: root.selectedTab === "stopwatch" ? TextButton.Filled : TextButton.Tonal
-                    verticalPadding: Tokens.padding.extraSmall
-                    horizontalPadding: Tokens.padding.extraSmall
-                    onClicked: root.selectedTab = "stopwatch"
-                }
-            }
-
-            Item {
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-
-                Item {
-                    anchors.centerIn: parent
-                    width: Math.min(parent.width, parent.height, Math.round(124 * root.s))
-                    height: width
-
-                    CircularProgress {
-                        anchors.fill: parent
-                        value: root.ringProgress
-                        wavy: root.visible && root.sizeMode === "2x1" && root.isTabRunning && !GameMode.enabled
-                        wavePaused: !wavy
-                        strokeWidth: Math.max(5, Math.round(7 * root.s))
-                        fgColour: root.accentColor
-                        bgColour: WidgetMetrics.trackSurface
-                        implicitSize: width
-                    }
-
-                    ColumnLayout {
-                        anchors.centerIn: parent
-                        spacing: 1
-
-                        StyledText {
-                            Layout.alignment: Qt.AlignHCenter
-                            text: root.mainDisplay
-                            font: Tokens.font.clock.size(Math.round(24 * root.s)).weight(Font.Bold).build()
-                            color: Colours.palette.m3onSurface
-                        }
-
-                        StyledText {
-                            Layout.alignment: Qt.AlignHCenter
-                            text: root.stateLabel
-                            font: Tokens.font.label.small
-                            color: root.accentColor
-                        }
-                    }
-                }
-            }
+            spacing: Math.max(4, Math.round(Tokens.spacing.small * root.s))
 
             RowLayout {
                 Layout.fillWidth: true
-                visible: root.selectedTab === "focus"
-                spacing: 4
-
-                IconButton {
-                    icon: "remove"
-                    type: IconButton.Tonal
-                    disabled: !root.focusActive
-                    onClicked: root.stepDuration(-5)
-                }
-
-                StyledText {
-                    Layout.fillWidth: true
-                    horizontalAlignment: Text.AlignHCenter
-                    text: `${root.focusDurationMins}m`
-                    font: Tokens.font.label.builders.medium.weight(Font.DemiBold).build()
-                    color: Colours.palette.m3onSurface
-                }
-
-                IconButton {
-                    icon: "add"
-                    type: IconButton.Tonal
-                    disabled: !root.focusActive
-                    onClicked: root.stepDuration(5)
-                }
-            }
-
-            ButtonRow {
-                Layout.fillWidth: true
-                spacing: Tokens.spacing.extraSmall
-
-                IconButton {
-                    fillWidth: true
-                    icon: root.isTabRunning ? "pause" : "play_arrow"
-                    type: IconButton.Filled
-                    isRound: true
-                    isToggle: true
-                    checked: root.isTabRunning
-                    disabled: !root.canControlTab
-                    onClicked: root.toggleCurrentTab()
-                }
-
-                IconButton {
-                    fillWidth: true
-                    visible: root.selectedTab === "focus"
-                    icon: "skip_next"
-                    type: IconButton.Tonal
-                    isRound: true
-                    disabled: !root.focusActive || !FocusTimer.sessionActive
-                    onClicked: FocusTimer.skipPhase()
-                }
-
-                IconButton {
-                    fillWidth: true
-                    icon: "replay"
-                    type: IconButton.Tonal
-                    isRound: true
-                    disabled: !root.canControlTab
-                    onClicked: FocusTimer.reset()
-                }
-            }
-        }
-
-        // 2x2 Square Focus Card & 2x3 Split Focus + Stats Hub
-        RowLayout {
-            anchors.fill: parent
-            anchors.topMargin: shell.topPadding
-            anchors.bottomMargin: shell.bottomPadding
-            anchors.leftMargin: shell.sidePadding
-            anchors.rightMargin: shell.sidePadding
-            visible: root.sizeMode === "2x2" || root.sizeMode === "2x3"
-            spacing: Math.round(Tokens.spacing.large * root.s)
-
-            ColumnLayout {
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                spacing: Math.round(Tokens.spacing.small * root.s)
+                Layout.minimumWidth: 0
+                spacing: Math.max(4, Math.round(Tokens.spacing.small * root.s))
 
                 ButtonRow {
                     Layout.fillWidth: true
-                    Layout.minimumHeight: Math.round(32 * root.s)
-                    spacing: Tokens.spacing.extraSmall
+                    Layout.minimumHeight: Math.round(30 * root.s)
+                    spacing: Math.max(2, Math.round(Tokens.spacing.extraSmall * root.s))
 
-                    TextButton {
+                    WidgetTextButton {
                         fillWidth: true
                         text: Tr.tr("Focus")
                         isRound: true
+                        translucent: shell.isTranslucent
+                        scaleFactor: root.s * 0.94
                         type: root.selectedTab === "focus" ? TextButton.Filled : TextButton.Tonal
-                        verticalPadding: Tokens.padding.extraSmall
-                        horizontalPadding: Tokens.padding.small
+                        verticalPadding: Math.max(3, Math.round(Tokens.padding.extraSmall * root.s))
+                        horizontalPadding: Math.max(6, Math.round(Tokens.padding.small * root.s))
                         onClicked: root.selectedTab = "focus"
                     }
 
-                    TextButton {
+                    WidgetTextButton {
                         fillWidth: true
                         text: Tr.tr("Stopwatch")
                         isRound: true
+                        translucent: shell.isTranslucent
+                        scaleFactor: root.s * 0.94
                         type: root.selectedTab === "stopwatch" ? TextButton.Filled : TextButton.Tonal
-                        verticalPadding: Tokens.padding.extraSmall
-                        horizontalPadding: Tokens.padding.small
+                        verticalPadding: Math.max(3, Math.round(Tokens.padding.extraSmall * root.s))
+                        horizontalPadding: Math.max(6, Math.round(Tokens.padding.small * root.s))
                         onClicked: root.selectedTab = "stopwatch"
                     }
                 }
 
-                Item {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
+                StyledRect {
+                    Layout.fillWidth: false
+                    Layout.preferredHeight: Math.round(28 * root.s)
+                    Layout.preferredWidth: Math.round(todayBadgeRow.implicitWidth + Math.round(14 * root.s))
+                    Layout.maximumWidth: Math.round(92 * root.s)
+                    clip: true
+                    radius: Math.round(14 * root.s)
+                    color: shell.primaryContainerTint
 
-                    Item {
+                    RowLayout {
+                        id: todayBadgeRow
+
                         anchors.centerIn: parent
-                        width: Math.min(parent.width, parent.height, Math.round(148 * root.s))
-                        height: width
+                        width: Math.min(implicitWidth, Math.max(0, parent.width - Math.round(10 * root.s)))
+                        spacing: Math.max(2, Math.round(3 * root.s))
 
-                        CircularProgress {
-                            anchors.fill: parent
-                            value: root.ringProgress
-                            wavy: root.visible && (root.sizeMode === "2x2" || root.sizeMode === "2x3") && root.isTabRunning && !GameMode.enabled
-                            wavePaused: !wavy
-                            strokeWidth: Math.max(6, Math.round(9 * root.s))
-                            fgColour: root.accentColor
-                            bgColour: WidgetMetrics.trackSurface
-                            implicitSize: width
+                        MaterialIcon {
+                            text: "local_fire_department"
+                            fontStyle: Tokens.font.icon.builders.small.scale(WidgetMetrics.safeFontScale(root.s, 0.85)).build()
+                            color: Colours.palette.m3onPrimaryContainer
                         }
 
-                        ColumnLayout {
-                            anchors.centerIn: parent
-                            spacing: 2
-
-                            StyledText {
-                                Layout.alignment: Qt.AlignHCenter
-                                text: root.mainDisplay
-                                font: Tokens.font.clock.size(Math.round(32 * root.s)).weight(Font.Bold).build()
-                                color: Colours.palette.m3onSurface
-                            }
-
-                            StyledRect {
-                                Layout.alignment: Qt.AlignHCenter
-                                Layout.preferredHeight: Math.round(20 * root.s)
-                                Layout.preferredWidth: Math.round(phaseTag.implicitWidth + 16)
-                                radius: Math.round(10 * root.s)
-                                color: Colours.palette.m3secondaryContainer
-
-                                StyledText {
-                                    id: phaseTag
-
-                                    anchors.centerIn: parent
-                                    text: root.stateLabel + (root.selectedTab === "focus" && FocusTimer.completedSessions > 0 ? (" · #" + (FocusTimer.completedSessions + 1)) : "")
-                                    font: Tokens.font.label.small
-                                    color: Colours.palette.m3onSecondaryContainer
-                                }
-                            }
+                        StyledText {
+                            Layout.minimumWidth: 0
+                            text: FocusLedger.fmt(FocusLedger.todaySecs)
+                            font: Tokens.font.label.builders.small.scale(WidgetMetrics.safeFontScale(root.s, 0.88)).weight(Font.Bold).build()
+                            color: Colours.palette.m3onPrimaryContainer
+                            elide: Text.ElideRight
                         }
                     }
                 }
+            }
+
+            Item {
+                id: sqRingHost
+
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+
+                Item {
+                    id: sqRing
+
+                    readonly property int ringStroke: Math.max(5, Math.round(8 * root.s))
+                    readonly property int boxSize: Math.max(48, Math.round(Math.min(sqRingHost.width, sqRingHost.height, 134 * root.s)))
+
+                    anchors.centerIn: parent
+                    width: boxSize
+                    height: boxSize
+
+                    CircularProgress {
+                        anchors.fill: parent
+                        value: root.ringProgress
+                        wavy: root.visible && root.effectiveSize === "2x2" && root.isTabRunning && !GameMode.enabled
+                        wavePaused: !wavy
+                        strokeWidth: sqRing.ringStroke
+                        fgColour: root.accentColor
+                        bgColour: shell.trackSurface
+                        implicitSize: sqRing.boxSize
+                    }
+
+                    ColumnLayout {
+                        anchors.centerIn: parent
+                        width: Math.max(24, sqRing.width - sqRing.ringStroke * 2 - Math.round(10 * root.s))
+                        spacing: Math.max(1, Math.round(2 * root.s))
+
+                        StyledText {
+                            Layout.fillWidth: true
+                            Layout.minimumWidth: 0
+                            horizontalAlignment: Text.AlignHCenter
+                            text: root.mainDisplay
+                            font: Tokens.font.clock.size(Math.max(14, Math.round(27 * root.s))).weight(Font.Bold).build()
+                            color: Colours.palette.m3onSurface
+                            elide: Text.ElideRight
+                        }
+
+                        StyledRect {
+                            Layout.alignment: Qt.AlignHCenter
+                            Layout.maximumWidth: parent.width
+                            Layout.preferredHeight: Math.round(20 * root.s)
+                            Layout.preferredWidth: Math.min(parent.width, Math.round(phaseTag.implicitWidth + Math.round(14 * root.s)))
+                            clip: true
+                            radius: Math.round(10 * root.s)
+                            color: shell.secondaryContainerTint
+
+                            StyledText {
+                                id: phaseTag
+
+                                anchors.centerIn: parent
+                                width: Math.min(implicitWidth, Math.max(0, parent.width - Math.round(10 * root.s)))
+                                horizontalAlignment: Text.AlignHCenter
+                                text: root.compactStateLabel + (root.selectedTab === "focus" && FocusTimer.completedSessions > 0 ? (" · #" + (FocusTimer.completedSessions + 1)) : "")
+                                font: Tokens.font.label.builders.small.scale(WidgetMetrics.safeFontScale(root.s, 0.86)).weight(Font.Medium).build()
+                                color: Colours.palette.m3onSecondaryContainer
+                                elide: Text.ElideRight
+                            }
+                        }
+                    }
+
+                    StateLayer {
+                        enabled: root.locked && root.canControlTab
+                        radius: width / 2
+                        onClicked: root.toggleCurrentTab()
+                    }
+                }
+            }
+
+            // Duration stepper + Quick Presets combined row
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.minimumWidth: 0
+                visible: root.selectedTab === "focus"
+                spacing: Math.max(4, Math.round(6 * root.s))
 
                 StyledRect {
-                    Layout.alignment: Qt.AlignHCenter
-                    Layout.preferredWidth: Math.min(parent.width, Math.round(188 * root.s))
-                    Layout.preferredHeight: Math.round(32 * root.s)
-                    visible: root.selectedTab === "focus"
-                    radius: Math.round(16 * root.s)
-                    color: WidgetMetrics.innerSurface
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 0
+                    Layout.preferredHeight: Math.round(30 * root.s)
+                    clip: true
+                    radius: Math.round(15 * root.s)
+                    color: shell.innerSurface
                     border.width: 1
-                    border.color: WidgetMetrics.innerBorder
+                    border.color: shell.innerBorder
 
                     RowLayout {
                         anchors.fill: parent
-                        anchors.leftMargin: 4
-                        anchors.rightMargin: 4
-                        spacing: 4
+                        anchors.leftMargin: Math.max(3, Math.round(4 * root.s))
+                        anchors.rightMargin: Math.max(3, Math.round(4 * root.s))
+                        spacing: Math.max(2, Math.round(4 * root.s))
 
                         StyledRect {
-                            Layout.preferredWidth: Math.round(24 * root.s)
-                            Layout.preferredHeight: Math.round(24 * root.s)
-                            radius: Math.round(12 * root.s)
-                            color: WidgetMetrics.innerSurfaceStrong
+                            Layout.fillWidth: false
+                            Layout.preferredWidth: Math.round(22 * root.s)
+                            Layout.preferredHeight: Math.round(22 * root.s)
+                            radius: Math.round(11 * root.s)
+                            color: shell.innerSurfaceStrong
                             opacity: !root.focusActive ? 0.45 : 1.0
 
                             MaterialIcon {
                                 anchors.centerIn: parent
                                 text: "remove"
-                                fontStyle: Tokens.font.icon.small
+                                fontStyle: Tokens.font.icon.builders.small.scale(WidgetMetrics.safeFontScale(root.s, 0.88)).build()
                                 color: Colours.palette.m3onSurface
                             }
 
                             StateLayer {
                                 enabled: root.locked && root.focusActive
+                                radius: parent.radius
                                 onClicked: root.stepDuration(-5)
                             }
                         }
 
                         StyledText {
                             Layout.fillWidth: true
+                            Layout.minimumWidth: 0
                             horizontalAlignment: Text.AlignHCenter
-                            text: Tr.tr("%1 min").arg(root.focusDurationMins)
-                            font: Tokens.font.label.builders.medium.weight(Font.DemiBold).build()
+                            text: Tr.tr("%1m").arg(root.focusDurationMins)
+                            font: Tokens.font.label.builders.medium.scale(WidgetMetrics.safeFontScale(root.s, 0.94)).weight(Font.DemiBold).build()
                             color: Colours.palette.m3onSurface
+                            elide: Text.ElideRight
                         }
 
                         StyledRect {
-                            Layout.preferredWidth: Math.round(24 * root.s)
-                            Layout.preferredHeight: Math.round(24 * root.s)
-                            radius: Math.round(12 * root.s)
-                            color: WidgetMetrics.innerSurfaceStrong
+                            Layout.fillWidth: false
+                            Layout.preferredWidth: Math.round(22 * root.s)
+                            Layout.preferredHeight: Math.round(22 * root.s)
+                            radius: Math.round(11 * root.s)
+                            color: shell.innerSurfaceStrong
                             opacity: !root.focusActive ? 0.45 : 1.0
 
                             MaterialIcon {
                                 anchors.centerIn: parent
                                 text: "add"
-                                fontStyle: Tokens.font.icon.small
+                                fontStyle: Tokens.font.icon.builders.small.scale(WidgetMetrics.safeFontScale(root.s, 0.88)).build()
                                 color: Colours.palette.m3onSurface
                             }
 
                             StateLayer {
                                 enabled: root.locked && root.focusActive
+                                radius: parent.radius
                                 onClicked: root.stepDuration(5)
                             }
                         }
                     }
                 }
 
-                ButtonRow {
-                    Layout.fillWidth: true
-                    Layout.minimumHeight: Math.round(34 * root.s)
-                    spacing: Tokens.spacing.small
+                Repeater {
+                    model: [15, 25, 50]
 
-                    IconTextButton {
-                        fillWidth: true
-                        icon: root.isTabRunning ? "pause" : "play_arrow"
-                        text: root.isTabRunning ? Tr.tr("Pause") : Tr.tr("Start")
-                        type: IconTextButton.Filled
-                        isRound: true
-                        isToggle: true
-                        checked: root.isTabRunning
-                        disabled: !root.canControlTab
-                        onClicked: root.toggleCurrentTab()
-                    }
+                    delegate: StyledRect {
+                        id: presetChip
 
-                    IconButton {
-                        fillWidth: false
-                        visible: root.selectedTab === "focus"
-                        icon: "skip_next"
-                        type: IconButton.Tonal
-                        isRound: true
-                        disabled: !root.focusActive || !FocusTimer.sessionActive
-                        onClicked: FocusTimer.skipPhase()
-                    }
+                        required property int modelData
+                        readonly property bool active: !FocusTimer.isStopwatch && Math.round(FocusTimer.durationSecs / 60) === modelData
 
-                    IconButton {
-                        fillWidth: false
-                        icon: "replay"
-                        type: IconButton.Tonal
-                        isRound: true
-                        disabled: !root.canControlTab
-                        onClicked: FocusTimer.reset()
+                        Layout.fillWidth: false
+                        Layout.preferredWidth: Math.round(40 * root.s)
+                        Layout.preferredHeight: Math.round(30 * root.s)
+                        clip: true
+                        radius: Math.round(15 * root.s)
+                        color: active ? shell.primaryContainerTint : shell.innerSurfaceStrong
+                        border.width: active ? 1 : 0
+                        border.color: Colours.palette.m3primary
+
+                        StyledText {
+                            anchors.centerIn: parent
+                            text: presetChip.modelData + "m"
+                            font: Tokens.font.label.builders.small.scale(WidgetMetrics.safeFontScale(root.s, 0.88)).weight(presetChip.active ? Font.Bold : Font.Medium).build()
+                            color: presetChip.active ? Colours.palette.m3onPrimaryContainer : Colours.palette.m3onSurface
+                        }
+
+                        StateLayer {
+                            enabled: root.locked && !FocusTimer.running && !FocusTimer.sessionActive
+                            radius: parent.radius
+                            onClicked: root.applyPresetMinutes(presetChip.modelData)
+                        }
                     }
                 }
             }
 
-            // 2x3 Right Today FocusLedger + Quick Presets Panel
-            StyledRect {
-                visible: root.sizeMode === "2x3"
-                Layout.preferredWidth: Math.round(176 * root.s)
-                Layout.fillHeight: true
-                radius: Tokens.rounding.extraLarge
-                color: WidgetMetrics.innerSurface
-                border.width: 1
-                border.color: WidgetMetrics.innerBorder
+            ButtonRow {
+                Layout.fillWidth: true
+                Layout.minimumHeight: Math.round(34 * root.s)
+                spacing: Math.max(4, Math.round(Tokens.spacing.small * root.s))
 
-                ColumnLayout {
-                    anchors.fill: parent
-                    anchors.margins: Math.round(Tokens.padding.medium * root.s)
-                    spacing: Math.round(Tokens.spacing.small * root.s)
+                WidgetIconTextButton {
+                    fillWidth: true
+                    icon: root.isTabRunning ? "pause" : "play_arrow"
+                    text: root.isTabRunning ? Tr.tr("Pause") : Tr.tr("Start")
+                    type: IconTextButton.Filled
+                    isRound: true
+                    isToggle: true
+                    checked: root.isTabRunning
+                    translucent: shell.isTranslucent
+                    scaleFactor: root.s
+                    disabled: !root.canControlTab
+                    onClicked: root.toggleCurrentTab()
+                }
 
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 6
+                WidgetIconButton {
+                    fillWidth: false
+                    visible: root.selectedTab === "focus"
+                    icon: "skip_next"
+                    type: IconButton.Tonal
+                    isRound: true
+                    translucent: shell.isTranslucent
+                    scaleFactor: root.s
+                    disabled: !root.focusActive || !FocusTimer.sessionActive
+                    onClicked: FocusTimer.skipPhase()
+                }
 
-                        MaterialShape {
-                            Layout.preferredWidth: 24
-                            Layout.preferredHeight: 24
-                            shape: MaterialShape.Sunny
-                            color: Colours.palette.m3primaryContainer
-
-                            MaterialIcon {
-                                anchors.centerIn: parent
-                                text: "local_fire_department"
-                                fontStyle: Tokens.font.icon.small
-                                color: Colours.palette.m3onPrimaryContainer
-                            }
-                        }
-
-                        StyledText {
-                            text: Tr.tr("Today")
-                            font: Tokens.font.title.builders.small.weight(Font.DemiBold).build()
-                            color: Colours.palette.m3onSurface
-                            Layout.fillWidth: true
-                        }
-                    }
-
-                    StyledRect {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: Math.round(54 * root.s)
-                        radius: Tokens.rounding.large
-                        color: Qt.alpha(Colours.palette.m3primaryContainer, 0.45)
-
-                        ColumnLayout {
-                            anchors.centerIn: parent
-                            spacing: 0
-
-                            StyledText {
-                                Layout.alignment: Qt.AlignHCenter
-                                text: FocusLedger.fmt(FocusLedger.todaySecs)
-                                font: Tokens.font.headline.builders.small.weight(Font.Bold).build()
-                                color: Colours.palette.m3onSurface
-                            }
-
-                            StyledText {
-                                Layout.alignment: Qt.AlignHCenter
-                                text: Tr.tr("%1 sessions · %2d streak").arg(FocusLedger.todaySessions).arg(FocusLedger.streak)
-                                font: Tokens.font.label.small
-                                color: Colours.palette.m3onSurfaceVariant
-                            }
-                        }
-                    }
-
-                    StyledText {
-                        text: Tr.tr("Quick Presets")
-                        font: Tokens.font.label.small
-                        color: Colours.palette.m3onSurfaceVariant
-                    }
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: Tokens.spacing.extraSmall
-
-                        Repeater {
-                            model: [15, 25, 50]
-
-                            delegate: StyledRect {
-                                id: presetChip
-
-                                required property int modelData
-                                readonly property bool active: !FocusTimer.isStopwatch && Math.round(FocusTimer.durationSecs / 60) === modelData
-
-                                Layout.fillWidth: true
-                                Layout.preferredHeight: Math.round(30 * root.s)
-                                radius: Math.round(15 * root.s)
-                                color: active ? Colours.palette.m3primaryContainer : WidgetMetrics.innerSurfaceStrong
-
-                                StyledText {
-                                    anchors.centerIn: parent
-                                    text: presetChip.modelData + "m"
-                                    font: Tokens.font.label.builders.small.weight(presetChip.active ? Font.Bold : Font.Medium).build()
-                                    color: presetChip.active ? Colours.palette.m3onPrimaryContainer : Colours.palette.m3onSurface
-                                }
-
-                                StateLayer {
-                                    enabled: root.locked && !FocusTimer.running && !FocusTimer.sessionActive
-                                    radius: parent.radius
-                                    onClicked: root.applyPresetMinutes(presetChip.modelData)
-                                }
-                            }
-                        }
-                    }
-
-                    Item {
-                        Layout.fillHeight: true
-                    }
+                WidgetIconButton {
+                    fillWidth: false
+                    icon: "replay"
+                    type: IconButton.Tonal
+                    isRound: true
+                    translucent: shell.isTranslucent
+                    scaleFactor: root.s
+                    disabled: !root.canControlTab
+                    onClicked: FocusTimer.reset()
                 }
             }
         }

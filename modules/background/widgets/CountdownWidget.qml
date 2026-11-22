@@ -16,12 +16,14 @@ Item {
     property bool weActive: false
     property bool locked: true
     property string sizeMode: "1x1"
+    property real widgetScale: WidgetMetrics.scale
     property string surfaceStyle: ""
     property bool blurEnabled: Config.background.desktopWidgets.blur
     property real plateOpacity: Config.background.desktopWidgets.opacity
     property var widgetOptions: ({})
 
-    readonly property real s: Math.max(0.7, Math.min(1.5, Config.background.desktopWidgets.scale ?? 1.0))
+    readonly property real s: Math.max(0.55, Math.min(2.2, widgetScale > 0 ? widgetScale : WidgetMetrics.scale))
+    readonly property string effectiveSize: WidgetMetrics.fallbackSizeFor("countdown", sizeMode)
     readonly property string todayKey: Qt.formatDate(Time.date, "yyyy-MM-dd")
     property int cycleOffset: 0
 
@@ -80,7 +82,7 @@ Item {
     }
     readonly property string subCountdownText: {
         if (!hasValidDate) return "";
-        if (daysLeft === 0) return Tr.tr("Day of milestone");
+        if (daysLeft === 0) return Tr.tr("Milestone");
         const prefix = daysLeft > 0 ? "" : "-";
         return weeksPart > 0 ? `${prefix}${weeksPart}w ${remPart}d` : `${prefix}${remPart}d`;
     }
@@ -106,15 +108,15 @@ Item {
         cycleOffset = (cycleOffset + 1) % countdownList.length;
     }
 
-    implicitWidth: WidgetMetrics.widthFor(sizeMode, s)
-    implicitHeight: WidgetMetrics.heightFor(sizeMode, "countdown", s)
+    implicitWidth: WidgetMetrics.widthFor(effectiveSize, s)
+    implicitHeight: WidgetMetrics.heightFor(effectiveSize, "countdown", s)
 
     WidgetCardShell {
         id: shell
 
         anchors.fill: parent
         widgetType: "countdown"
-        sizeMode: root.sizeMode
+        sizeMode: root.effectiveSize
         outerShape: root.widgetOptions?.outerShape ?? ""
         wallpaper: root.wallpaper
         weActive: root.weActive
@@ -123,53 +125,73 @@ Item {
         plateOpacity: root.plateOpacity
         scaleFactor: root.s
 
-        // 1x1 Expressive Countdown Tile (tap to cycle when multiple shared countdowns exist)
-        Item {
+        Loader {
+            id: layoutLoader
+
             anchors.fill: parent
-            anchors.topMargin: shell.topPadding
-            anchors.bottomMargin: shell.bottomPadding
-            anchors.leftMargin: shell.sidePadding
-            anchors.rightMargin: shell.sidePadding
-            visible: root.sizeMode === "1x1"
+            sourceComponent: {
+                switch (root.effectiveSize) {
+                case "1x2":
+                    return layout1x2;
+                case "2x2":
+                    return layout2x2;
+                default:
+                    return layout1x1;
+                }
+            }
+        }
+    }
+
+    // 1x1 Expressive Countdown Tile (tap to cycle when multiple shared countdowns exist)
+    Component {
+        id: layout1x1
+
+        Item {
+            clip: true
 
             ColumnLayout {
                 anchors.centerIn: parent
-                width: parent.width
-                spacing: Math.round(3 * root.s)
+                width: Math.max(24, parent.width - shell.sidePadding * 2)
+                spacing: Math.max(2, Math.round(3 * root.s))
 
                 StyledText {
                     Layout.fillWidth: true
+                    Layout.minimumWidth: 0
                     horizontalAlignment: Text.AlignHCenter
                     text: root.targetTitle
-                    font: Tokens.font.label.builders.small.scale(Math.max(0.85, root.s * 0.92)).weight(Font.DemiBold).build()
+                    font: Tokens.font.label.builders.small.scale(WidgetMetrics.safeFontScale(root.s, 0.9)).weight(Font.DemiBold).build()
                     color: Colours.palette.m3primary
                     elide: Text.ElideRight
                 }
 
                 StyledText {
                     Layout.fillWidth: true
+                    Layout.minimumWidth: 0
                     horizontalAlignment: Text.AlignHCenter
                     text: root.daysDisplay
-                    font: Tokens.font.clock.size(Math.round((shell.isShaped ? 24 : 30) * root.s)).weight(Font.Bold).build()
+                    font: Tokens.font.clock.size(Math.max(12, Math.round((shell.isShaped ? 23 : 29) * root.s))).weight(Font.Bold).build()
                     color: Colours.palette.m3onSurface
+                    elide: Text.ElideRight
                 }
 
                 StyledRect {
                     visible: root.hasValidDate
                     Layout.alignment: Qt.AlignHCenter
+                    Layout.maximumWidth: parent.width
                     Layout.preferredHeight: Math.round(18 * root.s)
-                    Layout.preferredWidth: Math.min(parent.width, Math.round(tileSubTxt.implicitWidth + 12 * root.s))
+                    Layout.preferredWidth: Math.min(parent.width, Math.round(tileSubTxt.implicitWidth + Math.round(12 * root.s)))
+                    clip: true
                     radius: Math.round(9 * root.s)
-                    color: WidgetMetrics.innerSurfaceStrong
+                    color: shell.innerSurfaceStrong
 
                     StyledText {
                         id: tileSubTxt
 
                         anchors.centerIn: parent
-                        width: Math.max(0, parent.width - Math.round(12 * root.s))
+                        width: Math.min(implicitWidth, Math.max(0, parent.width - Math.round(10 * root.s)))
                         horizontalAlignment: Text.AlignHCenter
                         text: shell.isShaped ? root.subCountdownText : root.formattedDate
-                        font: Tokens.font.label.builders.small.scale(Math.max(0.75, root.s * 0.85)).build()
+                        font: Tokens.font.label.builders.small.scale(WidgetMetrics.safeFontScale(root.s, 0.84)).build()
                         color: Colours.palette.m3onSurfaceVariant
                         elide: Text.ElideRight
                     }
@@ -177,47 +199,66 @@ Item {
             }
 
             StateLayer {
+                anchors.fill: parent
+                anchors.topMargin: shell.topPadding
+                anchors.bottomMargin: shell.bottomPadding
+                anchors.leftMargin: shell.sidePadding
+                anchors.rightMargin: shell.sidePadding
                 enabled: root.locked && !root.hasCustom && root.countdownList.length > 1
                 radius: shell.isShaped ? width / 2 : shell.radius
                 onClicked: root.cycleNext()
             }
         }
+    }
 
-        // 1x2 Wide Countdown Strip
+    // 1x2 Wide Countdown Strip
+    Component {
+        id: layout1x2
+
         RowLayout {
             anchors.fill: parent
             anchors.margins: shell.contentPadding
-            visible: root.sizeMode === "1x2"
-            spacing: Math.round(Tokens.spacing.medium * root.s)
+            spacing: Math.max(6, Math.round(Tokens.spacing.medium * root.s))
 
             Item {
-                Layout.preferredWidth: Math.round(96 * root.s)
-                Layout.preferredHeight: Math.round(96 * root.s)
+                id: medallionBox
+
+                Layout.fillWidth: false
+                Layout.preferredWidth: Math.round(94 * root.s)
+                Layout.preferredHeight: Math.round(94 * root.s)
                 Layout.alignment: Qt.AlignVCenter
 
                 MaterialShape {
                     anchors.fill: parent
+                    implicitSize: Math.round(94 * root.s)
                     shape: MaterialShape.Cookie9Sided
-                    color: Colours.palette.m3primaryContainer
+                    color: shell.primaryContainerTint
                 }
 
                 ColumnLayout {
                     anchors.centerIn: parent
+                    width: Math.max(24, medallionBox.width - Math.round(16 * root.s))
                     spacing: 0
 
                     StyledText {
-                        Layout.alignment: Qt.AlignHCenter
+                        Layout.fillWidth: true
+                        Layout.minimumWidth: 0
+                        horizontalAlignment: Text.AlignHCenter
                         text: root.daysDisplay
-                        font: Tokens.font.clock.size(Math.round(22 * root.s)).weight(Font.Bold).build()
+                        font: Tokens.font.clock.size(Math.max(12, Math.round(21 * root.s))).weight(Font.Bold).build()
                         color: Colours.palette.m3onPrimaryContainer
+                        elide: Text.ElideRight
                     }
 
                     StyledText {
-                        Layout.alignment: Qt.AlignHCenter
+                        Layout.fillWidth: true
+                        Layout.minimumWidth: 0
+                        horizontalAlignment: Text.AlignHCenter
                         visible: root.subCountdownText !== ""
                         text: root.subCountdownText
-                        font: Tokens.font.label.builders.small.scale(0.85).build()
+                        font: Tokens.font.label.builders.small.scale(WidgetMetrics.safeFontScale(root.s, 0.84)).build()
                         color: Colours.palette.m3onPrimaryContainer
+                        elide: Text.ElideRight
                     }
                 }
 
@@ -230,8 +271,9 @@ Item {
 
             ColumnLayout {
                 Layout.fillWidth: true
+                Layout.minimumWidth: 0
                 Layout.fillHeight: true
-                spacing: Math.round(3 * root.s)
+                spacing: Math.max(2, Math.round(3 * root.s))
 
                 Item {
                     Layout.fillHeight: true
@@ -239,27 +281,30 @@ Item {
 
                 StyledText {
                     Layout.fillWidth: true
+                    Layout.minimumWidth: 0
                     text: root.targetTitle
-                    font: Tokens.font.title.builders.small.weight(Font.DemiBold).build()
+                    font: Tokens.font.title.builders.small.scale(WidgetMetrics.safeFontScale(root.s, 0.96)).weight(Font.DemiBold).build()
                     color: Colours.palette.m3onSurface
                     elide: Text.ElideRight
                 }
 
                 StyledText {
                     Layout.fillWidth: true
+                    Layout.minimumWidth: 0
                     text: root.formattedDate
-                    font: Tokens.font.label.medium
+                    font: Tokens.font.label.builders.medium.scale(WidgetMetrics.safeFontScale(root.s, 0.94)).build()
                     color: Colours.palette.m3primary
                     elide: Text.ElideRight
                 }
 
                 StyledText {
                     Layout.fillWidth: true
+                    Layout.minimumWidth: 0
                     visible: root.hasValidDate
                     text: root.daysLeft > 0
                         ? Tr.tr("%1 weeks, %2 days left").arg(root.weeksPart).arg(root.remPart)
                         : (root.daysLeft === 0 ? Tr.tr("Happening today") : Tr.tr("%1 days ago").arg(root.absDays))
-                    font: Tokens.font.label.small
+                    font: Tokens.font.label.builders.small.scale(WidgetMetrics.safeFontScale(root.s, 0.9)).build()
                     color: Colours.palette.m3onSurfaceVariant
                     elide: Text.ElideRight
                 }
@@ -269,127 +314,51 @@ Item {
                 }
             }
         }
+    }
 
-        // 2x1 Tall Tower Countdown Card
+    // 2x2 All Countdowns Bento Card
+    Component {
+        id: layout2x2
+
         ColumnLayout {
             anchors.fill: parent
             anchors.margins: shell.contentPadding
-            visible: root.sizeMode === "2x1"
-            spacing: Math.round(Tokens.spacing.small * root.s)
+            spacing: Math.max(4, Math.round(Tokens.spacing.small * root.s))
 
             RowLayout {
                 Layout.fillWidth: true
-                spacing: 4
-
-                MaterialIcon {
-                    text: "hourglass_top"
-                    fontStyle: Tokens.font.icon.small
-                    color: Colours.palette.m3primary
-                }
-
-                StyledText {
-                    Layout.fillWidth: true
-                    text: root.targetTitle
-                    font: Tokens.font.label.builders.medium.weight(Font.DemiBold).build()
-                    color: Colours.palette.m3onSurface
-                    elide: Text.ElideRight
-                }
-            }
-
-            Item {
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-
-                Item {
-                    anchors.centerIn: parent
-                    width: Math.min(parent.width, parent.height, Math.round(112 * root.s))
-                    height: width
-
-                    MaterialShape {
-                        anchors.fill: parent
-                        shape: MaterialShape.Sunny
-                        color: Colours.palette.m3primaryContainer
-                    }
-
-                    ColumnLayout {
-                        anchors.centerIn: parent
-                        spacing: 0
-
-                        StyledText {
-                            Layout.alignment: Qt.AlignHCenter
-                            text: root.daysDisplay
-                            font: Tokens.font.clock.size(Math.round(24 * root.s)).weight(Font.Bold).build()
-                            color: Colours.palette.m3onPrimaryContainer
-                        }
-
-                        StyledText {
-                            Layout.alignment: Qt.AlignHCenter
-                            visible: root.subCountdownText !== ""
-                            text: root.subCountdownText
-                            font: Tokens.font.label.small
-                            color: Colours.palette.m3onPrimaryContainer
-                        }
-                    }
-
-                    StateLayer {
-                        enabled: root.locked && !root.hasCustom && root.countdownList.length > 1
-                        radius: width / 2
-                        onClicked: root.cycleNext()
-                    }
-                }
-            }
-
-            StyledRect {
-                Layout.fillWidth: true
-                Layout.preferredHeight: Math.round(26 * root.s)
-                radius: Math.round(13 * root.s)
-                color: WidgetMetrics.innerSurfaceStrong
-
-                StyledText {
-                    anchors.centerIn: parent
-                    text: root.formattedDate
-                    font: Tokens.font.label.small
-                    color: Colours.palette.m3onSurfaceVariant
-                }
-            }
-        }
-
-        // 2x2 All Countdowns Bento Card
-        ColumnLayout {
-            anchors.fill: parent
-            anchors.margins: shell.contentPadding
-            visible: root.sizeMode === "2x2"
-            spacing: Math.round(Tokens.spacing.small * root.s)
-
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: Tokens.spacing.small
+                Layout.minimumWidth: 0
+                spacing: Math.max(4, Math.round(Tokens.spacing.small * root.s))
 
                 MaterialIcon {
                     text: "event_upcoming"
-                    fontStyle: Tokens.font.icon.medium
+                    fontStyle: Tokens.font.icon.builders.medium.scale(WidgetMetrics.safeFontScale(root.s, 0.96)).build()
                     color: Colours.palette.m3primary
                 }
 
                 StyledText {
                     Layout.fillWidth: true
+                    Layout.minimumWidth: 0
                     text: Tr.tr("Countdowns")
-                    font: Tokens.font.title.small
+                    font: Tokens.font.title.builders.small.scale(WidgetMetrics.safeFontScale(root.s, 0.96)).build()
                     color: Colours.palette.m3onSurface
+                    elide: Text.ElideRight
                 }
 
                 StyledRect {
                     visible: root.allDisplayItems.length > 0
-                    implicitHeight: 22
-                    implicitWidth: cdBadgeCount.implicitWidth + Tokens.padding.small * 2
-                    radius: Tokens.rounding.full
-                    color: WidgetMetrics.innerSurfaceStrong
+                    Layout.fillWidth: false
+                    Layout.preferredHeight: Math.round(22 * root.s)
+                    Layout.preferredWidth: Math.round(cdBadgeCount.implicitWidth + Math.round(Tokens.padding.small * 2 * root.s))
+                    radius: Math.round(11 * root.s)
+                    color: shell.innerSurfaceStrong
 
                     StyledText {
                         id: cdBadgeCount
+
                         anchors.centerIn: parent
                         text: `${root.allDisplayItems.length}`
-                        font: Tokens.font.label.small
+                        font: Tokens.font.label.builders.small.scale(WidgetMetrics.safeFontScale(root.s, 0.92)).build()
                         color: Colours.palette.m3onSurfaceVariant
                     }
                 }
@@ -401,10 +370,13 @@ Item {
 
                 StyledText {
                     anchors.centerIn: parent
+                    width: Math.max(24, parent.width - Math.round(16 * root.s))
+                    horizontalAlignment: Text.AlignHCenter
                     visible: root.allDisplayItems.length === 0
                     text: Tr.tr("Add countdowns in Nexus")
-                    font: Tokens.font.body.small
+                    font: Tokens.font.body.builders.small.scale(WidgetMetrics.safeFontScale(root.s, 0.94)).build()
                     color: Colours.palette.m3onSurfaceVariant
+                    elide: Text.ElideRight
                 }
 
                 Flickable {
@@ -419,7 +391,7 @@ Item {
                         id: bentoCol
 
                         width: parent.width
-                        spacing: Math.round(Tokens.spacing.small * root.s)
+                        spacing: Math.max(4, Math.round(Tokens.spacing.small * root.s))
 
                         Repeater {
                             model: root.allDisplayItems
@@ -441,52 +413,60 @@ Item {
 
                                 Layout.fillWidth: true
                                 implicitHeight: Math.round(54 * root.s)
-                                radius: Tokens.rounding.large
-                                color: WidgetMetrics.innerSurface
+                                clip: true
+                                radius: Math.round(Tokens.rounding.large * Math.min(1.2, Math.max(0.75, root.s)))
+                                color: shell.innerSurface
                                 border.width: 1
-                                border.color: WidgetMetrics.innerBorder
+                                border.color: shell.innerBorder
 
                                 RowLayout {
                                     anchors.fill: parent
-                                    anchors.leftMargin: Tokens.padding.small
-                                    anchors.rightMargin: Tokens.padding.medium
-                                    spacing: Tokens.spacing.small
+                                    anchors.leftMargin: Math.max(4, Math.round(Tokens.padding.small * root.s))
+                                    anchors.rightMargin: Math.max(6, Math.round(Tokens.padding.medium * root.s))
+                                    spacing: Math.max(4, Math.round(Tokens.spacing.small * root.s))
 
                                     MaterialShape {
+                                        Layout.fillWidth: false
+                                        Layout.preferredWidth: Math.round(34 * root.s)
+                                        Layout.preferredHeight: Math.round(34 * root.s)
                                         implicitSize: Math.round(34 * root.s)
                                         shape: bentoItem.isHero ? MaterialShape.Sunny : MaterialShape.Cookie6Sided
-                                        color: bentoItem.isHero ? Colours.palette.m3primaryContainer : Colours.palette.m3tertiaryContainer
+                                        color: bentoItem.isHero ? shell.primaryContainerTint : shell.tertiaryContainerTint
 
                                         MaterialIcon {
                                             anchors.centerIn: parent
                                             text: bentoItem.isHero ? "school" : "flag"
-                                            fontStyle: Tokens.font.icon.small
+                                            fontStyle: Tokens.font.icon.builders.small.scale(WidgetMetrics.safeFontScale(root.s, 0.94)).build()
                                             color: bentoItem.isHero ? Colours.palette.m3onPrimaryContainer : Colours.palette.m3onTertiaryContainer
                                         }
                                     }
 
                                     ColumnLayout {
                                         Layout.fillWidth: true
+                                        Layout.minimumWidth: 0
                                         spacing: 0
 
                                         StyledText {
                                             Layout.fillWidth: true
+                                            Layout.minimumWidth: 0
                                             text: bentoItem.modelData?.title ?? ""
-                                            font: Tokens.font.body.builders.small.weight(Font.DemiBold).build()
+                                            font: Tokens.font.body.builders.small.scale(WidgetMetrics.safeFontScale(root.s, 0.94)).weight(Font.DemiBold).build()
                                             color: Colours.palette.m3onSurface
                                             elide: Text.ElideRight
                                         }
 
                                         StyledText {
                                             Layout.fillWidth: true
+                                            Layout.minimumWidth: 0
                                             text: FocusLedger.formatDateShort(bentoItem.modelData?.date ?? "")
-                                            font: Tokens.font.label.small
+                                            font: Tokens.font.label.builders.small.scale(WidgetMetrics.safeFontScale(root.s, 0.88)).build()
                                             color: Colours.palette.m3onSurfaceVariant
                                             elide: Text.ElideRight
                                         }
                                     }
 
                                     ColumnLayout {
+                                        Layout.fillWidth: false
                                         spacing: 0
 
                                         StyledText {
@@ -494,7 +474,7 @@ Item {
                                             text: bentoItem.dLeft > 0
                                                 ? `${bentoItem.dLeft}d`
                                                 : (bentoItem.dLeft === 0 ? Tr.tr("Today") : `-${bentoItem.aDays}d`)
-                                            font: Tokens.font.title.builders.small.weight(Font.Bold).build()
+                                            font: Tokens.font.title.builders.small.scale(WidgetMetrics.safeFontScale(root.s, 0.92)).weight(Font.Bold).build()
                                             color: bentoItem.isHero ? Colours.palette.m3primary : Colours.palette.m3tertiary
                                         }
 
@@ -502,7 +482,7 @@ Item {
                                             Layout.alignment: Qt.AlignRight
                                             visible: bentoItem.dLeft > 0
                                             text: bentoItem.wPart > 0 ? `${bentoItem.wPart}w ${bentoItem.rPart}d` : `${bentoItem.rPart}d`
-                                            font: Tokens.font.label.small
+                                            font: Tokens.font.label.builders.small.scale(WidgetMetrics.safeFontScale(root.s, 0.86)).build()
                                             color: Colours.palette.m3onSurfaceVariant
                                         }
                                     }

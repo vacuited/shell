@@ -17,12 +17,14 @@ Item {
     property bool weActive: false
     property bool locked: true
     property string sizeMode: "2x1"
+    property real widgetScale: WidgetMetrics.scale
     property string surfaceStyle: ""
     property bool blurEnabled: Config.background.desktopWidgets.blur
     property real plateOpacity: Config.background.desktopWidgets.opacity
     property var widgetOptions: ({})
 
-    readonly property real s: Math.max(0.7, Math.min(1.5, Config.background.desktopWidgets.scale ?? 1.0))
+    readonly property real s: Math.max(0.55, Math.min(2.2, widgetScale > 0 ? widgetScale : WidgetMetrics.scale))
+    readonly property string effectiveSize: WidgetMetrics.fallbackSizeFor("todo", sizeMode)
     property bool adding: false
     property bool _editingHeld: false
 
@@ -69,8 +71,11 @@ Item {
 
     onAddingChanged: {
         setEditingActive(adding && locked);
-        if (adding)
+        if (adding) {
             addFocusTimer.restart();
+        } else if (layoutLoader.item?.inputField) {
+            layoutLoader.item.inputField.text = "";
+        }
     }
 
     onLockedChanged: {
@@ -80,18 +85,16 @@ Item {
 
     Component.onDestruction: setEditingActive(false)
 
-    implicitWidth: WidgetMetrics.widthFor(sizeMode, s)
-    implicitHeight: WidgetMetrics.heightFor(sizeMode, "todo", s)
+    implicitWidth: WidgetMetrics.widthFor(effectiveSize, s)
+    implicitHeight: WidgetMetrics.heightFor(effectiveSize, "todo", s)
 
     Timer {
         id: addFocusTimer
 
         interval: 30
         onTriggered: {
-            if (root.sizeMode === "2x3")
-                panoInput.forceActiveFocus();
-            else
-                mainInput.forceActiveFocus();
+            if (layoutLoader.item?.inputField)
+                layoutLoader.item.inputField.forceActiveFocus();
         }
     }
 
@@ -100,7 +103,7 @@ Item {
 
         anchors.fill: parent
         widgetType: "todo"
-        sizeMode: root.sizeMode
+        sizeMode: root.effectiveSize
         outerShape: root.widgetOptions?.outerShape ?? ""
         wallpaper: root.wallpaper
         weActive: root.weActive
@@ -109,138 +112,158 @@ Item {
         plateOpacity: root.plateOpacity
         scaleFactor: root.s
 
-        // 1x1 Expressive Progress & Open Count Tile
-        Item {
+        Loader {
+            id: layoutLoader
+
             anchors.fill: parent
-            anchors.topMargin: shell.topPadding
-            anchors.bottomMargin: shell.bottomPadding
-            anchors.leftMargin: shell.sidePadding
-            anchors.rightMargin: shell.sidePadding
-            visible: root.sizeMode === "1x1"
+            sourceComponent: root.effectiveSize === "1x1" ? layout1x1 : layoutStandard
+        }
+    }
+
+    // 1x1 Expressive Progress & Open Count Tile
+    Component {
+        id: layout1x1
+
+        Item {
+            readonly property int ringSize: Math.max(36, Math.round(Math.min((shell.isShaped ? 64 : 74) * root.s, shell.safeInnerBox - Math.round(22 * root.s))))
+
+            clip: true
 
             ColumnLayout {
                 anchors.centerIn: parent
-                width: parent.width
-                spacing: Math.round(4 * root.s)
+                width: Math.max(24, parent.width - shell.sidePadding * 2)
+                spacing: Math.max(2, Math.round(4 * root.s))
 
                 Item {
                     Layout.alignment: Qt.AlignHCenter
-                    Layout.preferredWidth: Math.round((shell.isShaped ? 68 : 78) * root.s)
-                    Layout.preferredHeight: Math.round((shell.isShaped ? 68 : 78) * root.s)
+                    Layout.preferredWidth: ringSize
+                    Layout.preferredHeight: ringSize
 
                     CircularProgress {
                         anchors.fill: parent
                         value: root.completionRatio
                         strokeWidth: Math.max(4, Math.round(6 * root.s))
                         fgColour: root.openCount === 0 ? Colours.palette.m3tertiary : Colours.palette.m3primary
-                        bgColour: WidgetMetrics.trackSurface
-                        implicitSize: width
+                        bgColour: shell.trackSurface
+                        implicitSize: ringSize
                     }
 
                     StyledText {
                         anchors.centerIn: parent
                         text: root.totalCount === 0 ? "0" : String(root.openCount)
-                        font: Tokens.font.clock.size(Math.round(28 * root.s)).weight(Font.Bold).build()
+                        font: Tokens.font.clock.size(Math.max(12, Math.round(ringSize * 0.36))).weight(Font.Bold).build()
                         color: Colours.palette.m3onSurface
                     }
                 }
 
                 StyledText {
                     Layout.fillWidth: true
+                    Layout.minimumWidth: 0
                     horizontalAlignment: Text.AlignHCenter
                     text: root.openCount === 0 && root.totalCount > 0 ? Tr.tr("All done") : Tr.tr("tasks left")
-                    font: Tokens.font.label.builders.small.scale(Math.max(0.84, root.s * 0.9)).weight(Font.DemiBold).build()
+                    font: Tokens.font.label.builders.small.scale(WidgetMetrics.safeFontScale(root.s, 0.88)).weight(Font.DemiBold).build()
                     color: root.openCount === 0 && root.totalCount > 0 ? Colours.palette.m3tertiary : Colours.palette.m3onSurfaceVariant
                     elide: Text.ElideRight
                 }
             }
         }
+    }
 
-        // 1x2, 2x1, 2x2 Standard Interactive Task Cards
+    // 1x2, 2x1, 2x2 Standard Interactive Task Cards
+    Component {
+        id: layoutStandard
+
         ColumnLayout {
+            property alias inputField: mainInput
+
             anchors.fill: parent
             anchors.margins: shell.contentPadding
-            visible: root.sizeMode === "1x2" || root.sizeMode === "2x1" || root.sizeMode === "2x2"
-            spacing: Math.round(Tokens.spacing.small * root.s)
+            spacing: Math.max(4, Math.round(Tokens.spacing.small * root.s))
 
             RowLayout {
                 Layout.fillWidth: true
-                spacing: 6
+                Layout.minimumWidth: 0
+                spacing: Math.max(3, Math.round(6 * root.s))
 
                 WidgetHeader {
                     Layout.fillWidth: true
                     title: Tr.tr("Todo")
                     icon: "checklist"
+                    scaleFactor: root.s
                 }
 
                 StyledRect {
                     visible: root.totalCount > 0
+                    Layout.fillWidth: false
                     Layout.preferredHeight: Math.round(22 * root.s)
-                    Layout.preferredWidth: Math.round(cntText.implicitWidth + 14)
+                    Layout.preferredWidth: Math.round(cntText.implicitWidth + Math.round(12 * root.s))
                     radius: Math.round(11 * root.s)
-                    color: root.openCount === 0 ? Colours.palette.m3tertiaryContainer : Colours.palette.m3primaryContainer
+                    color: root.openCount === 0 ? shell.tertiaryContainerTint : shell.primaryContainerTint
 
                     StyledText {
                         id: cntText
 
                         anchors.centerIn: parent
                         text: root.doneCount + "/" + root.totalCount
-                        font: Tokens.font.label.small
+                        font: Tokens.font.label.builders.small.scale(WidgetMetrics.safeFontScale(root.s, 0.9)).build()
                         color: root.openCount === 0 ? Colours.palette.m3onTertiaryContainer : Colours.palette.m3onPrimaryContainer
                     }
                 }
 
-                IconButton {
-                    visible: root.doneCount > 0
+                WidgetIconButton {
+                    visible: root.doneCount > 0 && root.effectiveSize !== "2x1"
                     icon: "delete_sweep"
                     type: IconButton.Text
+                    translucent: shell.isTranslucent
+                    scaleFactor: root.s
                     onClicked: root.clearCompleted()
                 }
 
-                IconButton {
+                WidgetIconButton {
                     icon: root.adding ? "close" : "add"
                     type: IconButton.Tonal
                     isRound: true
-                    onClicked: {
-                        root.adding = !root.adding;
-                        if (!root.adding)
-                            mainInput.text = "";
-                    }
+                    translucent: shell.isTranslucent
+                    scaleFactor: root.s
+                    onClicked: root.adding = !root.adding
                 }
             }
 
             StyledProgressBar {
-                visible: root.sizeMode !== "1x2" && root.totalCount > 0
+                visible: root.effectiveSize !== "1x2" && root.totalCount > 0
                 Layout.fillWidth: true
-                Layout.preferredHeight: Math.round(8 * root.s)
+                Layout.preferredHeight: Math.max(5, Math.round(8 * root.s))
                 value: root.completionRatio
                 fgColour: Colours.palette.m3primary
-                bgColour: WidgetMetrics.trackSurface
+                bgColour: shell.trackSurface
             }
 
             StyledRect {
                 visible: root.adding
                 Layout.fillWidth: true
-                Layout.preferredHeight: Math.round(34 * root.s)
-                radius: Tokens.rounding.medium
-                color: WidgetMetrics.innerSurfaceStrong
+                Layout.preferredHeight: Math.round(32 * root.s)
+                clip: true
+                radius: Math.round(Tokens.rounding.medium * Math.min(1.2, Math.max(0.75, root.s)))
+                color: shell.innerSurfaceStrong
                 border.width: mainInput.activeFocus ? 1.5 : 1
-                border.color: mainInput.activeFocus ? Colours.palette.m3primary : Colours.palette.m3outlineVariant
+                border.color: mainInput.activeFocus ? Colours.palette.m3primary : shell.innerBorder
 
                 RowLayout {
                     anchors.fill: parent
-                    anchors.leftMargin: 10
-                    anchors.rightMargin: 6
-                    spacing: 4
+                    anchors.leftMargin: Math.round(10 * root.s)
+                    anchors.rightMargin: Math.round(4 * root.s)
+                    spacing: Math.max(2, Math.round(4 * root.s))
 
                     TextInput {
                         id: mainInput
 
                         Layout.fillWidth: true
+                        Layout.minimumWidth: 0
                         color: Colours.palette.m3onSurface
-                        font: Tokens.font.body.small
+                        font: Tokens.font.body.builders.small.scale(WidgetMetrics.safeFontScale(root.s, 0.94)).build()
                         verticalAlignment: TextInput.AlignVCenter
                         selectByMouse: true
+                        clip: true
                         Keys.onReturnPressed: root.submitTodo(mainInput)
                         Keys.onEnterPressed: root.submitTodo(mainInput)
                         Keys.onEscapePressed: {
@@ -252,15 +275,18 @@ Item {
                             anchors.fill: parent
                             verticalAlignment: Text.AlignVCenter
                             text: Tr.tr("New task...")
-                            font: Tokens.font.body.small
+                            font: Tokens.font.body.builders.small.scale(WidgetMetrics.safeFontScale(root.s, 0.94)).build()
                             color: Qt.alpha(Colours.palette.m3onSurfaceVariant, 0.65)
                             visible: mainInput.text === "" && !mainInput.activeFocus
+                            elide: Text.ElideRight
                         }
                     }
 
-                    IconButton {
+                    WidgetIconButton {
                         icon: "check"
                         type: IconButton.Text
+                        translucent: shell.isTranslucent
+                        scaleFactor: root.s * 0.92
                         onClicked: root.submitTodo(mainInput)
                     }
                 }
@@ -272,10 +298,13 @@ Item {
 
                 StyledText {
                     anchors.centerIn: parent
+                    width: Math.max(24, parent.width - Math.round(12 * root.s))
+                    horizontalAlignment: Text.AlignHCenter
                     visible: root.totalCount === 0
                     text: Tr.tr("No tasks yet")
-                    font: Tokens.font.body.small
+                    font: Tokens.font.body.builders.small.scale(WidgetMetrics.safeFontScale(root.s, 0.94)).build()
                     color: Colours.palette.m3onSurfaceVariant
+                    elide: Text.ElideRight
                 }
 
                 ListView {
@@ -284,7 +313,7 @@ Item {
                     anchors.fill: parent
                     visible: root.totalCount > 0
                     clip: true
-                    spacing: Math.round(6 * root.s)
+                    spacing: Math.max(3, Math.round(6 * root.s))
                     boundsBehavior: Flickable.StopAtBounds
                     model: root.sortedTodos
 
@@ -295,9 +324,12 @@ Item {
                         readonly property bool done: Boolean(modelData.done)
 
                         width: mainTodoList.width
-                        height: Math.max(Math.round(34 * root.s), Math.round(todoText.implicitHeight + 14 * root.s))
-                        radius: Tokens.rounding.medium
-                        color: rowHover.hovered ? WidgetMetrics.innerSurfaceStrong : WidgetMetrics.innerSurface
+                        height: Math.max(Math.round(32 * root.s), Math.round(todoText.implicitHeight + 12 * root.s))
+                        clip: true
+                        radius: Math.round(Tokens.rounding.medium * Math.min(1.2, Math.max(0.75, root.s)))
+                        color: rowHover.hovered ? shell.innerSurfaceStrong : shell.innerSurface
+                        border.width: 1
+                        border.color: shell.innerBorder
 
                         HoverHandler {
                             id: rowHover
@@ -305,29 +337,31 @@ Item {
 
                         RowLayout {
                             anchors.fill: parent
-                            anchors.leftMargin: Math.round(10 * root.s)
+                            anchors.leftMargin: Math.round(8 * root.s)
                             anchors.rightMargin: Math.round(6 * root.s)
-                            anchors.topMargin: Math.round(6 * root.s)
-                            anchors.bottomMargin: Math.round(6 * root.s)
-                            spacing: Math.round(8 * root.s)
+                            anchors.topMargin: Math.round(5 * root.s)
+                            anchors.bottomMargin: Math.round(5 * root.s)
+                            spacing: Math.max(4, Math.round(8 * root.s))
 
                             Item {
-                                Layout.preferredWidth: Math.round(20 * root.s)
-                                Layout.preferredHeight: Math.round(20 * root.s)
+                                Layout.fillWidth: false
+                                Layout.preferredWidth: Math.round(18 * root.s)
+                                Layout.preferredHeight: Math.round(18 * root.s)
                                 Layout.alignment: Qt.AlignVCenter
 
                                 MaterialShape {
                                     anchors.fill: parent
+                                    implicitSize: Math.round(18 * root.s)
                                     visible: todoRow.done
                                     shape: MaterialShape.Cookie7Sided
-                                    color: Colours.palette.m3primary
+                                    color: shell.primaryAccentTint
                                 }
 
                                 Rectangle {
                                     anchors.fill: parent
                                     anchors.margins: 1
                                     visible: !todoRow.done
-                                    radius: 5
+                                    radius: Math.round(5 * root.s)
                                     color: "transparent"
                                     border.width: 1.5
                                     border.color: Colours.palette.m3outline
@@ -337,13 +371,13 @@ Item {
                                     anchors.centerIn: parent
                                     visible: todoRow.done
                                     text: "check"
-                                    fontStyle: Tokens.font.icon.builders.small.scale(0.8).build()
+                                    fontStyle: Tokens.font.icon.builders.small.scale(WidgetMetrics.safeFontScale(root.s, 0.78)).build()
                                     color: Colours.palette.m3onPrimary
                                 }
 
                                 StateLayer {
                                     enabled: root.locked
-                                    radius: 10
+                                    radius: width / 2
                                     onClicked: NotesStore.toggleTodo(todoRow.modelData.id)
                                 }
                             }
@@ -352,284 +386,62 @@ Item {
                                 id: todoText
 
                                 Layout.fillWidth: true
+                                Layout.minimumWidth: 0
                                 Layout.alignment: Qt.AlignVCenter
                                 text: todoRow.modelData.title ?? ""
                                 font.family: Tokens.font.body.small.family
-                                font.pointSize: Math.max(8, Tokens.font.body.small.pointSize * root.s)
+                                font.pointSize: Math.max(7, Tokens.font.body.small.pointSize * root.s)
                                 font.weight: Tokens.font.body.small.weight
                                 font.strikeout: todoRow.done
                                 color: todoRow.done ? Qt.alpha(Colours.palette.m3onSurfaceVariant, 0.55) : Colours.palette.m3onSurface
                                 wrapMode: Text.WordWrap
                             }
 
-                            IconButton {
+                            WidgetIconButton {
                                 visible: rowHover.hovered
                                 icon: "close"
                                 type: IconButton.Text
+                                translucent: shell.isTranslucent
+                                scaleFactor: root.s * 0.85
                                 onClicked: NotesStore.deleteTodo(todoRow.modelData.id)
                             }
                         }
                     }
                 }
             }
-        }
 
-        // 2x3 Split Summary Hero + Generous Task List
-        RowLayout {
-            anchors.fill: parent
-            anchors.margins: shell.contentPadding
-            visible: root.sizeMode === "2x3"
-            spacing: Math.round(Tokens.spacing.large * root.s)
-
+            // Compact footer action on narrow 2x1 column so header stays uncluttered
             StyledRect {
-                Layout.preferredWidth: Math.round(162 * root.s)
-                Layout.fillHeight: true
-                radius: Tokens.rounding.extraLarge
-                color: WidgetMetrics.innerSurface
-                border.width: 1
-                border.color: Qt.alpha(Colours.palette.m3outlineVariant, 0.4)
-
-                ColumnLayout {
-                    anchors.fill: parent
-                    anchors.margins: Math.round(Tokens.padding.medium * root.s)
-                    spacing: Math.round(Tokens.spacing.small * root.s)
-
-                    WidgetHeader {
-                        Layout.fillWidth: true
-                        title: Tr.tr("Tasks")
-                        icon: "checklist"
-                    }
-
-                    Item {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: Math.round(92 * root.s)
-
-                        CircularProgress {
-                            anchors.centerIn: parent
-                            width: Math.round(86 * root.s)
-                            height: Math.round(86 * root.s)
-                            value: root.completionRatio
-                            strokeWidth: Math.max(5, Math.round(7 * root.s))
-                            fgColour: root.openCount === 0 ? Colours.palette.m3tertiary : Colours.palette.m3primary
-                            bgColour: WidgetMetrics.trackSurface
-                            implicitSize: width
-                        }
-
-                        ColumnLayout {
-                            anchors.centerIn: parent
-                            spacing: 0
-
-                            StyledText {
-                                Layout.alignment: Qt.AlignHCenter
-                                text: root.openCount + ""
-                                font: Tokens.font.clock.size(Math.round(24 * root.s)).weight(Font.Bold).build()
-                                color: Colours.palette.m3onSurface
-                            }
-
-                            StyledText {
-                                Layout.alignment: Qt.AlignHCenter
-                                text: Tr.tr("left")
-                                font: Tokens.font.label.small
-                                color: Colours.palette.m3onSurfaceVariant
-                            }
-                        }
-                    }
-
-                    StyledText {
-                        Layout.fillWidth: true
-                        horizontalAlignment: Text.AlignHCenter
-                        text: Tr.tr("%1 / %2 done").arg(root.doneCount).arg(root.totalCount)
-                        font: Tokens.font.label.small
-                        color: Colours.palette.m3onSurfaceVariant
-                    }
-
-                    Item {
-                        Layout.fillHeight: true
-                    }
-
-                    IconTextButton {
-                        Layout.fillWidth: true
-                        icon: root.adding ? "close" : "add"
-                        text: root.adding ? Tr.tr("Cancel") : Tr.tr("Add task")
-                        type: IconTextButton.Filled
-                        isRound: true
-                        onClicked: {
-                            root.adding = !root.adding;
-                            if (!root.adding)
-                                panoInput.text = "";
-                        }
-                    }
-
-                    IconTextButton {
-                        visible: root.doneCount > 0
-                        Layout.fillWidth: true
-                        icon: "delete_sweep"
-                        text: Tr.tr("Clear done")
-                        type: IconTextButton.Tonal
-                        isRound: true
-                        onClicked: root.clearCompleted()
-                    }
-                }
-            }
-
-            ColumnLayout {
+                visible: root.effectiveSize === "2x1" && root.doneCount > 0
                 Layout.fillWidth: true
-                Layout.fillHeight: true
-                spacing: Math.round(Tokens.spacing.small * root.s)
+                Layout.preferredHeight: Math.round(24 * root.s)
+                clip: true
+                radius: Math.round(12 * root.s)
+                color: shell.innerSurfaceStrong
+                border.width: 1
+                border.color: shell.innerBorder
 
-                StyledRect {
-                    visible: root.adding
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: Math.round(36 * root.s)
-                    radius: Tokens.rounding.large
-                    color: WidgetMetrics.innerSurfaceStrong
-                    border.width: panoInput.activeFocus ? 1.5 : 1
-                    border.color: panoInput.activeFocus ? Colours.palette.m3primary : Colours.palette.m3outlineVariant
+                RowLayout {
+                    anchors.centerIn: parent
+                    spacing: Math.max(3, Math.round(4 * root.s))
 
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 12
-                        anchors.rightMargin: 8
-                        spacing: 6
-
-                        TextInput {
-                            id: panoInput
-
-                            Layout.fillWidth: true
-                            color: Colours.palette.m3onSurface
-                            font: Tokens.font.body.small
-                            verticalAlignment: TextInput.AlignVCenter
-                            selectByMouse: true
-                            Keys.onReturnPressed: root.submitTodo(panoInput)
-                            Keys.onEnterPressed: root.submitTodo(panoInput)
-                            Keys.onEscapePressed: {
-                                text = "";
-                                root.adding = false;
-                            }
-
-                            StyledText {
-                                anchors.fill: parent
-                                verticalAlignment: Text.AlignVCenter
-                                text: Tr.tr("What needs to get done?")
-                                font: Tokens.font.body.small
-                                color: Qt.alpha(Colours.palette.m3onSurfaceVariant, 0.65)
-                                visible: panoInput.text === "" && !panoInput.activeFocus
-                            }
-                        }
-
-                        IconButton {
-                            icon: "check"
-                            type: IconButton.Text
-                            onClicked: root.submitTodo(panoInput)
-                        }
-                    }
-                }
-
-                Item {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-
-                    StyledText {
-                        anchors.centerIn: parent
-                        visible: root.totalCount === 0
-                        text: Tr.tr("No tasks yet")
-                        font: Tokens.font.body.medium
+                    MaterialIcon {
+                        text: "delete_sweep"
+                        fontStyle: Tokens.font.icon.builders.small.scale(WidgetMetrics.safeFontScale(root.s, 0.84)).build()
                         color: Colours.palette.m3onSurfaceVariant
                     }
 
-                    ListView {
-                        id: panoTodoList
-
-                        anchors.fill: parent
-                        visible: root.totalCount > 0
-                        clip: true
-                        spacing: Math.round(6 * root.s)
-                        boundsBehavior: Flickable.StopAtBounds
-                        model: root.sortedTodos
-
-                        delegate: StyledRect {
-                            id: pRow
-
-                            required property var modelData
-                            readonly property bool done: Boolean(modelData.done)
-
-                            width: panoTodoList.width
-                            height: Math.max(Math.round(36 * root.s), Math.round(pTxt.implicitHeight + 16 * root.s))
-                            radius: Tokens.rounding.large
-                            color: pHover.hovered ? WidgetMetrics.innerSurfaceStrong : WidgetMetrics.innerSurface
-
-                            HoverHandler {
-                                id: pHover
-                            }
-
-                            RowLayout {
-                                anchors.fill: parent
-                                anchors.leftMargin: 12
-                                anchors.rightMargin: 8
-                                anchors.topMargin: 7
-                                anchors.bottomMargin: 7
-                                spacing: 10
-
-                                Item {
-                                    Layout.preferredWidth: 20
-                                    Layout.preferredHeight: 20
-                                    Layout.alignment: Qt.AlignVCenter
-
-                                    MaterialShape {
-                                        anchors.fill: parent
-                                        visible: pRow.done
-                                        shape: MaterialShape.Cookie7Sided
-                                        color: Colours.palette.m3primary
-                                    }
-
-                                    Rectangle {
-                                        anchors.fill: parent
-                                        anchors.margins: 1
-                                        visible: !pRow.done
-                                        radius: 5
-                                        color: "transparent"
-                                        border.width: 1.5
-                                        border.color: Colours.palette.m3outline
-                                    }
-
-                                    MaterialIcon {
-                                        anchors.centerIn: parent
-                                        visible: pRow.done
-                                        text: "check"
-                                        fontStyle: Tokens.font.icon.builders.small.scale(0.8).build()
-                                        color: Colours.palette.m3onPrimary
-                                    }
-
-                                    StateLayer {
-                                        enabled: root.locked
-                                        radius: 10
-                                        onClicked: NotesStore.toggleTodo(pRow.modelData.id)
-                                    }
-                                }
-
-                                StyledText {
-                                    id: pTxt
-
-                                    Layout.fillWidth: true
-                                    Layout.alignment: Qt.AlignVCenter
-                                    text: pRow.modelData.title ?? ""
-                                    font.family: Tokens.font.body.small.family
-                                    font.pointSize: Math.max(8, Tokens.font.body.small.pointSize * root.s)
-                                    font.weight: Tokens.font.body.small.weight
-                                    font.strikeout: pRow.done
-                                    color: pRow.done ? Qt.alpha(Colours.palette.m3onSurfaceVariant, 0.55) : Colours.palette.m3onSurface
-                                    wrapMode: Text.WordWrap
-                                }
-
-                                IconButton {
-                                    visible: pHover.hovered
-                                    icon: "close"
-                                    type: IconButton.Text
-                                    onClicked: NotesStore.deleteTodo(pRow.modelData.id)
-                                }
-                            }
-                        }
+                    StyledText {
+                        text: Tr.tr("Clear done")
+                        font: Tokens.font.label.builders.small.scale(WidgetMetrics.safeFontScale(root.s, 0.86)).build()
+                        color: Colours.palette.m3onSurfaceVariant
                     }
+                }
+
+                StateLayer {
+                    enabled: root.locked
+                    radius: parent.radius
+                    onClicked: root.clearCompleted()
                 }
             }
         }

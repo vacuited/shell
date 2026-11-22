@@ -15,12 +15,14 @@ Item {
     property bool weActive: false
     property bool locked: true
     property string sizeMode: "1x1"
+    property real widgetScale: WidgetMetrics.scale
     property string surfaceStyle: ""
     property bool blurEnabled: Config.background.desktopWidgets.blur
     property real plateOpacity: Config.background.desktopWidgets.opacity
     property var widgetOptions: ({})
 
-    readonly property real s: Math.max(0.7, Math.min(1.5, Config.background.desktopWidgets.scale ?? 1.0))
+    readonly property real s: Math.max(0.55, Math.min(2.2, widgetScale > 0 ? widgetScale : WidgetMetrics.scale))
+    readonly property string effectiveSize: WidgetMetrics.fallbackSizeFor("calendar", sizeMode)
     property int monthOffset: 0
     property int selectedYear: todayYear
     property int selectedMonth: todayMonth
@@ -36,11 +38,6 @@ Item {
     readonly property int viewYear: displayDate.getFullYear()
     readonly property int viewMonth: displayDate.getMonth()
     readonly property int firstOffset: (displayDate.getDay() + 6) % 7
-    readonly property int daysInMonth: new Date(viewYear, viewMonth + 1, 0).getDate()
-
-    readonly property date selectedDateObj: new Date(selectedYear, selectedMonth, selectedDay)
-    readonly property bool selectedIsToday: selectedYear === todayYear && selectedMonth === todayMonth && selectedDay === todayDay
-    readonly property int dayOfYear: Math.floor((Date.UTC(todayYear, todayMonth, todayDay) - Date.UTC(todayYear, 0, 0)) / 86400000)
 
     readonly property int openTodoCount: {
         void NotesStore.version;
@@ -51,17 +48,6 @@ Item {
                 c++;
         }
         return c;
-    }
-
-    readonly property var topTodos: {
-        void NotesStore.version;
-        const list = NotesStore.getSortedTodos ? NotesStore.getSortedTodos() : (NotesStore.todos ?? []);
-        const out = [];
-        for (let i = 0; i < list.length && out.length < 3; i++) {
-            if (!list[i].done)
-                out.push(list[i]);
-        }
-        return out;
     }
 
     readonly property var monthCells: {
@@ -103,15 +89,15 @@ Item {
         };
     }
 
-    implicitWidth: WidgetMetrics.widthFor(sizeMode, s)
-    implicitHeight: WidgetMetrics.heightFor(sizeMode, "calendar", s)
+    implicitWidth: WidgetMetrics.widthFor(effectiveSize, s)
+    implicitHeight: WidgetMetrics.heightFor(effectiveSize, "calendar", s)
 
     WidgetCardShell {
         id: shell
 
         anchors.fill: parent
         widgetType: "calendar"
-        sizeMode: root.sizeMode
+        sizeMode: root.effectiveSize
         outerShape: root.widgetOptions?.outerShape ?? ""
         wallpaper: root.wallpaper
         weActive: root.weActive
@@ -120,78 +106,114 @@ Item {
         plateOpacity: root.plateOpacity
         scaleFactor: root.s
 
-        // 1x1 Expressive Shaped Tile
-        Item {
+        Loader {
+            id: layoutLoader
+
             anchors.fill: parent
-            anchors.topMargin: shell.topPadding
-            anchors.bottomMargin: shell.bottomPadding
-            anchors.leftMargin: shell.sidePadding
-            anchors.rightMargin: shell.sidePadding
-            visible: root.sizeMode === "1x1"
-
-            ColumnLayout {
-                anchors.centerIn: parent
-                spacing: Math.round(2 * root.s)
-
-                StyledText {
-                    Layout.alignment: Qt.AlignHCenter
-                    text: Qt.formatDate(root.nowDate, "ddd").toUpperCase()
-                    font: Tokens.font.label.builders.small.scale(root.s).letterSpacing(1.5).weight(Font.Bold).build()
-                    color: Colours.palette.m3primary
-                }
-
-                StyledText {
-                    Layout.alignment: Qt.AlignHCenter
-                    text: String(root.todayDay)
-                    font: Tokens.font.clock.size(Math.round(46 * root.s)).weight(Font.Bold).build()
-                    color: Colours.palette.m3onSurface
-                }
-
-                StyledText {
-                    Layout.alignment: Qt.AlignHCenter
-                    text: Qt.formatDate(root.nowDate, "MMM yyyy")
-                    font: Tokens.font.label.builders.small.scale(Math.max(0.85, root.s * 0.92)).build()
-                    color: Colours.palette.m3onSurfaceVariant
+            sourceComponent: {
+                switch (root.effectiveSize) {
+                case "1x2":
+                    return layout1x2;
+                case "2x2":
+                    return layout2x2;
+                default:
+                    return layout1x1;
                 }
             }
         }
+    }
 
-        // 1x2 Date Hero + Non-Overlapping 7-Day Week Strip
+    // 1x1 Expressive Shaped Tile
+    Component {
+        id: layout1x1
+
+        Item {
+            clip: true
+
+            ColumnLayout {
+                anchors.centerIn: parent
+                width: Math.max(24, parent.width - shell.sidePadding * 2)
+                spacing: Math.max(1, Math.round(2 * root.s))
+
+                StyledText {
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 0
+                    horizontalAlignment: Text.AlignHCenter
+                    text: Qt.formatDate(root.nowDate, "ddd").toUpperCase()
+                    font: Tokens.font.label.builders.small.scale(WidgetMetrics.safeFontScale(root.s, 0.94)).letterSpacing(1.3).weight(Font.Bold).build()
+                    color: Colours.palette.m3primary
+                    elide: Text.ElideRight
+                }
+
+                StyledText {
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 0
+                    horizontalAlignment: Text.AlignHCenter
+                    text: String(root.todayDay)
+                    font: Tokens.font.clock.size(Math.max(18, Math.round((shell.isShaped ? 38 : 44) * root.s))).weight(Font.Bold).build()
+                    color: Colours.palette.m3onSurface
+                    elide: Text.ElideRight
+                }
+
+                StyledText {
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 0
+                    horizontalAlignment: Text.AlignHCenter
+                    text: Qt.formatDate(root.nowDate, "MMM yyyy")
+                    font: Tokens.font.label.builders.small.scale(WidgetMetrics.safeFontScale(root.s, 0.88)).build()
+                    color: Colours.palette.m3onSurfaceVariant
+                    elide: Text.ElideRight
+                }
+            }
+        }
+    }
+
+    // 1x2 Date Hero + Non-Overlapping 7-Day Week Strip
+    Component {
+        id: layout1x2
+
         RowLayout {
             anchors.fill: parent
             anchors.margins: shell.contentPadding
-            visible: root.sizeMode === "1x2"
-            spacing: Math.round(Tokens.spacing.medium * root.s)
+            spacing: Math.max(6, Math.round(Tokens.spacing.medium * root.s))
 
             ColumnLayout {
-                Layout.preferredWidth: Math.round(82 * root.s)
+                Layout.fillWidth: false
+                Layout.preferredWidth: Math.round(80 * root.s)
+                Layout.maximumWidth: Math.round(84 * root.s)
                 Layout.alignment: Qt.AlignVCenter
-                spacing: Math.round(2 * root.s)
+                spacing: Math.max(1, Math.round(2 * root.s))
 
                 StyledText {
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 0
                     text: Qt.formatDate(root.nowDate, "dddd").toUpperCase()
-                    font: Tokens.font.label.builders.small.scale(Math.max(0.82, root.s * 0.9)).letterSpacing(1.2).weight(Font.Bold).build()
+                    font: Tokens.font.label.builders.small.scale(WidgetMetrics.safeFontScale(root.s, 0.86)).letterSpacing(1.1).weight(Font.Bold).build()
                     color: Colours.palette.m3primary
                     elide: Text.ElideRight
+                }
+
+                StyledText {
                     Layout.fillWidth: true
-                }
-
-                StyledText {
+                    Layout.minimumWidth: 0
                     text: String(root.todayDay)
-                    font: Tokens.font.clock.size(Math.round(40 * root.s)).weight(Font.Bold).build()
+                    font: Tokens.font.clock.size(Math.max(18, Math.round(38 * root.s))).weight(Font.Bold).build()
                     color: Colours.palette.m3onSurface
+                    elide: Text.ElideRight
                 }
 
                 StyledText {
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 0
                     text: Qt.formatDate(root.nowDate, "MMM yyyy")
-                    font: Tokens.font.label.builders.small.scale(Math.max(0.85, root.s * 0.92)).build()
+                    font: Tokens.font.label.builders.small.scale(WidgetMetrics.safeFontScale(root.s, 0.88)).build()
                     color: Colours.palette.m3onSurfaceVariant
                     elide: Text.ElideRight
-                    Layout.fillWidth: true
                 }
             }
 
             Rectangle {
+                Layout.fillWidth: false
                 Layout.preferredWidth: 1
                 Layout.fillHeight: true
                 Layout.topMargin: Math.round(8 * root.s)
@@ -201,32 +223,38 @@ Item {
 
             ColumnLayout {
                 Layout.fillWidth: true
+                Layout.minimumWidth: 0
                 Layout.alignment: Qt.AlignVCenter
-                spacing: Math.round(6 * root.s)
+                spacing: Math.max(4, Math.round(6 * root.s))
 
                 RowLayout {
                     Layout.fillWidth: true
+                    Layout.minimumWidth: 0
 
                     StyledText {
-                        text: qsTr("This Week")
-                        font: Tokens.font.label.builders.small.scale(root.s).weight(Font.DemiBold).build()
-                        color: Colours.palette.m3onSurfaceVariant
                         Layout.fillWidth: true
+                        Layout.minimumWidth: 0
+                        text: qsTr("This Week")
+                        font: Tokens.font.label.builders.small.scale(WidgetMetrics.safeFontScale(root.s, 0.94)).weight(Font.DemiBold).build()
+                        color: Colours.palette.m3onSurfaceVariant
+                        elide: Text.ElideRight
                     }
 
                     StyledRect {
                         visible: root.openTodoCount > 0
+                        Layout.fillWidth: false
                         Layout.preferredHeight: Math.round(20 * root.s)
-                        Layout.preferredWidth: Math.round(weekTaskText.implicitWidth + 14 * root.s)
+                        Layout.preferredWidth: Math.round(weekTaskText.implicitWidth + Math.round(12 * root.s))
+                        clip: true
                         radius: Math.round(10 * root.s)
-                        color: Colours.palette.m3secondaryContainer
+                        color: shell.secondaryContainerTint
 
                         StyledText {
                             id: weekTaskText
 
                             anchors.centerIn: parent
                             text: qsTr("%1 due").arg(root.openTodoCount)
-                            font: Tokens.font.label.builders.small.scale(Math.max(0.8, root.s * 0.85)).weight(Font.DemiBold).build()
+                            font: Tokens.font.label.builders.small.scale(WidgetMetrics.safeFontScale(root.s, 0.82)).weight(Font.DemiBold).build()
                             color: Colours.palette.m3onSecondaryContainer
                         }
                     }
@@ -234,8 +262,9 @@ Item {
 
                 GridLayout {
                     Layout.fillWidth: true
+                    Layout.minimumWidth: 0
                     columns: 7
-                    columnSpacing: Math.round(2 * root.s)
+                    columnSpacing: Math.max(1, Math.round(2 * root.s))
 
                     Repeater {
                         model: 7
@@ -248,33 +277,38 @@ Item {
 
                             Layout.fillWidth: true
                             Layout.minimumWidth: 0
-                            spacing: Math.round(4 * root.s)
+                            implicitWidth: Math.round(22 * root.s)
+                            spacing: Math.max(2, Math.round(4 * root.s))
 
                             StyledText {
-                                Layout.alignment: Qt.AlignHCenter
+                                Layout.fillWidth: true
+                                Layout.minimumWidth: 0
+                                horizontalAlignment: Text.AlignHCenter
                                 text: wkCol.cell.shortName
-                                font: Tokens.font.label.builders.small.scale(Math.max(0.8, root.s * 0.85)).weight(wkCol.cell.isToday ? Font.Bold : Font.Medium).build()
+                                font: Tokens.font.label.builders.small.scale(WidgetMetrics.safeFontScale(root.s, 0.82)).weight(wkCol.cell.isToday ? Font.Bold : Font.Medium).build()
                                 color: wkCol.cell.isToday
                                     ? Colours.palette.m3primary
                                     : (wkCol.cell.isWeekend ? Colours.palette.m3tertiary : Colours.palette.m3onSurfaceVariant)
+                                elide: Text.ElideRight
                             }
 
                             Item {
                                 Layout.alignment: Qt.AlignHCenter
-                                Layout.preferredWidth: Math.round(24 * root.s)
-                                Layout.preferredHeight: Math.round(24 * root.s)
+                                Layout.preferredWidth: Math.round(22 * root.s)
+                                Layout.preferredHeight: Math.round(22 * root.s)
 
                                 MaterialShape {
                                     anchors.fill: parent
+                                    implicitSize: Math.round(22 * root.s)
                                     visible: wkCol.cell.isToday
                                     shape: MaterialShape.Sunny
-                                    color: Colours.palette.m3primary
+                                    color: shell.primaryAccentTint
                                 }
 
                                 StyledText {
                                     anchors.centerIn: parent
                                     text: String(wkCol.cell.day)
-                                    font: Tokens.font.label.builders.small.scale(Math.max(0.82, root.s * 0.9)).weight(wkCol.cell.isToday ? Font.Bold : Font.Medium).build()
+                                    font: Tokens.font.label.builders.small.scale(WidgetMetrics.safeFontScale(root.s, 0.86)).weight(wkCol.cell.isToday ? Font.Bold : Font.Medium).build()
                                     color: wkCol.cell.isToday
                                         ? Colours.palette.m3onPrimary
                                         : (wkCol.cell.isWeekend ? Colours.palette.m3tertiary : Colours.palette.m3onSurface)
@@ -285,431 +319,191 @@ Item {
                 }
             }
         }
+    }
 
-        // 2x1 Tall Date Pillar + Agenda Glance
+    // 2x2 Full Native Dash Month Grid
+    Component {
+        id: layout2x2
+
         ColumnLayout {
             anchors.fill: parent
             anchors.margins: shell.contentPadding
-            visible: root.sizeMode === "2x1"
-            spacing: Math.round(Tokens.spacing.medium * root.s)
+            spacing: Math.max(3, Math.round(Tokens.spacing.small * root.s))
 
-            WidgetHeader {
+            RowLayout {
                 Layout.fillWidth: true
-                title: Qt.formatDate(root.nowDate, "MMM yyyy")
-                icon: "calendar_today"
-            }
+                Layout.minimumWidth: 0
+                spacing: Math.max(2, Math.round(Tokens.spacing.extraSmall * root.s))
 
-            Item {
-                Layout.fillWidth: true
-                Layout.preferredHeight: Math.round(108 * root.s)
+                StyledRect {
+                    Layout.fillWidth: false
+                    Layout.preferredWidth: Math.round(26 * root.s)
+                    Layout.preferredHeight: Math.round(26 * root.s)
+                    radius: Math.round(13 * root.s)
+                    color: shell.innerSurfaceStrong
+                    border.width: 1
+                    border.color: shell.innerBorder
 
-                MaterialShape {
-                    anchors.centerIn: parent
-                    width: Math.round(104 * root.s)
-                    height: Math.round(104 * root.s)
-                    shape: MaterialShape.Cookie9Sided
-                    color: Colours.palette.m3primaryContainer
+                    MaterialIcon {
+                        anchors.centerIn: parent
+                        text: "chevron_left"
+                        fontStyle: Tokens.font.icon.builders.small.scale(WidgetMetrics.safeFontScale(root.s, 0.96)).build()
+                        color: Colours.palette.m3onSurface
+                    }
+
+                    StateLayer {
+                        enabled: root.locked
+                        radius: parent.radius
+                        onClicked: root.monthOffset -= 1
+                    }
                 }
 
-                ColumnLayout {
-                    anchors.centerIn: parent
-                    spacing: 0
-
-                    StyledText {
-                        Layout.alignment: Qt.AlignHCenter
-                        text: Qt.formatDate(root.nowDate, "ddd").toUpperCase()
-                        font: Tokens.font.label.builders.small.scale(Math.max(0.85, root.s * 0.9)).letterSpacing(1.2).weight(Font.Bold).build()
-                        color: Colours.palette.m3onPrimaryContainer
-                    }
-
-                    StyledText {
-                        Layout.alignment: Qt.AlignHCenter
-                        text: String(root.todayDay)
-                        font: Tokens.font.clock.size(Math.round(36 * root.s)).weight(Font.Bold).build()
-                        color: Colours.palette.m3onPrimaryContainer
-                    }
-                }
-            }
-
-            StyledRect {
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                radius: Tokens.rounding.large
-                color: WidgetMetrics.innerSurface
-                border.width: 1
-                border.color: WidgetMetrics.innerBorder
-
-                ColumnLayout {
-                    anchors.fill: parent
-                    anchors.margins: Math.round(Tokens.padding.medium * root.s)
-                    spacing: Math.round(4 * root.s)
-
-                    StyledText {
-                        text: root.openTodoCount > 0 ? qsTr("%1 Open Tasks").arg(root.openTodoCount) : qsTr("All Clear")
-                        font: Tokens.font.label.builders.small.scale(root.s).weight(Font.DemiBold).build()
-                        color: root.openTodoCount > 0 ? Colours.palette.m3primary : Colours.palette.m3onSurfaceVariant
-                    }
-
-                    Repeater {
-                        model: root.topTodos
-
-                        delegate: RowLayout {
-                            id: tallTodoRow
-
-                            required property var modelData
-
-                            Layout.fillWidth: true
-                            spacing: 6
-
-                            MaterialIcon {
-                                text: "radio_button_unchecked"
-                                fontStyle: Tokens.font.icon.builders.small.scale(0.85 * root.s).build()
-                                color: Colours.palette.m3primary
-                            }
-
-                            StyledText {
-                                Layout.fillWidth: true
-                                text: tallTodoRow.modelData.title ?? ""
-                                font: Tokens.font.body.builders.small.scale(Math.max(0.85, root.s * 0.9)).build()
-                                color: Colours.palette.m3onSurface
-                                elide: Text.ElideRight
-                            }
-                        }
-                    }
-
-                    StyledText {
-                        visible: root.topTodos.length === 0
-                        text: qsTr("Day %1 of %2").arg(root.dayOfYear).arg(root.todayYear)
-                        font: Tokens.font.body.small
-                        color: Colours.palette.m3onSurfaceVariant
-                        Layout.fillWidth: true
-                    }
-
-                    Item {
-                        Layout.fillHeight: true
-                    }
-                }
-            }
-        }
-
-        // 2x2 Full Native Dash Month Grid + 2x3 Split Agenda Panel
-        RowLayout {
-            anchors.fill: parent
-            anchors.topMargin: shell.topPadding
-            anchors.bottomMargin: shell.bottomPadding
-            anchors.leftMargin: shell.sidePadding
-            anchors.rightMargin: shell.sidePadding
-            visible: root.sizeMode === "2x2" || root.sizeMode === "2x3"
-            spacing: Math.round(Tokens.spacing.large * root.s)
-
-            ColumnLayout {
-                id: monthGridPane
-
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                spacing: Math.round((shell.isShaped ? Tokens.spacing.extraSmall : Tokens.spacing.small) * root.s)
-
-                // Month header with directional nav + tap-to-Today pill
-                RowLayout {
+                StyledRect {
                     Layout.fillWidth: true
-                    spacing: Tokens.spacing.extraSmall
-
-                    StyledRect {
-                        Layout.preferredWidth: Math.round((shell.isShaped ? 24 : 28) * root.s)
-                        Layout.preferredHeight: Math.round((shell.isShaped ? 24 : 28) * root.s)
-                        radius: Math.round((shell.isShaped ? 12 : 14) * root.s)
-                        color: WidgetMetrics.innerSurfaceStrong
-                        border.width: 1
-                        border.color: WidgetMetrics.innerBorder
-
-                        MaterialIcon {
-                            anchors.centerIn: parent
-                            text: "chevron_left"
-                            fontStyle: Tokens.font.icon.builders.small.scale(root.s * (shell.isShaped ? 0.9 : 1.0)).build()
-                            color: Colours.palette.m3onSurface
-                        }
-
-                        StateLayer {
-                            enabled: root.locked
-                            onClicked: root.monthOffset -= 1
-                        }
-                    }
-
-                    StyledRect {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: Math.round((shell.isShaped ? 24 : 28) * root.s)
-                        radius: Math.round((shell.isShaped ? 12 : 14) * root.s)
-                        color: root.monthOffset !== 0 ? Colours.palette.m3secondaryContainer : "transparent"
-
-                        StyledText {
-                            anchors.centerIn: parent
-                            width: parent.width - 8
-                            horizontalAlignment: Text.AlignHCenter
-                            text: Qt.formatDate(root.displayDate, shell.isShaped ? "MMM yyyy" : "MMMM yyyy")
-                            font: Tokens.font.title.builders.small.scale(root.s * (shell.isShaped ? 0.88 : 1.0)).weight(Font.DemiBold).build()
-                            color: root.monthOffset !== 0 ? Colours.palette.m3onSecondaryContainer : Colours.palette.m3onSurface
-                            elide: Text.ElideRight
-                        }
-
-                        StateLayer {
-                            enabled: root.locked
-                            onClicked: root.jumpToToday()
-                        }
-                    }
-
-                    StyledRect {
-                        Layout.preferredWidth: Math.round((shell.isShaped ? 24 : 28) * root.s)
-                        Layout.preferredHeight: Math.round((shell.isShaped ? 24 : 28) * root.s)
-                        radius: Math.round((shell.isShaped ? 12 : 14) * root.s)
-                        color: WidgetMetrics.innerSurfaceStrong
-                        border.width: 1
-                        border.color: WidgetMetrics.innerBorder
-
-                        MaterialIcon {
-                            anchors.centerIn: parent
-                            text: "chevron_right"
-                            fontStyle: Tokens.font.icon.builders.small.scale(root.s * (shell.isShaped ? 0.9 : 1.0)).build()
-                            color: Colours.palette.m3onSurface
-                        }
-
-                        StateLayer {
-                            enabled: root.locked
-                            onClicked: root.monthOffset += 1
-                        }
-                    }
-                }
-
-                // Weekday headers
-                GridLayout {
-                    Layout.fillWidth: true
-                    columns: 7
-                    columnSpacing: 1
-
-                    Repeater {
-                        model: ["M", "T", "W", "T", "F", "S", "S"]
-
-                        delegate: StyledText {
-                            id: wdHeader
-
-                            required property string modelData
-                            required property int index
-
-                            Layout.fillWidth: true
-                            horizontalAlignment: Text.AlignHCenter
-                            text: modelData
-                            font: Tokens.font.label.builders.small.scale(root.s * (shell.isShaped ? 0.86 : 1.0)).weight(Font.Bold).build()
-                            color: (index === 5 || index === 6) ? Colours.palette.m3tertiary : Colours.palette.m3onSurfaceVariant
-                        }
-                    }
-                }
-
-                // 6x7 day matrix with MaterialShape.Sunny Today highlight
-                GridLayout {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    columns: 7
-                    rowSpacing: 1
-                    columnSpacing: 1
-
-                    Repeater {
-                        model: root.monthCells
-
-                        delegate: Item {
-                            id: dayCell
-
-                            required property var modelData
-
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
-
-                            readonly property real badgeSize: Math.min(width, height, Math.round((shell.isShaped ? 26 : 32) * root.s))
-
-                            MaterialShape {
-                                anchors.centerIn: parent
-                                width: dayCell.badgeSize
-                                height: dayCell.badgeSize
-                                visible: dayCell.modelData.isToday
-                                shape: MaterialShape.Sunny
-                                color: Colours.palette.m3primary
-                            }
-
-                            Rectangle {
-                                anchors.centerIn: parent
-                                width: dayCell.badgeSize
-                                height: dayCell.badgeSize
-                                radius: width / 2
-                                visible: !dayCell.modelData.isToday && dayCell.modelData.isSelected
-                                color: Colours.palette.m3secondaryContainer
-                                border.width: 1
-                                border.color: Colours.palette.m3secondary
-                            }
-
-                            StyledText {
-                                anchors.centerIn: parent
-                                text: String(dayCell.modelData.day)
-                                font: Tokens.font.label.builders.medium.scale(Math.max(0.78, root.s * (shell.isShaped ? 0.84 : 0.92))).weight(dayCell.modelData.isToday || dayCell.modelData.isSelected ? Font.Bold : Font.Medium).build()
-                                color: {
-                                    if (dayCell.modelData.isToday)
-                                        return Colours.palette.m3onPrimary;
-                                    if (dayCell.modelData.isSelected)
-                                        return Colours.palette.m3onSecondaryContainer;
-                                    if (!dayCell.modelData.inMonth)
-                                        return Qt.alpha(Colours.palette.m3onSurfaceVariant, 0.38);
-                                    if (dayCell.modelData.isWeekend)
-                                        return Colours.palette.m3tertiary;
-                                    return Colours.palette.m3onSurface;
-                                }
-                            }
-
-                            StateLayer {
-                                enabled: root.locked
-                                radius: dayCell.badgeSize / 2
-                                onClicked: {
-                                    root.selectedYear = dayCell.modelData.year;
-                                    root.selectedMonth = dayCell.modelData.month;
-                                    root.selectedDay = dayCell.modelData.day;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // 2x3 Right Agenda & Selected Day Detail Panel
-            StyledRect {
-                visible: root.sizeMode === "2x3"
-                Layout.preferredWidth: Math.round(166 * root.s)
-                Layout.fillHeight: true
-                radius: Tokens.rounding.extraLarge
-                color: WidgetMetrics.innerSurface
-                border.width: 1
-                border.color: WidgetMetrics.innerBorder
-
-                ColumnLayout {
-                    anchors.fill: parent
-                    anchors.margins: Math.round(Tokens.padding.medium * root.s)
-                    spacing: Math.round(Tokens.spacing.small * root.s)
-
-                    Item {
-                        Layout.alignment: Qt.AlignHCenter
-                        Layout.preferredWidth: Math.round(80 * root.s)
-                        Layout.preferredHeight: Math.round(80 * root.s)
-
-                        MaterialShape {
-                            anchors.fill: parent
-                            shape: root.selectedIsToday ? MaterialShape.Sunny : MaterialShape.Cookie9Sided
-                            color: root.selectedIsToday ? Colours.palette.m3primaryContainer : Colours.palette.m3secondaryContainer
-                        }
-
-                        ColumnLayout {
-                            anchors.centerIn: parent
-                            spacing: 0
-
-                            StyledText {
-                                Layout.alignment: Qt.AlignHCenter
-                                text: Qt.formatDate(root.selectedDateObj, "ddd").toUpperCase()
-                                font: Tokens.font.label.builders.small.scale(Math.max(0.8, root.s * 0.85)).weight(Font.Bold).build()
-                                color: root.selectedIsToday ? Colours.palette.m3onPrimaryContainer : Colours.palette.m3onSecondaryContainer
-                            }
-
-                            StyledText {
-                                Layout.alignment: Qt.AlignHCenter
-                                text: String(root.selectedDay)
-                                font: Tokens.font.clock.size(Math.round(28 * root.s)).weight(Font.Bold).build()
-                                color: root.selectedIsToday ? Colours.palette.m3onPrimaryContainer : Colours.palette.m3onSecondaryContainer
-                            }
-                        }
-                    }
+                    Layout.minimumWidth: 0
+                    Layout.preferredHeight: Math.round(26 * root.s)
+                    clip: true
+                    radius: Math.round(13 * root.s)
+                    color: root.monthOffset !== 0 ? shell.secondaryContainerTint : "transparent"
 
                     StyledText {
-                        Layout.fillWidth: true
+                        anchors.centerIn: parent
+                        width: Math.max(0, parent.width - Math.round(8 * root.s))
                         horizontalAlignment: Text.AlignHCenter
-                        text: root.selectedIsToday ? qsTr("Today") : Qt.formatDate(root.selectedDateObj, "MMM d, yyyy")
-                        font: Tokens.font.label.builders.medium.scale(root.s).weight(Font.DemiBold).build()
-                        color: root.selectedIsToday ? Colours.palette.m3primary : Colours.palette.m3onSurface
+                        text: Qt.formatDate(root.displayDate, "MMMM yyyy")
+                        font: Tokens.font.title.builders.small.scale(WidgetMetrics.safeFontScale(root.s, 0.96)).weight(Font.DemiBold).build()
+                        color: root.monthOffset !== 0 ? Colours.palette.m3onSecondaryContainer : Colours.palette.m3onSurface
                         elide: Text.ElideRight
                     }
 
-                    Rectangle {
+                    StateLayer {
+                        enabled: root.locked
+                        radius: parent.radius
+                        onClicked: root.jumpToToday()
+                    }
+                }
+
+                StyledRect {
+                    Layout.fillWidth: false
+                    Layout.preferredWidth: Math.round(26 * root.s)
+                    Layout.preferredHeight: Math.round(26 * root.s)
+                    radius: Math.round(13 * root.s)
+                    color: shell.innerSurfaceStrong
+                    border.width: 1
+                    border.color: shell.innerBorder
+
+                    MaterialIcon {
+                        anchors.centerIn: parent
+                        text: "chevron_right"
+                        fontStyle: Tokens.font.icon.builders.small.scale(WidgetMetrics.safeFontScale(root.s, 0.96)).build()
+                        color: Colours.palette.m3onSurface
+                    }
+
+                    StateLayer {
+                        enabled: root.locked
+                        radius: parent.radius
+                        onClicked: root.monthOffset += 1
+                    }
+                }
+            }
+
+            GridLayout {
+                Layout.fillWidth: true
+                Layout.minimumWidth: 0
+                columns: 7
+                columnSpacing: 1
+
+                Repeater {
+                    model: ["M", "T", "W", "T", "F", "S", "S"]
+
+                    delegate: StyledText {
+                        id: wdHeader
+
+                        required property string modelData
+                        required property int index
+
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 1
-                        color: Qt.alpha(Colours.palette.m3outlineVariant, 0.45)
+                        Layout.minimumWidth: 0
+                        horizontalAlignment: Text.AlignHCenter
+                        text: modelData
+                        font: Tokens.font.label.builders.small.scale(WidgetMetrics.safeFontScale(root.s, 0.92)).weight(Font.Bold).build()
+                        color: (index === 5 || index === 6) ? Colours.palette.m3tertiary : Colours.palette.m3onSurfaceVariant
+                        elide: Text.ElideRight
                     }
+                }
+            }
 
-                    RowLayout {
+            GridLayout {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.minimumWidth: 0
+                columns: 7
+                rowSpacing: 1
+                columnSpacing: 1
+
+                Repeater {
+                    model: root.monthCells
+
+                    delegate: Item {
+                        id: dayCell
+
+                        required property var modelData
+
                         Layout.fillWidth: true
-                        spacing: 4
-
-                        StyledText {
-                            text: qsTr("Open tasks")
-                            font: Tokens.font.label.small
-                            color: Colours.palette.m3onSurfaceVariant
-                            Layout.fillWidth: true
-                        }
-
-                        StyledText {
-                            text: String(root.openTodoCount)
-                            font: Tokens.font.label.builders.small.weight(Font.Bold).build()
-                            color: Colours.palette.m3primary
-                        }
-                    }
-
-                    Repeater {
-                        model: root.topTodos
-
-                        delegate: RowLayout {
-                            id: splitTodoRow
-
-                            required property var modelData
-
-                            Layout.fillWidth: true
-                            spacing: 6
-
-                            MaterialIcon {
-                                text: "check_circle"
-                                fontStyle: Tokens.font.icon.builders.small.scale(0.85).build()
-                                color: Colours.palette.m3primary
-                            }
-
-                            StyledText {
-                                Layout.fillWidth: true
-                                text: splitTodoRow.modelData.title ?? ""
-                                font: Tokens.font.body.small
-                                color: Colours.palette.m3onSurface
-                                elide: Text.ElideRight
-                            }
-                        }
-                    }
-
-                    StyledText {
-                        visible: root.topTodos.length === 0
-                        Layout.fillWidth: true
-                        text: qsTr("No pending tasks")
-                        font: Tokens.font.body.small
-                        color: Colours.palette.m3onSurfaceVariant
-                    }
-
-                    Item {
                         Layout.fillHeight: true
-                    }
+                        Layout.minimumWidth: 0
+                        implicitWidth: Math.round(28 * root.s)
+                        implicitHeight: Math.round(28 * root.s)
+                        clip: true
 
-                    StyledRect {
-                        visible: !root.selectedIsToday || root.monthOffset !== 0
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: Math.round(28 * root.s)
-                        radius: Math.round(14 * root.s)
-                        color: Colours.palette.m3primaryContainer
+                        readonly property int badgeSize: Math.max(12, Math.round(Math.min(width, height, 30 * root.s)))
+
+                        MaterialShape {
+                            anchors.centerIn: parent
+                            width: dayCell.badgeSize
+                            height: dayCell.badgeSize
+                            implicitSize: dayCell.badgeSize
+                            visible: dayCell.modelData.isToday
+                            shape: MaterialShape.Sunny
+                            color: shell.primaryAccentTint
+                        }
+
+                        Rectangle {
+                            anchors.centerIn: parent
+                            width: dayCell.badgeSize
+                            height: dayCell.badgeSize
+                            radius: width / 2
+                            visible: !dayCell.modelData.isToday && dayCell.modelData.isSelected
+                            color: shell.secondaryContainerTint
+                            border.width: 1
+                            border.color: Colours.palette.m3secondary
+                        }
 
                         StyledText {
                             anchors.centerIn: parent
-                            text: qsTr("Back to today")
-                            font: Tokens.font.label.small
-                            color: Colours.palette.m3onPrimaryContainer
+                            text: String(dayCell.modelData.day)
+                            font: Tokens.font.label.builders.medium.scale(WidgetMetrics.safeFontScale(root.s, 0.88)).weight(dayCell.modelData.isToday || dayCell.modelData.isSelected ? Font.Bold : Font.Medium).build()
+                            color: {
+                                if (dayCell.modelData.isToday)
+                                    return Colours.palette.m3onPrimary;
+                                if (dayCell.modelData.isSelected)
+                                    return Colours.palette.m3onSecondaryContainer;
+                                if (!dayCell.modelData.inMonth)
+                                    return Qt.alpha(Colours.palette.m3onSurfaceVariant, 0.38);
+                                if (dayCell.modelData.isWeekend)
+                                    return Colours.palette.m3tertiary;
+                                return Colours.palette.m3onSurface;
+                            }
                         }
 
                         StateLayer {
                             enabled: root.locked
-                            onClicked: root.jumpToToday()
+                            radius: dayCell.badgeSize / 2
+                            onClicked: {
+                                root.selectedYear = dayCell.modelData.year;
+                                root.selectedMonth = dayCell.modelData.month;
+                                root.selectedDay = dayCell.modelData.day;
+                            }
                         }
                     }
                 }

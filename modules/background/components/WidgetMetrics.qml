@@ -10,6 +10,8 @@ QtObject {
 
     // Global scale clamped safely so widgets remain readable and well-proportioned.
     readonly property real scale: Math.max(0.7, Math.min(1.5, GlobalConfig.background.desktopWidgets.scale ?? 1.0))
+    readonly property real minWidgetScale: 0.7
+    readonly property real maxWidgetScale: 1.6
 
     // Scheme-harmonized inner surface tokens (lighter than dark hard-flavour containers).
     readonly property color innerSurface: Colours.light
@@ -107,7 +109,7 @@ QtObject {
             label: qsTr("At a Glance"),
             icon: "view_agenda",
             defaultSize: "1x2",
-            supportedSizes: ["1x2", "2x1", "2x2", "1x3", "2x3"],
+            supportedSizes: ["1x2", "2x2", "1x3"],
             defaultShape: "Rounded",
             supportsOuterShape: false
         },
@@ -115,7 +117,7 @@ QtObject {
             label: qsTr("Calendar"),
             icon: "calendar_month",
             defaultSize: "1x1",
-            supportedSizes: ["1x1", "1x2", "2x1", "2x2", "2x3"],
+            supportedSizes: ["1x1", "1x2", "2x2"],
             defaultShape: "Cookie9Sided",
             supportsOuterShape: true
         },
@@ -123,7 +125,7 @@ QtObject {
             label: qsTr("Weather"),
             icon: "partly_cloudy_day",
             defaultSize: "1x1",
-            supportedSizes: ["1x1", "1x2", "2x1", "2x2", "1x3", "2x3"],
+            supportedSizes: ["1x1", "1x2", "2x2", "1x3"],
             defaultShape: "Puffy",
             supportsOuterShape: true
         },
@@ -139,7 +141,7 @@ QtObject {
             label: qsTr("Focus & Timers"),
             icon: "timer",
             defaultSize: "1x1",
-            supportedSizes: ["1x1", "1x2", "2x1", "2x2", "2x3"],
+            supportedSizes: ["1x1", "1x2", "2x2"],
             defaultShape: "Circle",
             supportsOuterShape: true
         },
@@ -147,7 +149,7 @@ QtObject {
             label: qsTr("Countdown"),
             icon: "hourglass_top",
             defaultSize: "1x1",
-            supportedSizes: ["1x1", "1x2", "2x1", "2x2"],
+            supportedSizes: ["1x1", "1x2", "2x2"],
             defaultShape: "Cookie9Sided",
             supportsOuterShape: true
         },
@@ -155,7 +157,7 @@ QtObject {
             label: qsTr("Resources"),
             icon: "memory",
             defaultSize: "2x1",
-            supportedSizes: ["1x1", "1x2", "2x1", "2x2", "1x3", "2x3"],
+            supportedSizes: ["1x1", "1x2", "2x1", "2x2", "1x3"],
             defaultShape: "Sunny",
             supportsOuterShape: true
         },
@@ -163,7 +165,7 @@ QtObject {
             label: qsTr("Media"),
             icon: "music_note",
             defaultSize: "1x2",
-            supportedSizes: ["1x1", "1x2", "2x1", "2x2", "1x3", "2x3"],
+            supportedSizes: ["1x1", "1x2", "2x2", "1x3"],
             defaultShape: "Cookie12Sided",
             supportsOuterShape: true
         },
@@ -171,7 +173,7 @@ QtObject {
             label: qsTr("Battery"),
             icon: "battery_charging_full",
             defaultSize: "1x1",
-            supportedSizes: ["1x1", "1x2", "2x1", "2x2"],
+            supportedSizes: ["1x1", "1x2", "2x2"],
             defaultShape: "Pill",
             supportsOuterShape: true
         },
@@ -179,7 +181,7 @@ QtObject {
             label: qsTr("User Card"),
             icon: "person",
             defaultSize: "1x2",
-            supportedSizes: ["1x1", "1x2", "2x1", "2x2", "2x3"],
+            supportedSizes: ["1x1", "1x2", "2x2"],
             defaultShape: "Cookie9Sided",
             supportsOuterShape: true
         },
@@ -187,7 +189,7 @@ QtObject {
             label: qsTr("Todo"),
             icon: "checklist",
             defaultSize: "2x1",
-            supportedSizes: ["1x1", "1x2", "2x1", "2x2", "2x3"],
+            supportedSizes: ["1x1", "1x2", "2x1", "2x2"],
             defaultShape: "Cookie7Sided",
             supportsOuterShape: true
         },
@@ -195,7 +197,7 @@ QtObject {
             label: qsTr("Notes"),
             icon: "sticky_note_2",
             defaultSize: "2x1",
-            supportedSizes: ["1x1", "1x2", "2x1", "2x2", "2x3"],
+            supportedSizes: ["1x1", "1x2", "2x1", "2x2"],
             defaultShape: "Cookie4Sided",
             supportsOuterShape: true
         },
@@ -259,6 +261,50 @@ QtObject {
 
     function defaultSizeFor(type: string): string {
         return metaFor(type).defaultSize;
+    }
+
+    function fallbackSizeFor(type: string, rawMode: string): string {
+        const allowed = supportedSizesFor(type);
+        if (!allowed || allowed.length === 0)
+            return "1x1";
+        if (rawMode && allowed.indexOf(rawMode) >= 0)
+            return rawMode;
+        if (rawMode === "2x3") {
+            if (allowed.indexOf("2x2") >= 0)
+                return "2x2";
+            if (allowed.indexOf("1x3") >= 0)
+                return "1x3";
+        } else if (rawMode === "2x1" || rawMode === "1x3") {
+            if (allowed.indexOf("1x2") >= 0)
+                return "1x2";
+            if (allowed.indexOf("2x2") >= 0)
+                return "2x2";
+        }
+        return defaultSizeFor(type);
+    }
+
+    function clampItemScale(raw: real): real {
+        if (!raw || isNaN(raw) || raw <= 0)
+            return 1.0;
+        return Math.max(minWidgetScale, Math.min(maxWidgetScale, Math.round(raw * 20) / 20));
+    }
+
+    function snapItemScale(raw: real): real {
+        const val = (!raw || isNaN(raw) || raw <= 0) ? 1.0 : raw;
+        const clamped = Math.max(minWidgetScale, Math.min(maxWidgetScale, val));
+        if (Math.abs(clamped - 1.0) <= 0.045)
+            return 1.0;
+        return Math.round(clamped * 20) / 20;
+    }
+
+    function formatScaleLabel(sc: real): string {
+        const val = clampItemScale(sc);
+        return Math.abs(val - 1.0) < 0.005 ? "1.0×" : (val.toFixed(2).replace(/0$/, "") + "×");
+    }
+
+    function safeFontScale(s: real, factor: real): real {
+        const f = factor > 0 ? factor : 1.0;
+        return Math.max(0.55, s * f);
     }
 
     function keyForShapeEnum(shapeEnum: int): string {
@@ -341,14 +387,16 @@ QtObject {
         const isShaped = shapeKey && shapeKey !== "" && shapeKey !== "Rounded" && (shapeEnumMap[shapeKey] ?? -1) >= 0;
         if (isShaped) {
             const steep = shapeKey === "Heart" || shapeKey === "Diamond" || shapeKey === "Gem" || shapeKey === "Pentagon" || shapeKey === "Triangle";
-            const mild = shapeKey === "Square" || shapeKey === "Slanted" || shapeKey === "Arch" || shapeKey === "Pill" || shapeKey === "PixelCircle";
-            const base = Math.round((steep ? 25 : (mild ? 16 : 21)) * s);
-            const bottomExtra = (shapeKey === "Heart") ? Math.round(5 * s) : 0;
-            return { top: base, bottom: base + bottomExtra, left: base, right: base };
+            const narrow = shapeKey === "Pill" || shapeKey === "ClamShell" || shapeKey === "Bun" || shapeKey === "Ghostish" || shapeKey === "Clover4Leaf" || shapeKey === "Flower" || shapeKey === "Arch";
+            const mild = shapeKey === "Square" || shapeKey === "Slanted" || shapeKey === "PixelCircle";
+            const base = Math.round((steep ? 28 : (narrow ? 23 : (mild ? 16 : 21))) * s);
+            const topExtra = (shapeKey === "Heart") ? Math.round(3 * s) : 0;
+            const bottomExtra = (shapeKey === "Heart") ? Math.round(6 * s) : 0;
+            return { top: base + topExtra, bottom: base + bottomExtra, left: base, right: base };
         }
-        const rectPad = sizeMode === "1x1"
+        const rectPad = sizeMode === "1x1" || sizeMode === "1x2" || sizeMode === "2x1"
             ? Math.round(14 * s)
-            : ((sizeMode === "1x2" || sizeMode === "2x1") ? Math.round(16 * s) : Math.round(18 * s));
+            : Math.round(16 * s);
         return { top: rectPad, bottom: rectPad, left: rectPad, right: rectPad };
     }
 

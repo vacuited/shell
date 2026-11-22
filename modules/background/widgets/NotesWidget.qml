@@ -17,14 +17,18 @@ Item {
     property bool weActive: false
     property bool locked: true
     property string sizeMode: "2x1"
+    property real widgetScale: WidgetMetrics.scale
     property string surfaceStyle: ""
     property bool blurEnabled: Config.background.desktopWidgets.blur
     property real plateOpacity: Config.background.desktopWidgets.opacity
     property var widgetOptions: ({})
 
-    readonly property real s: Math.max(0.7, Math.min(1.5, Config.background.desktopWidgets.scale ?? 1.0))
+    readonly property real s: Math.max(0.55, Math.min(2.2, widgetScale > 0 ? widgetScale : WidgetMetrics.scale))
+    readonly property string effectiveSize: WidgetMetrics.fallbackSizeFor("notes", sizeMode)
     property string selectedNoteId: widgetOptions?.noteId ?? ""
     property string mode: "view" // "view" | "edit"
+    property string draftTitle: ""
+    property string draftBody: ""
     property bool _editingHeld: false
     readonly property var swatchKeys: ["none", "primary", "secondary", "tertiary", "pink"]
 
@@ -115,9 +119,10 @@ Item {
     function enterEditMode(): void {
         if (!activeNote)
             return;
-        titleInput.text = activeNote.title ?? "";
-        bodyEdit.text = activeNote.body ?? "";
+        draftTitle = activeNote.title ?? "";
+        draftBody = activeNote.body ?? "";
         mode = "edit";
+        layoutLoader.item?.syncDraftFields?.();
         setEditingActive(root.locked);
         editFocusTimer.restart();
     }
@@ -125,13 +130,13 @@ Item {
     function saveEdits(): void {
         const n = activeNote;
         if (n) {
-            const tTrim = titleInput.text.trim();
-            const bTrim = bodyEdit.text.trim();
+            const tTrim = draftTitle.trim();
+            const bTrim = draftBody.trim();
             if (tTrim === "" && bTrim === "") {
                 NotesStore.deleteNote(n.id);
             } else {
                 const shapes = (n.listShapes && typeof n.listShapes === "object" && !Array.isArray(n.listShapes)) ? n.listShapes : ({});
-                NotesStore.updateNote(n.id, titleInput.text, bodyEdit.text, Boolean(n.pinned), n.color ?? "none", shapes);
+                NotesStore.updateNote(n.id, draftTitle, draftBody, Boolean(n.pinned), n.color ?? "none", shapes);
             }
         }
         mode = "view";
@@ -142,14 +147,23 @@ Item {
         const n = activeNote;
         if (n) {
             const shapes = (n.listShapes && typeof n.listShapes === "object" && !Array.isArray(n.listShapes)) ? n.listShapes : ({});
-            const nextTitle = mode === "edit" ? titleInput.text : (n.title ?? "");
-            const nextBody = mode === "edit" ? bodyEdit.text : (n.body ?? "");
+            const nextTitle = mode === "edit" ? draftTitle : (n.title ?? "");
+            const nextBody = mode === "edit" ? draftBody : (n.body ?? "");
             NotesStore.updateNote(n.id, nextTitle, nextBody, Boolean(n.pinned), key, shapes);
         }
     }
 
-    implicitWidth: WidgetMetrics.widthFor(sizeMode, s)
-    implicitHeight: WidgetMetrics.heightFor(sizeMode, "notes", s)
+    function deleteActiveNote(): void {
+        if (!activeNote)
+            return;
+        const delId = activeNote.id;
+        mode = "view";
+        setEditingActive(false);
+        NotesStore.deleteNote(delId);
+    }
+
+    implicitWidth: WidgetMetrics.widthFor(effectiveSize, s)
+    implicitHeight: WidgetMetrics.heightFor(effectiveSize, "notes", s)
 
     onLockedChanged: {
         if (!locked && mode === "edit")
@@ -162,7 +176,10 @@ Item {
         id: editFocusTimer
 
         interval: 30
-        onTriggered: bodyEdit.forceActiveFocus()
+        onTriggered: {
+            if (layoutLoader.item?.bodyField)
+                layoutLoader.item.bodyField.forceActiveFocus();
+        }
     }
 
     WidgetCardShell {
@@ -170,7 +187,7 @@ Item {
 
         anchors.fill: parent
         widgetType: "notes"
-        sizeMode: root.sizeMode
+        sizeMode: root.effectiveSize
         outerShape: root.widgetOptions?.outerShape ?? ""
         wallpaper: root.wallpaper
         weActive: root.weActive
@@ -179,27 +196,39 @@ Item {
         plateOpacity: root.plateOpacity
         scaleFactor: root.s
 
-        // 1x1 Expressive Sticky Note Snippet (tap to cycle notes)
-        Item {
+        Loader {
+            id: layoutLoader
+
             anchors.fill: parent
-            anchors.topMargin: shell.topPadding
-            anchors.bottomMargin: shell.bottomPadding
-            anchors.leftMargin: shell.sidePadding
-            anchors.rightMargin: shell.sidePadding
-            visible: root.sizeMode === "1x1"
+            sourceComponent: root.effectiveSize === "1x1" ? layout1x1 : layoutWorkspace
+        }
+    }
+
+    // 1x1 Expressive Sticky Note Snippet (tap to cycle notes)
+    Component {
+        id: layout1x1
+
+        Item {
+            clip: true
 
             ColumnLayout {
                 anchors.fill: parent
-                spacing: Math.round(4 * root.s)
+                anchors.topMargin: shell.topPadding
+                anchors.bottomMargin: shell.bottomPadding
+                anchors.leftMargin: shell.sidePadding
+                anchors.rightMargin: shell.sidePadding
+                spacing: Math.max(2, Math.round(4 * root.s))
 
                 RowLayout {
                     Layout.fillWidth: true
-                    spacing: 4
+                    Layout.minimumWidth: 0
+                    spacing: Math.max(3, Math.round(4 * root.s))
 
                     MaterialShape {
-                        Layout.preferredWidth: Math.round(14 * root.s)
-                        Layout.preferredHeight: Math.round(14 * root.s)
-                        implicitSize: Math.round(14 * root.s)
+                        Layout.fillWidth: false
+                        Layout.preferredWidth: Math.round(13 * root.s)
+                        Layout.preferredHeight: Math.round(13 * root.s)
+                        implicitSize: Math.round(13 * root.s)
                         Layout.alignment: Qt.AlignVCenter
                         shape: MaterialShape.Cookie4Sided
                         color: root.accentColor
@@ -207,8 +236,9 @@ Item {
 
                     StyledText {
                         Layout.fillWidth: true
+                        Layout.minimumWidth: 0
                         text: root.activeNote ? (root.activeNote.title || Tr.tr("Note")) : Tr.tr("Notes")
-                        font: Tokens.font.label.builders.medium.weight(Font.Bold).build()
+                        font: Tokens.font.label.builders.medium.scale(WidgetMetrics.safeFontScale(root.s, 0.94)).weight(Font.Bold).build()
                         color: Colours.palette.m3onSurface
                         elide: Text.ElideRight
                     }
@@ -216,7 +246,7 @@ Item {
                     MaterialIcon {
                         visible: Boolean(root.activeNote?.pinned)
                         text: "push_pin"
-                        fontStyle: Tokens.font.icon.builders.small.scale(0.8).build()
+                        fontStyle: Tokens.font.icon.builders.small.scale(WidgetMetrics.safeFontScale(root.s, 0.8)).build()
                         color: root.accentColor
                     }
                 }
@@ -224,8 +254,9 @@ Item {
                 StyledText {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    text: root.activeNote ? (root.activeNote.body || Tr.tr("Empty note")) : Tr.tr("Tap + in larger view to write")
-                    font: Tokens.font.body.builders.small.scale(Math.max(0.85, root.s * 0.92)).build()
+                    Layout.minimumWidth: 0
+                    text: root.activeNote ? (root.activeNote.body || Tr.tr("Empty note")) : Tr.tr("Tap + in larger view")
+                    font: Tokens.font.body.builders.small.scale(WidgetMetrics.safeFontScale(root.s, 0.9)).build()
                     color: root.activeNote?.body ? Colours.palette.m3onSurface : Colours.palette.m3onSurfaceVariant
                     wrapMode: Text.WordWrap
                     elide: Text.ElideRight
@@ -235,369 +266,354 @@ Item {
                     visible: root.sortedNotes.length > 1
                     Layout.alignment: Qt.AlignRight
                     text: (root.activeIndex + 1) + "/" + root.sortedNotes.length
-                    font: Tokens.font.label.builders.small.scale(0.85).build()
+                    font: Tokens.font.label.builders.small.scale(WidgetMetrics.safeFontScale(root.s, 0.82)).build()
                     color: Colours.palette.m3onSurfaceVariant
                 }
             }
 
             StateLayer {
+                anchors.fill: parent
+                anchors.topMargin: shell.topPadding
+                anchors.bottomMargin: shell.bottomPadding
+                anchors.leftMargin: shell.sidePadding
+                anchors.rightMargin: shell.sidePadding
                 enabled: root.locked && root.sortedNotes.length > 1
                 radius: shell.isShaped ? width / 2 : shell.radius
                 onClicked: root.stepNote(1)
             }
         }
+    }
 
-        // Standard / Split Note Workspace (1x2, 2x1, 2x2, 2x3)
-        RowLayout {
+    // 1x2, 2x1, 2x2 Note Workspace
+    Component {
+        id: layoutWorkspace
+
+        ColumnLayout {
+            id: wsRoot
+
+            property alias bodyField: bodyEdit
+            readonly property bool narrowCard: root.effectiveSize === "2x1"
+
+            function syncDraftFields(): void {
+                if (titleInput.text !== root.draftTitle)
+                    titleInput.text = root.draftTitle;
+                if (bodyEdit.text !== root.draftBody)
+                    bodyEdit.text = root.draftBody;
+            }
+
+            Component.onCompleted: syncDraftFields()
+
             anchors.fill: parent
             anchors.margins: shell.contentPadding
-            visible: root.sizeMode !== "1x1"
-            spacing: Math.round(Tokens.spacing.medium * root.s)
+            spacing: Math.max(3, Math.round((root.effectiveSize === "1x2" ? 4 : Tokens.spacing.small) * root.s))
 
-            // 2x3 Left Note Switcher Sidebar
-            StyledRect {
-                visible: root.sizeMode === "2x3"
-                Layout.preferredWidth: Math.round(158 * root.s)
-                Layout.fillHeight: true
-                radius: Tokens.rounding.extraLarge
-                color: WidgetMetrics.innerSurface
-                border.width: 1
-                border.color: Qt.alpha(Colours.palette.m3outlineVariant, 0.4)
+            // Compact Action Header
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.minimumWidth: 0
+                spacing: Math.max(2, Math.round(3 * root.s))
 
-                ColumnLayout {
-                    anchors.fill: parent
-                    anchors.margins: Math.round(Tokens.padding.small * root.s)
-                    spacing: Math.round(6 * root.s)
+                MaterialShape {
+                    Layout.fillWidth: false
+                    Layout.preferredWidth: Math.round(14 * root.s)
+                    Layout.preferredHeight: Math.round(14 * root.s)
+                    implicitSize: Math.round(14 * root.s)
+                    Layout.alignment: Qt.AlignVCenter
+                    shape: MaterialShape.Cookie4Sided
+                    color: root.accentColor
+                }
 
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 4
+                StyledText {
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 0
+                    Layout.leftMargin: Math.round(4 * root.s)
+                    text: root.activeNote ? ((root.activeNote.title && root.activeNote.title.trim() !== "") ? root.activeNote.title : Tr.tr("Untitled Note")) : Tr.tr("Notes")
+                    visible: root.mode === "view"
+                    font: Tokens.font.title.builders.small.scale(WidgetMetrics.safeFontScale(root.s, wsRoot.narrowCard ? 0.9 : 0.96)).weight(Font.Bold).build()
+                    color: Colours.palette.m3onSurface
+                    elide: Text.ElideRight
+                }
+
+                StyledRect {
+                    visible: root.mode === "edit"
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 0
+                    Layout.leftMargin: Math.round(4 * root.s)
+                    Layout.preferredHeight: Math.round(28 * root.s)
+                    clip: true
+                    radius: Math.round(Tokens.rounding.small * Math.min(1.2, Math.max(0.75, root.s)))
+                    color: shell.innerSurfaceStrong
+                    border.width: 1
+                    border.color: shell.innerBorder
+
+                    TextInput {
+                        id: titleInput
+
+                        anchors.fill: parent
+                        anchors.leftMargin: Math.round(8 * root.s)
+                        anchors.rightMargin: Math.round(8 * root.s)
+                        verticalAlignment: TextInput.AlignVCenter
+                        color: Colours.palette.m3onSurface
+                        font: Tokens.font.label.builders.medium.scale(WidgetMetrics.safeFontScale(root.s, 0.94)).weight(Font.Bold).build()
+                        selectByMouse: true
+                        clip: true
+                        onTextEdited: root.draftTitle = text
 
                         StyledText {
-                            Layout.fillWidth: true
-                            text: Tr.tr("All Notes (%1)").arg(root.sortedNotes.length)
-                            font: Tokens.font.label.builders.small.weight(Font.Bold).build()
-                            color: Colours.palette.m3onSurfaceVariant
-                        }
-
-                        IconButton {
-                            icon: "add"
-                            type: IconButton.Tonal
-                            isRound: true
-                            onClicked: root.createAndEditNote()
+                            anchors.fill: parent
+                            verticalAlignment: Text.AlignVCenter
+                            text: Tr.tr("Title...")
+                            font: Tokens.font.label.builders.medium.scale(WidgetMetrics.safeFontScale(root.s, 0.94)).build()
+                            color: Qt.alpha(Colours.palette.m3onSurfaceVariant, 0.6)
+                            visible: titleInput.text === "" && !titleInput.activeFocus
+                            elide: Text.ElideRight
                         }
                     }
+                }
 
-                    ListView {
-                        id: sidebarNotesList
+                WidgetIconButton {
+                    visible: !wsRoot.narrowCard && root.sortedNotes.length > 1 && root.mode === "view"
+                    icon: "chevron_left"
+                    type: IconButton.Text
+                    translucent: shell.isTranslucent
+                    scaleFactor: root.s * 0.9
+                    onClicked: root.stepNote(-1)
+                }
 
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        clip: true
-                        spacing: 4
-                        boundsBehavior: Flickable.StopAtBounds
-                        model: root.sortedNotes
+                WidgetIconButton {
+                    visible: !wsRoot.narrowCard && root.sortedNotes.length > 1 && root.mode === "view"
+                    icon: "chevron_right"
+                    type: IconButton.Text
+                    translucent: shell.isTranslucent
+                    scaleFactor: root.s * 0.9
+                    onClicked: root.stepNote(1)
+                }
 
-                        delegate: StyledRect {
-                            id: sbRow
+                WidgetIconButton {
+                    visible: !wsRoot.narrowCard && root.activeNote !== null && root.mode === "view"
+                    icon: "push_pin"
+                    type: IconButton.Text
+                    isToggle: true
+                    checked: Boolean(root.activeNote?.pinned)
+                    translucent: shell.isTranslucent
+                    scaleFactor: root.s * 0.9
+                    onClicked: if (root.activeNote) NotesStore.togglePin(root.activeNote.id)
+                }
 
-                            required property var modelData
-                            readonly property bool selected: root.activeNote?.id === modelData.id
+                WidgetIconButton {
+                    visible: root.activeNote !== null
+                    icon: root.mode === "edit" ? "check" : "edit"
+                    type: root.mode === "edit" ? IconButton.Filled : IconButton.Tonal
+                    isRound: true
+                    translucent: shell.isTranslucent
+                    scaleFactor: root.s * 0.92
+                    onClicked: {
+                        if (root.mode === "edit")
+                            root.saveEdits();
+                        else
+                            root.enterEditMode();
+                    }
+                }
 
-                            width: sidebarNotesList.width
-                            height: Math.round(44 * root.s)
-                            radius: Tokens.rounding.medium
-                            color: selected
-                                ? Colours.palette.m3primaryContainer
-                                : (sbHover.hovered ? WidgetMetrics.innerSurfaceStrong : WidgetMetrics.innerSurface)
+                WidgetIconButton {
+                    visible: !wsRoot.narrowCard && root.mode === "view"
+                    icon: "add"
+                    type: IconButton.Text
+                    translucent: shell.isTranslucent
+                    scaleFactor: root.s * 0.92
+                    onClicked: root.createAndEditNote()
+                }
 
-                            HoverHandler {
-                                id: sbHover
-                            }
+                WidgetIconButton {
+                    visible: !wsRoot.narrowCard && root.activeNote !== null && root.mode === "edit"
+                    icon: "delete"
+                    type: IconButton.Text
+                    translucent: shell.isTranslucent
+                    scaleFactor: root.s * 0.92
+                    onClicked: root.deleteActiveNote()
+                }
+            }
 
-                            RowLayout {
-                                anchors.fill: parent
-                                anchors.margins: 8
-                                spacing: 6
+            // Color swatch bar when editing (hidden on compact 1x2)
+            RowLayout {
+                visible: root.mode === "edit" && root.activeNote !== null && root.effectiveSize !== "1x2"
+                Layout.fillWidth: true
+                spacing: Math.max(4, Math.round(6 * root.s))
 
-                                MaterialShape {
-                                    Layout.preferredWidth: 10
-                                    Layout.preferredHeight: 10
-                                    implicitSize: 10
-                                    Layout.alignment: Qt.AlignVCenter
-                                    shape: MaterialShape.Cookie4Sided
-                                    color: root.colorForKey(sbRow.modelData.color ?? "none")
-                                }
+                Repeater {
+                    model: root.swatchKeys
 
-                                ColumnLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 0
+                    delegate: StyledRect {
+                        id: swChip
 
-                                    StyledText {
-                                        Layout.fillWidth: true
-                                        text: (sbRow.modelData.title && sbRow.modelData.title.trim() !== "") ? sbRow.modelData.title : Tr.tr("Untitled")
-                                        font: Tokens.font.label.builders.small.weight(sbRow.selected ? Font.Bold : Font.Medium).build()
-                                        color: sbRow.selected ? Colours.palette.m3onPrimaryContainer : Colours.palette.m3onSurface
-                                        elide: Text.ElideRight
-                                    }
+                        required property string modelData
+                        readonly property bool selected: root.noteColorKey === modelData
 
-                                    StyledText {
-                                        Layout.fillWidth: true
-                                        text: (sbRow.modelData.body ?? "").replace(/\n/g, " ") || Tr.tr("Empty")
-                                        font: Tokens.font.label.builders.small.scale(0.82).build()
-                                        color: sbRow.selected ? Qt.alpha(Colours.palette.m3onPrimaryContainer, 0.78) : Colours.palette.m3onSurfaceVariant
-                                        elide: Text.ElideRight
-                                    }
-                                }
+                        Layout.fillWidth: false
+                        Layout.preferredWidth: Math.round(20 * root.s)
+                        Layout.preferredHeight: Math.round(20 * root.s)
+                        radius: Math.round(10 * root.s)
+                        color: modelData === "none" ? shell.innerSurfaceStrong : root.colorForKey(modelData)
+                        border.width: selected ? 2 : 0
+                        border.color: Colours.palette.m3onSurface
 
-                                MaterialIcon {
-                                    visible: Boolean(sbRow.modelData.pinned)
-                                    text: "push_pin"
-                                    fontStyle: Tokens.font.icon.builders.small.scale(0.8).build()
-                                    color: sbRow.selected ? Colours.palette.m3onPrimaryContainer : Colours.palette.m3primary
-                                }
-                            }
+                        StateLayer {
+                            enabled: root.locked
+                            radius: parent.radius
+                            onClicked: root.setNoteColor(swChip.modelData)
+                        }
+                    }
+                }
 
-                            StateLayer {
-                                enabled: root.locked
-                                radius: parent.radius
-                                onClicked: root.selectNote(sbRow.modelData.id)
-                            }
+                Item {
+                    Layout.fillWidth: true
+                }
+            }
+
+            // View Body
+            Flickable {
+                visible: root.mode === "view"
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.minimumHeight: Math.round(36 * root.s)
+                contentWidth: width
+                contentHeight: viewBodyText.implicitHeight
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+
+                StyledText {
+                    id: viewBodyText
+
+                    width: parent.width
+                    text: root.activeNote
+                        ? (root.activeNote.body || Tr.tr("Double-click or press Edit to write..."))
+                        : Tr.tr("Tap + to create a note")
+                    font: Tokens.font.body.builders.small.scale(WidgetMetrics.safeFontScale(root.s, 0.94)).build()
+                    color: root.activeNote?.body ? Colours.palette.m3onSurface : Colours.palette.m3onSurfaceVariant
+                    wrapMode: Text.WordWrap
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    enabled: root.locked
+                    onDoubleClicked: {
+                        if (root.activeNote)
+                            root.enterEditMode();
+                        else
+                            root.createAndEditNote();
+                    }
+                }
+            }
+
+            // Edit Body
+            StyledRect {
+                visible: root.mode === "edit"
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.minimumHeight: Math.round(44 * root.s)
+                clip: true
+                radius: Math.round(Tokens.rounding.medium * Math.min(1.2, Math.max(0.75, root.s)))
+                color: shell.innerSurfaceStrong
+                border.width: bodyEdit.activeFocus ? 1.5 : 1
+                border.color: bodyEdit.activeFocus ? root.accentColor : shell.innerBorder
+
+                Flickable {
+                    id: editFlick
+
+                    anchors.fill: parent
+                    anchors.margins: Math.round(8 * root.s)
+                    contentWidth: width
+                    contentHeight: Math.max(height, bodyEdit.implicitHeight)
+                    clip: true
+                    boundsBehavior: Flickable.StopAtBounds
+
+                    TextEdit {
+                        id: bodyEdit
+
+                        width: editFlick.width
+                        height: Math.max(editFlick.height, implicitHeight)
+                        color: Colours.palette.m3onSurface
+                        font: Tokens.font.body.builders.small.scale(WidgetMetrics.safeFontScale(root.s, 0.94)).build()
+                        wrapMode: TextEdit.WordWrap
+                        selectByMouse: true
+                        onTextChanged: if (root.mode === "edit") root.draftBody = text
+                        Keys.onEscapePressed: root.saveEdits()
+
+                        StyledText {
+                            anchors.left: parent.left
+                            anchors.top: parent.top
+                            text: Tr.tr("Start typing...")
+                            font: Tokens.font.body.builders.small.scale(WidgetMetrics.safeFontScale(root.s, 0.94)).build()
+                            color: Qt.alpha(Colours.palette.m3onSurfaceVariant, 0.55)
+                            visible: bodyEdit.text === "" && !bodyEdit.activeFocus
                         }
                     }
                 }
             }
 
-            // Active Note Editor / Viewer Pane
-            ColumnLayout {
+            // Bottom toolbar on narrow 2x1 column so controls fit cleanly
+            RowLayout {
+                visible: wsRoot.narrowCard
                 Layout.fillWidth: true
-                Layout.fillHeight: true
-                spacing: Math.round(root.sizeMode === "1x2" ? 4 : Tokens.spacing.small * root.s)
+                Layout.minimumWidth: 0
+                spacing: Math.max(2, Math.round(2 * root.s))
 
-                // Compact Action Header
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 2
-
-                    MaterialShape {
-                        Layout.preferredWidth: Math.round(14 * root.s)
-                        Layout.preferredHeight: Math.round(14 * root.s)
-                        implicitSize: Math.round(14 * root.s)
-                        Layout.alignment: Qt.AlignVCenter
-                        shape: MaterialShape.Cookie4Sided
-                        color: root.accentColor
-                    }
-
-                    StyledText {
-                        Layout.fillWidth: true
-                        Layout.leftMargin: 4
-                        text: root.activeNote ? ((root.activeNote.title && root.activeNote.title.trim() !== "") ? root.activeNote.title : Tr.tr("Untitled Note")) : Tr.tr("Notes")
-                        visible: root.mode === "view"
-                        font: Tokens.font.title.builders.small.scale(root.s).weight(Font.Bold).build()
-                        color: Colours.palette.m3onSurface
-                        elide: Text.ElideRight
-                    }
-
-                    StyledRect {
-                        visible: root.mode === "edit"
-                        Layout.fillWidth: true
-                        Layout.leftMargin: 4
-                        Layout.preferredHeight: Math.round(28 * root.s)
-                        radius: Tokens.rounding.small
-                        color: WidgetMetrics.innerSurfaceStrong
-
-                        TextInput {
-                            id: titleInput
-
-                            anchors.fill: parent
-                            anchors.leftMargin: 8
-                            anchors.rightMargin: 8
-                            verticalAlignment: TextInput.AlignVCenter
-                            color: Colours.palette.m3onSurface
-                            font: Tokens.font.label.builders.medium.weight(Font.Bold).build()
-                            selectByMouse: true
-
-                            StyledText {
-                                anchors.fill: parent
-                                verticalAlignment: Text.AlignVCenter
-                                text: Tr.tr("Title...")
-                                font: Tokens.font.label.medium
-                                color: Qt.alpha(Colours.palette.m3onSurfaceVariant, 0.6)
-                                visible: titleInput.text === "" && !titleInput.activeFocus
-                            }
-                        }
-                    }
-
-                    IconButton {
-                        visible: root.sizeMode !== "2x3" && root.sortedNotes.length > 1 && root.mode === "view"
-                        icon: "chevron_left"
-                        type: IconButton.Text
-                        onClicked: root.stepNote(-1)
-                    }
-
-                    IconButton {
-                        visible: root.sizeMode !== "2x3" && root.sortedNotes.length > 1 && root.mode === "view"
-                        icon: "chevron_right"
-                        type: IconButton.Text
-                        onClicked: root.stepNote(1)
-                    }
-
-                    IconButton {
-                        visible: root.activeNote !== null && root.mode === "view"
-                        icon: "push_pin"
-                        type: IconButton.Text
-                        isToggle: true
-                        checked: Boolean(root.activeNote?.pinned)
-                        onClicked: if (root.activeNote) NotesStore.togglePin(root.activeNote.id)
-                    }
-
-                    IconButton {
-                        visible: root.activeNote !== null
-                        icon: root.mode === "edit" ? "check" : "edit"
-                        type: root.mode === "edit" ? IconButton.Filled : IconButton.Tonal
-                        isRound: true
-                        onClicked: {
-                            if (root.mode === "edit")
-                                root.saveEdits();
-                            else
-                                root.enterEditMode();
-                        }
-                    }
-
-                    IconButton {
-                        visible: root.sizeMode !== "2x3" && root.mode === "view"
-                        icon: "add"
-                        type: IconButton.Text
-                        onClicked: root.createAndEditNote()
-                    }
-
-                    IconButton {
-                        visible: root.activeNote !== null && root.mode === "edit"
-                        icon: "delete"
-                        type: IconButton.Text
-                        onClicked: {
-                            if (root.activeNote) {
-                                const delId = root.activeNote.id;
-                                root.mode = "view";
-                                root.setEditingActive(false);
-                                NotesStore.deleteNote(delId);
-                            }
-                        }
-                    }
+                WidgetIconButton {
+                    visible: root.sortedNotes.length > 1 && root.mode === "view"
+                    icon: "chevron_left"
+                    type: IconButton.Text
+                    translucent: shell.isTranslucent
+                    scaleFactor: root.s * 0.85
+                    onClicked: root.stepNote(-1)
                 }
 
-                // Color swatch bar when editing (hidden only on cramped 1x2 unless taller)
-                RowLayout {
-                    visible: root.mode === "edit" && root.activeNote !== null && root.sizeMode !== "1x2"
-                    Layout.fillWidth: true
-                    spacing: 6
-
-                    Repeater {
-                        model: root.swatchKeys
-
-                        delegate: StyledRect {
-                            id: swChip
-
-                            required property string modelData
-                            readonly property bool selected: root.noteColorKey === modelData
-
-                            Layout.preferredWidth: 20
-                            Layout.preferredHeight: 20
-                            radius: 10
-                            color: modelData === "none" ? WidgetMetrics.innerSurfaceStrong : root.colorForKey(modelData)
-                            border.width: selected ? 2 : 0
-                            border.color: Colours.palette.m3onSurface
-
-                            StateLayer {
-                                enabled: root.locked
-                                radius: 10
-                                onClicked: root.setNoteColor(swChip.modelData)
-                            }
-                        }
-                    }
-
-                    Item {
-                        Layout.fillWidth: true
-                    }
+                StyledText {
+                    visible: root.sortedNotes.length > 1 && root.mode === "view"
+                    text: (root.activeIndex + 1) + "/" + root.sortedNotes.length
+                    font: Tokens.font.label.builders.small.scale(WidgetMetrics.safeFontScale(root.s, 0.84)).build()
+                    color: Colours.palette.m3onSurfaceVariant
                 }
 
-                // View Body
-                Flickable {
+                WidgetIconButton {
+                    visible: root.sortedNotes.length > 1 && root.mode === "view"
+                    icon: "chevron_right"
+                    type: IconButton.Text
+                    translucent: shell.isTranslucent
+                    scaleFactor: root.s * 0.85
+                    onClicked: root.stepNote(1)
+                }
+
+                Item {
+                    Layout.fillWidth: true
+                }
+
+                WidgetIconButton {
+                    visible: root.activeNote !== null && root.mode === "view"
+                    icon: "push_pin"
+                    type: IconButton.Text
+                    isToggle: true
+                    checked: Boolean(root.activeNote?.pinned)
+                    translucent: shell.isTranslucent
+                    scaleFactor: root.s * 0.85
+                    onClicked: if (root.activeNote) NotesStore.togglePin(root.activeNote.id)
+                }
+
+                WidgetIconButton {
                     visible: root.mode === "view"
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    Layout.minimumHeight: 40
-                    contentWidth: width
-                    contentHeight: viewBodyText.implicitHeight
-                    clip: true
-                    boundsBehavior: Flickable.StopAtBounds
-
-                    StyledText {
-                        id: viewBodyText
-
-                        width: parent.width
-                        text: root.activeNote
-                            ? (root.activeNote.body || Tr.tr("Double-click or press Edit to write..."))
-                            : Tr.tr("Tap + to create a note")
-                        font: Tokens.font.body.builders.small.scale(root.s).build()
-                        color: root.activeNote?.body ? Colours.palette.m3onSurface : Colours.palette.m3onSurfaceVariant
-                        wrapMode: Text.WordWrap
-                    }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        enabled: root.locked
-                        onDoubleClicked: {
-                            if (root.activeNote)
-                                root.enterEditMode();
-                            else
-                                root.createAndEditNote();
-                        }
-                    }
+                    icon: "add"
+                    type: IconButton.Text
+                    translucent: shell.isTranslucent
+                    scaleFactor: root.s * 0.88
+                    onClicked: root.createAndEditNote()
                 }
 
-                // Edit Body (minimumHeight prevents collapse on 1x2)
-                StyledRect {
-                    visible: root.mode === "edit"
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    Layout.minimumHeight: 48
-                    radius: Tokens.rounding.medium
-                    color: WidgetMetrics.innerSurfaceStrong
-                    border.width: bodyEdit.activeFocus ? 1.5 : 1
-                    border.color: bodyEdit.activeFocus ? root.accentColor : Colours.palette.m3outlineVariant
-
-                    Flickable {
-                        id: editFlick
-
-                        anchors.fill: parent
-                        anchors.margins: 8
-                        contentWidth: width
-                        contentHeight: Math.max(height, bodyEdit.implicitHeight)
-                        clip: true
-                        boundsBehavior: Flickable.StopAtBounds
-
-                        TextEdit {
-                            id: bodyEdit
-
-                            width: editFlick.width
-                            height: Math.max(editFlick.height, implicitHeight)
-                            color: Colours.palette.m3onSurface
-                            font: Tokens.font.body.builders.small.scale(root.s).build()
-                            wrapMode: TextEdit.WordWrap
-                            selectByMouse: true
-                            Keys.onEscapePressed: root.saveEdits()
-
-                            StyledText {
-                                anchors.left: parent.left
-                                anchors.top: parent.top
-                                text: Tr.tr("Start typing...")
-                                font: Tokens.font.body.small
-                                color: Qt.alpha(Colours.palette.m3onSurfaceVariant, 0.55)
-                                visible: bodyEdit.text === "" && !bodyEdit.activeFocus
-                            }
-                        }
-                    }
+                WidgetIconButton {
+                    visible: root.activeNote !== null && root.mode === "edit"
+                    icon: "delete"
+                    type: IconButton.Text
+                    translucent: shell.isTranslucent
+                    scaleFactor: root.s * 0.88
+                    onClicked: root.deleteActiveNote()
                 }
             }
         }

@@ -33,20 +33,33 @@ function validSizeMode(type, sizeMode) {
     if (type === "weatherPill")
         return sizeMode === "1x2" ? "1x2" : "1x1";
     var allowed = {
-        "atAGlance": ["1x2", "2x1", "2x2", "1x3", "2x3"],
-        "calendar": ["1x1", "1x2", "2x1", "2x2", "2x3"],
-        "weather": ["1x1", "1x2", "2x1", "2x2", "1x3", "2x3"],
-        "timers": ["1x1", "1x2", "2x1", "2x2", "2x3"],
-        "countdown": ["1x1", "1x2", "2x1", "2x2"],
-        "resources": ["1x1", "1x2", "2x1", "2x2", "1x3", "2x3"],
-        "media": ["1x1", "1x2", "2x1", "2x2", "1x3", "2x3"],
-        "battery": ["1x1", "1x2", "2x1", "2x2"],
-        "usercard": ["1x1", "1x2", "2x1", "2x2", "2x3"],
-        "todo": ["1x1", "1x2", "2x1", "2x2", "2x3"],
-        "notes": ["1x1", "1x2", "2x1", "2x2", "2x3"]
+        "atAGlance": ["1x2", "2x2", "1x3"],
+        "calendar": ["1x1", "1x2", "2x2"],
+        "weather": ["1x1", "1x2", "2x2", "1x3"],
+        "timers": ["1x1", "1x2", "2x2"],
+        "countdown": ["1x1", "1x2", "2x2"],
+        "resources": ["1x1", "1x2", "2x1", "2x2", "1x3"],
+        "media": ["1x1", "1x2", "2x2", "1x3"],
+        "battery": ["1x1", "1x2", "2x2"],
+        "usercard": ["1x1", "1x2", "2x2"],
+        "todo": ["1x1", "1x2", "2x1", "2x2"],
+        "notes": ["1x1", "1x2", "2x1", "2x2"]
     }[type];
-    if (sizeMode && sizeMode !== "" && (!allowed || allowed.indexOf(sizeMode) >= 0))
+    if (!allowed)
+        return sizeMode && sizeMode !== "" ? sizeMode : defaultSizeMode(type);
+    if (sizeMode && sizeMode !== "" && allowed.indexOf(sizeMode) >= 0)
         return sizeMode;
+    if (sizeMode === "2x3") {
+        if (allowed.indexOf("2x2") >= 0)
+            return "2x2";
+        if (allowed.indexOf("1x3") >= 0)
+            return "1x3";
+    } else if (sizeMode === "2x1" || sizeMode === "1x3") {
+        if (allowed.indexOf("1x2") >= 0)
+            return "1x2";
+        if (allowed.indexOf("2x2") >= 0)
+            return "2x2";
+    }
     return defaultSizeMode(type);
 }
 

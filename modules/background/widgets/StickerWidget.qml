@@ -106,37 +106,40 @@ Item {
         ColumnLayout {
             anchors.centerIn: parent
             width: Math.max(40, parent.width - emptyShell.contentPadding * 2)
-            spacing: Math.round(6 * root.s)
+            spacing: Math.max(3, Math.round(6 * root.s))
 
             MaterialShape {
                 Layout.alignment: Qt.AlignHCenter
                 Layout.preferredWidth: Math.round(46 * root.s)
                 Layout.preferredHeight: Math.round(46 * root.s)
+                implicitSize: Math.round(46 * root.s)
                 shape: MaterialShape.SoftBurst
-                color: Colours.palette.m3tertiaryContainer
+                color: emptyShell.tertiaryContainerTint
 
                 MaterialIcon {
                     anchors.centerIn: parent
                     text: "sentiment_satisfied"
-                    fontStyle: Tokens.font.icon.large
+                    fontStyle: Tokens.font.icon.builders.large.scale(WidgetMetrics.safeFontScale(root.s, 0.96)).build()
                     color: Colours.palette.m3onTertiaryContainer
                 }
             }
 
             StyledText {
                 Layout.fillWidth: true
+                Layout.minimumWidth: 0
                 horizontalAlignment: Text.AlignHCenter
                 text: qsTr("Pick sticker")
-                font: Tokens.font.label.builders.medium.weight(Font.DemiBold).build()
+                font: Tokens.font.label.builders.medium.scale(WidgetMetrics.safeFontScale(root.s, 0.94)).weight(Font.DemiBold).build()
                 color: Colours.palette.m3onSurface
                 elide: Text.ElideRight
             }
 
             StyledText {
                 Layout.fillWidth: true
+                Layout.minimumWidth: 0
                 horizontalAlignment: Text.AlignHCenter
                 text: qsTr("Transparent PNG / GIF")
-                font: Tokens.font.label.small
+                font: Tokens.font.label.builders.small.scale(WidgetMetrics.safeFontScale(root.s, 0.9)).build()
                 color: Colours.palette.m3onSurfaceVariant
                 elide: Text.ElideRight
             }
