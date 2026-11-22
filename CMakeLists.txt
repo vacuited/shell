@@ -1,47 +1,74 @@
 cmake_minimum_required(VERSION 3.19)
 
-set(REMOTE_REPO_URL "https://github.com/caelestia-dots/shell.git")
+set(REMOTE_REPO_URL "https://github.com/vacuited/shell.git")
 
 if(NOT DEFINED VERSION)
-    # Fetch the latest annotated or lightweight tag from the remote repo
+    # Try local git tag first, then remote tags, falling back to 1.0.0
     execute_process(
-        COMMAND git ls-remote --tags --sort=-v:refname "${REMOTE_REPO_URL}"
-        OUTPUT_VARIABLE REMOTE_TAGS_RAW
-        RESULT_VARIABLE GIT_TAG_RESULT
+        COMMAND git -C "${CMAKE_CURRENT_SOURCE_DIR}" describe --tags --abbrev=0
+        OUTPUT_VARIABLE LOCAL_TAG_RAW
+        RESULT_VARIABLE LOCAL_TAG_RESULT
+        ERROR_QUIET
         OUTPUT_STRIP_TRAILING_WHITESPACE
     )
 
-    if(NOT GIT_TAG_RESULT EQUAL 0 OR "${REMOTE_TAGS_RAW}" STREQUAL "")
-        message(FATAL_ERROR "Failed to query tags from ${REMOTE_REPO_URL}")
+    if(LOCAL_TAG_RESULT EQUAL 0 AND NOT "${LOCAL_TAG_RAW}" STREQUAL "")
+        set(VERSION "${LOCAL_TAG_RAW}")
+    else()
+        execute_process(
+            COMMAND git ls-remote --tags --sort=-v:refname "${REMOTE_REPO_URL}"
+            OUTPUT_VARIABLE REMOTE_TAGS_RAW
+            RESULT_VARIABLE GIT_TAG_RESULT
+            ERROR_QUIET
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+        )
+
+        if(GIT_TAG_RESULT EQUAL 0 AND NOT "${REMOTE_TAGS_RAW}" STREQUAL "")
+            string(REGEX MATCH "refs/tags/([^\n\^\t ]+)" _MATCH "${REMOTE_TAGS_RAW}")
+            set(VERSION "${CMAKE_MATCH_1}")
+        endif()
     endif()
 
-    # Extract the first ref tag name (strips commit hash and peels ^{})
-    string(REGEX MATCH "refs/tags/([^\n\^\t ]+)" _MATCH "${REMOTE_TAGS_RAW}")
-    set(VERSION "${CMAKE_MATCH_1}")
-
-    if("${VERSION}" STREQUAL "")
-        message(FATAL_ERROR "VERSION is not set and failed to parse from remote tags")
+    if(NOT DEFINED VERSION OR "${VERSION}" STREQUAL "")
+        set(VERSION "1.0.0")
     endif()
 endif()
 
 if(NOT DEFINED GIT_REVISION)
-    # Fetch HEAD commit hash from the remote repo
+    # Try local git HEAD first, then remote HEAD, falling back to unknown
     execute_process(
-        COMMAND git ls-remote "${REMOTE_REPO_URL}" HEAD
-        OUTPUT_VARIABLE REMOTE_HEAD_RAW
-        RESULT_VARIABLE GIT_REV_RESULT
+        COMMAND git -C "${CMAKE_CURRENT_SOURCE_DIR}" rev-parse HEAD
+        OUTPUT_VARIABLE LOCAL_HEAD_RAW
+        RESULT_VARIABLE LOCAL_REV_RESULT
+        ERROR_QUIET
         OUTPUT_STRIP_TRAILING_WHITESPACE
     )
 
-    if(NOT GIT_REV_RESULT EQUAL 0 OR "${REMOTE_HEAD_RAW}" STREQUAL "")
-        message(FATAL_ERROR "GIT_REVISION is not set and failed to get from remote repo")
+    if(LOCAL_REV_RESULT EQUAL 0 AND "${LOCAL_HEAD_RAW}" MATCHES "^[0-9a-fA-F]+$")
+        set(GIT_REVISION "${LOCAL_HEAD_RAW}")
+    else()
+        execute_process(
+            COMMAND git ls-remote "${REMOTE_REPO_URL}" HEAD
+            OUTPUT_VARIABLE REMOTE_HEAD_RAW
+            RESULT_VARIABLE GIT_REV_RESULT
+            ERROR_QUIET
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+        )
+
+        if(GIT_REV_RESULT EQUAL 0 AND NOT "${REMOTE_HEAD_RAW}" STREQUAL "")
+            string(REGEX MATCH "^([0-9a-fA-F]+)" GIT_REVISION "${REMOTE_HEAD_RAW}")
+        endif()
     endif()
 
-    # Extract the 40-character commit SHA
-    string(REGEX MATCH "^([0-9a-fA-F]+)" GIT_REVISION "${REMOTE_HEAD_RAW}")
+    if(NOT DEFINED GIT_REVISION OR "${GIT_REVISION}" STREQUAL "")
+        set(GIT_REVISION "unknown")
+    endif()
 endif()
 
 string(REGEX REPLACE "^v" "" VERSION "${VERSION}")
+if(NOT "${VERSION}" MATCHES "^[0-9]+\\.[0-9]+(\\.[0-9]+)?(\\.[0-9]+)?$")
+    set(VERSION "1.0.0")
+endif()
 
 project(caelestia-shell VERSION ${VERSION} LANGUAGES CXX)
 
@@ -90,7 +117,14 @@ endif()
 
 if("shell" IN_LIST ENABLE_MODULES)
     foreach(dir assets components daemons modules services utils)
-        install(DIRECTORY ${dir} DESTINATION "${INSTALL_QSCONFDIR}")
+        install(
+            DIRECTORY ${dir}
+            DESTINATION "${INSTALL_QSCONFDIR}"
+            PATTERN "__pycache__" EXCLUDE
+            PATTERN "*.pyc" EXCLUDE
+            PATTERN "*.orig" EXCLUDE
+            PATTERN "*.bak" EXCLUDE
+        )
     endforeach()
 
     install(PROGRAMS assets/wrap_term_launch.sh DESTINATION "${INSTALL_QSCONFDIR}/assets")

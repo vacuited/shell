@@ -16,7 +16,7 @@ body:
       options:
         - label: I have read the above instructions and am sure that this is supposed to be posted here.
           required: true
-        - label: I have successfully updated to the latest versions by following the [updating guide](https://github.com/caelestia-dots/caelestia?tab=readme-ov-file#updating).
+        - label: I have successfully updated to the latest versions by following the [install & build guide](https://github.com/vacuited/shell#install--build).
           required: false # Not required since the user may have been unable to do so
         - label: I have successfully updated the system packages to the latest.
           required: false # Not required since the user may have been unable to do so

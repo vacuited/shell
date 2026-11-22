@@ -49,7 +49,7 @@ class ServiceConfig : public settings::ObjectNode {
     // Discord ARPC settings
     CONFIG_GLOBAL_PROPERTY(bool, arpcEnabled, false)
     CONFIG_GLOBAL_PROPERTY(QString, arpcClientId, u"1126685412586733678"_s)
-    CONFIG_GLOBAL_PROPERTY(QString, arpcAppName, u"Caelestia Shell"_s)
+    CONFIG_GLOBAL_PROPERTY(QString, arpcAppName, u"Vacuited Shell"_s)
     CONFIG_GLOBAL_PROPERTY(QString, arpcDetails, u""_s)
     CONFIG_GLOBAL_PROPERTY(QString, arpcState, u""_s)
     CONFIG_GLOBAL_PROPERTY(QString, arpcLargeImage, u""_s)

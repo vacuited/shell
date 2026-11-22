@@ -20,14 +20,14 @@
 ## Features & Changes
 
 ### Dynamic Island Notch & Desktop Widgets
-<sub>Ported from [cykler-caelestia](https://github.com/cykler01/cykler-caelestia) and heavily reworked to fit my setup and be cleaner/minimal</sub>
 - **Notch / Dynamic Island**: Morphing top pill with Caelestia `BlobRect` jelly physics, live Cava visualiser bars, spinning album art, clock, and active Pomodoro countdown.
 - **Notch Controls Drawer**: Expands with shape-morphing `ButtonRow` media and focus controls, auto-collapses cleanly, and slides seamlessly into the top border when apps enter fullscreen or the dashboard opens.
 - **Smart Compact Mode**: Auto-shrinks when windows are open to save space, or toggle `Always compact` in settings.
 - **Top Edge Dashboard Access**: Fixed hit-testing so hovering the very top edge above or beside the notch still opens the dashboard smoothly without fighting the notch.
 - **Desktop Widgets**: 15 modular snapping widgets (At a Glance, Weather card & pill, Timers, Countdown, Calendar, Resources, Media, Battery, Todo, Notes, User card, Sticker, Custom image & text) with multi-instance duplication, quick-edit popover, and `1×1` expressive `MaterialShape` silhouettes (`24` shapes).
 - **Widget Surface Modes**: 4 configurable surface styles (`Glass`, `Blur`, `Frosted` via `ditherglass.frag.qsb`, and `Material`) with padded wallpaper blur and auto-fade when tiled windows open.
-- **Desktop Clocks**: 5 clock styles (`Classic`, `Cookie`, `Pixel`, `Stacked`, and `Smooth`) with per-style shape, orientation, font, and alignment controls in `Nexus > Background elements`, plus automatic `Cookie` spin pause when covered by windows.
+- **Desktop Clocks**: 5 clock styles (`Classic`, `Cookie`, `Pixel`, `Stacked`, and `Smooth`) with an inline quick-edit popover (style, surface, scale, and color controls), `Nexus > Background elements` settings, and automatic `Cookie` spin pause when covered by windows.
+- **Desktop Lyrics**: Word-synced karaoke desktop lyrics (`karaokeword.frag.qsb`) with 4 visual styles (`Apple Flow`, `Minimal`, `Editorial`, `Neon Glow`), multi-provider backend (`Boidu`, `LyricsPlus`, `LRCLIB`, `NetEase`, local), and inline quick-edit popover.
 - **GPU Audio Visualiser (`VisualiserView`)**: Custom C++ RHI shader renderer with 5 GLSL styles (`Aurora`, `Bars`, `Wave`, `Dots`, `Glow`), edge or centered stage placement, and adaptive frame pacing (`30 FPS` over Wallpaper Engine or open windows, `60 FPS` on desktop).
 - **Shell Assets Page**: Custom profile picture (`~/.face`), system logo, GIFs (`sessionGif`, `mediaGif`), and empty notification placeholders under `Nexus > Appearance > Shell assets`.
 
@@ -65,6 +65,7 @@
 - **Keep Awake Inhibitor**: 3-stage toggle in Utilities (`Off`, `Prevent Sleep`, `Prevent Lock & Sleep`).
 - **Google Lens Screen Search**: Regional search button in Utilities drawer.
 - **Draggable Quick Toggles**: Drag-and-drop reordering editor in `Nexus > Panels > Utilities`.
+- **Built-in Nexus Updater**: Commit-level update checker for `vacuited/shell` and `vacuited/cli` under `Nexus > Updates` with changelog preview, fast QML-only vs. plugin-rebuild detection, rollback backups, and cancelable installs.
 - **Hyprshutdown Graceful Exits**: Session dialog showing running apps before logout, reboot, or shutdown.
 
 ---
@@ -114,10 +115,13 @@ To auto-start on login, add `exec-once = caelestia shell -d` (alongside the Glob
 ### Manual Build
 
 ```fish
-# Build plugin and install
-cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/ -DINSTALL_QSCONFDIR="$HOME/.config/quickshell/caelestia"
+# Build and install C++ plugin + extras
+cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr -DINSTALL_LIBDIR=/usr/lib/caelestia -DINSTALL_QMLDIR=/usr/lib/qt6/qml -DENABLE_MODULES="extras;plugin" -DDISTRIBUTOR=vacuited
 cmake --build build
 sudo cmake --install build
+
+# Deploy QML shell to user config (non-root)
+./install.sh --qml-only
 
 # Run or reload shell
 caelestia shell -d -r
@@ -131,7 +135,7 @@ caelestia shell -d -r
 | :--- | :--- | :--- |
 | **Caelestia Shell** | [caelestia-dots/shell](https://github.com/caelestia-dots/shell) | Original Quickshell desktop environment |
 | **MiDnight Shell** | [dim-ghub/midnight-shell](https://github.com/dim-ghub/midnight-shell) | Initial base the shell was derived from: styling, launchers, desktop gadgets |
-| **Cykler Caelestia** | [cykler01/cykler-caelestia](https://github.com/cykler01/cykler-caelestia) | Dynamic Island Notch, desktop widgets grid, shell assets page |
+| **Cykler Caelestia** | [cykler01/cykler-caelestia](https://github.com/cykler01/cykler-caelestia) | Initial idea and base for Dynamic Island Notch and shell assets (heavily rewritten) |
 | **Caelestia Notes** | [Denzils-repo/Caelestia_Notes](https://github.com/Denzils-repo/Caelestia_Notes) | Notes tab component and store |
 | **Caelestia Hourly Weather** | [ItsXyzzy/Caelestia-Hourly-Weather](https://github.com/ItsXyzzy/Caelestia-Hourly-Weather) | Hourly forecast and spline curve |
 | **Nexus Night Mode** | [AEON-mod/Scripts](https://github.com/AEON-mod/Scripts/tree/main/Nexus-NightMode) | HyprSunset service, toggle, and temp slider |
