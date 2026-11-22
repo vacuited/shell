@@ -207,7 +207,7 @@ Item {
                         sourceComponent: modelData.component
 
                         property bool wasActive: false
-                        onActiveChanged: if (active) wasActive = true
+                        onActiveChanged: if (active && !wasActive) Qt.callLater(() => { wasActive = true; })
 
                         Component.onCompleted: active = Qt.binding(() => {
                             if (wasActive || index === view.currentIndex)

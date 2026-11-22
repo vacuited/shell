@@ -66,6 +66,7 @@ PAC_OPTIONAL=(
     imagemagick playerctl lua papirus-icon-theme
 )
 AUR_OPTIONAL=(papirus-folders)
+AUR_WE=(skwd-paper-bin skwd-deck-bin skwd-deck-steamworks-bin)
 # Fonts: "fc-list family pattern|official package|aur package"
 FONTS=(
     "Material Symbols Rounded||ttf-material-symbols-variable-git"
@@ -78,6 +79,7 @@ SKIP_DEPS=0
 SKIP_CLI=0
 UPDATE_CLI=0
 WITH_OPTIONAL=0
+WITH_WE=0
 NO_BACKUP=0
 CLEAN_BUILD=0
 QML_ONLY=0
@@ -90,19 +92,20 @@ usage() {
     cat <<EOF
 Usage: ./install.sh [options]
 
-  -y, --yes            Non-interactive (answer yes, pass --noconfirm to package managers)
-      --skip-deps      Do not check or install dependencies
-      --skip-cli       Do not install the vacuited CLI when 'caelestia' is missing
-      --update-cli     Force rebuild and update of the vacuited CLI
-      --with-optional  Install optional runtime packages automatically (Arch)
-      --qml-only       Deploy QML files and shaders only (skip deps, CLI, C++ plugin, hardware)
-      --clean          Wipe the CMake build directory before configuring
-      --no-backup      Do not create a backup of existing QML config before overwriting
-      --hardware       Install the HP Victus hardware helper + polkit rule
-      --no-hardware    Skip hardware helper install (never removes an existing working helper)
-      --uninstall      Remove installed shell config, QML plugin, and hardware helper
-      --dry-run        Print what would run without changing anything
-  -h, --help           Show this help
+  -y, --yes                   Non-interactive (answer yes, pass --noconfirm to package managers)
+      --skip-deps             Do not check or install dependencies
+      --skip-cli              Do not install the vacuited CLI when 'caelestia' is missing
+      --update-cli            Force rebuild and update of the vacuited CLI
+      --with-optional         Install optional runtime packages automatically (Arch)
+      --with-wallpaper-engine Install Wallpaper Engine backend + Steam Workshop (Arch AUR)
+      --qml-only              Deploy QML files and shaders only (skip deps, CLI, C++ plugin, hardware)
+      --clean                 Wipe the CMake build directory before configuring
+      --no-backup             Do not create a backup of existing QML config before overwriting
+      --hardware              Install the HP Victus hardware helper + polkit rule
+      --no-hardware           Skip hardware helper install (never removes an existing working helper)
+      --uninstall             Remove installed shell config, QML plugin, and hardware helper
+      --dry-run               Print what would run without changing anything
+  -h, --help                  Show this help
 
 Supported for automatic dependency install: Arch Linux and derivatives (pacman + yay/paru).
 Other distros: dependencies are verified and missing ones are reported.
@@ -116,6 +119,7 @@ while [ $# -gt 0 ]; do
         --skip-cli) SKIP_CLI=1 ;;
         --update-cli) UPDATE_CLI=1 ;;
         --with-optional) WITH_OPTIONAL=1 ;;
+        --with-wallpaper-engine) WITH_WE=1 ;;
         --qml-only) QML_ONLY=1 ;;
         --clean) CLEAN_BUILD=1 ;;
         --no-backup) NO_BACKUP=1 ;;
@@ -433,6 +437,26 @@ install_deps_arch() {
             fi
         fi
     fi
+
+    # Optional Wallpaper Engine backend (skwd-paper-v2 + Steam Workshop)
+    if ! (command -v skwd-paper-v2 >/dev/null 2>&1 && command -v skwd-helm >/dev/null 2>&1 && command -v skwd-steam >/dev/null 2>&1); then
+        local we_aur=()
+        mapfile -t we_aur < <(pac_missing "${AUR_WE[@]}")
+        clean=(); for p in "${we_aur[@]}"; do [ -n "$p" ] && clean+=("$p"); done; we_aur=("${clean[@]+"${clean[@]}"}")
+        if [ ${#we_aur[@]} -gt 0 ]; then
+            info "Optional Wallpaper Engine backend not installed: ${we_aur[*]}"
+            local do_we=0
+            if [ "$WITH_WE" -eq 1 ]; then
+                do_we=1
+            elif [ "$ASSUME_YES" -eq 0 ] && confirm "Install Wallpaper Engine support (skwd-paper-bin + Steam Workshop)?" n; then
+                do_we=1
+            fi
+            if [ "$do_we" -eq 1 ]; then
+                detect_aur_helper || bootstrap_aur_helper
+                run "$AUR_HELPER" -S --needed "${YES_FLAG[@]}" "${we_aur[@]}"
+            fi
+        fi
+    fi
 }
 
 find_m3shapes_qmldir() {
@@ -456,9 +480,10 @@ find_m3shapes_qmldir() {
 # Distro-agnostic verification of what the build and shell actually need
 verify_prereqs() {
     local missing=() c m
-    for c in cmake ninja c++ git pkg-config qs fish hyprctl protoc python3; do
+    for c in cmake ninja c++ git pkg-config fish hyprctl protoc python3; do
         command -v "$c" >/dev/null 2>&1 || missing+=("command: $c")
     done
+    command -v qs >/dev/null 2>&1 || command -v quickshell >/dev/null 2>&1 || missing+=("command: qs (quickshell)")
     for m in Qt6Core Qt6Gui Qt6Qml Qt6Quick Qt6QuickControls2 Qt6ShaderTools Qt6Multimedia Qt6Sql Qt6Network Qt6DBus Qt6Concurrent \
              protobuf openssl libqalculate libpipewire-0.3 aubio; do
         pkg-config --exists "$m" 2>/dev/null || missing+=("pkg-config: $m")
@@ -522,6 +547,7 @@ if [ "$QML_ONLY" -eq 0 ]; then
         log "Checking dependencies..."
         if [ "$IS_ARCH" -eq 1 ]; then
             install_deps_arch
+            QT_QML_DIR="$(detect_qt_qml_dir)"
         else
             warn "Not an Arch-based system: cannot auto-install packages. Verifying instead."
         fi
@@ -552,7 +578,7 @@ install_cli() {
     else
         info "Fetching the vacuited CLI into $CLI_CLONE_DIR..."
         if [ -d "$CLI_CLONE_DIR/.git" ]; then
-            run git -C "$CLI_CLONE_DIR" pull --ff-only
+            run git -C "$CLI_CLONE_DIR" pull --ff-only || warn "Could not update cached CLI clone; using existing checkout."
         else
             run mkdir -p "$(dirname "$CLI_CLONE_DIR")"
             run git clone "$CLI_REPO_URL" "$CLI_CLONE_DIR"
@@ -650,6 +676,7 @@ if [ "$QML_ONLY" -eq 0 ]; then
     run cmake -S "$SCRIPT_DIR" -B "$BUILD_DIR" -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX=/usr \
+        -DINSTALL_LIBDIR=/usr/lib/caelestia \
         -DINSTALL_QMLDIR="$QT_QML_DIR" \
         "-DENABLE_MODULES=extras;plugin" \
         -DVERSION="$VERSION" \
@@ -861,7 +888,7 @@ if command -v systemctl >/dev/null 2>&1; then
 fi
 
 if ! command -v skwd-paper-v2 >/dev/null 2>&1; then
-    info "Wallpaper Engine (optional): install skwd-paper-v2 from https://github.com/liixini/skwd-wall"
+    info "Wallpaper Engine (optional): run ./install.sh --with-wallpaper-engine (or install from https://github.com/liixini/skwd-wall)"
 fi
 
 cat <<EOF
@@ -870,6 +897,7 @@ cat <<EOF
   Mode:            $([ "$QML_ONLY" -eq 1 ] && echo "QML-only" || echo "Full (${VERSION}, ${GIT_REV:0:9})")
   QML Target:      $QS_DEST
   Plugin QML Dir:  $([ "$QML_ONLY" -eq 1 ] && echo "skipped" || echo "$QT_QML_DIR/Caelestia")
+  Wallpaper Eng.:  $(command -v skwd-paper-v2 >/dev/null 2>&1 && echo "installed" || echo "not installed (optional)")
   Hardware Helper: $HARDWARE_STATUS
 
 Start the shell (fish or bash):
@@ -878,7 +906,8 @@ Start the shell (fish or bash):
 If it was already running, reload it:
     caelestia shell -d -r
 
-Bind keys in your Hyprland config, e.g.:
+Add autostart + keybinds in your Hyprland config, e.g.:
+    exec-once = caelestia shell -d
     bind = SUPER, SPACE, global, caelestia:launcher
 (see the README for the full shortcut list)
 EOF

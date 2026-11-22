@@ -475,7 +475,8 @@ Singleton {
                 root.surfaceReady = false;
                 root.usedTransitionFrom = false;
                 root.engineFailed = true;
-                root.lastError = "skwd-paper-v2 is not installed or unavailable";
+                root.lastError = "skwd-paper-v2 is not installed. Run ./install.sh --with-wallpaper-engine (Arch AUR: skwd-paper-bin) or install from github.com/liixini/skwd-wall";
+                Toaster.toast("Wallpaper Engine", root.lastError, "error", Toast.Error);
             }
             return;
         }

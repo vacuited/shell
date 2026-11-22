@@ -61,10 +61,39 @@ def _fail(message: str, **extra: Any) -> int:
     return _emit(payload)
 
 
+def _which(name: str) -> str | None:
+    found = shutil.which(name)
+    if found:
+        return found
+    home = _home()
+    for d in (os.path.join(home, ".local", "bin"), os.path.join(home, ".cargo", "bin")):
+        cand = os.path.join(d, name)
+        if os.path.isfile(cand) and os.access(cand, os.X_OK):
+            return cand
+    return None
+
+
 def _is_within(path: str, root: str) -> bool:
     real_root = os.path.realpath(root)
     real_path = os.path.realpath(path)
     return real_path == real_root or real_path.startswith(real_root + os.sep)
+
+
+def _read_vdf_library_paths(steam_root: str) -> list[str]:
+    vdf_path = os.path.join(steam_root, "steamapps", "libraryfolders.vdf")
+    if not os.path.isfile(vdf_path):
+        return []
+    paths: list[str] = []
+    try:
+        with open(vdf_path, "r", encoding="utf-8", errors="replace") as fh:
+            content = fh.read()
+        for raw in re.findall(r'"path"\s+"([^"]+)"', content):
+            cleaned = raw.replace("\\\\", "\\").strip()
+            if cleaned:
+                paths.append(os.path.expanduser(cleaned))
+    except OSError:
+        pass
+    return paths
 
 
 def _resolve_workshop_dir(custom_dir: str | None = None) -> str:
@@ -72,18 +101,27 @@ def _resolve_workshop_dir(custom_dir: str | None = None) -> str:
     if custom_dir:
         candidates.append(os.path.expanduser(custom_dir))
 
-    home = _home()
-    candidates.extend([
-        os.path.join(home, ".local", "share", "Steam", "steamapps", "workshop", "content", "431960"),
-        os.path.join(home, ".steam", "steam", "steamapps", "workshop", "content", "431960"),
-        os.path.join(home, "SteamLibrary", "steamapps", "workshop", "content", "431960"),
-    ])
-
     env_dir = os.environ.get("STEAM_WORKSHOP_DIR", "").strip()
     if env_dir:
         expanded = os.path.expanduser(env_dir)
         candidates.append(expanded)
         candidates.append(os.path.join(expanded, "431960"))
+
+    home = _home()
+    steam_roots = [
+        os.path.join(home, ".local", "share", "Steam"),
+        os.path.join(home, ".steam", "steam"),
+        os.path.join(home, "SteamLibrary"),
+        os.path.join(home, ".var", "app", "com.valvesoftware.Steam", ".local", "share", "Steam"),
+        os.path.join(home, ".var", "app", "com.valvesoftware.Steam", ".steam", "steam"),
+        os.path.join(home, "snap", "steam", "common", ".local", "share", "Steam"),
+    ]
+    for root in steam_roots:
+        candidates.append(os.path.join(root, "steamapps", "workshop", "content", "431960"))
+    for root in steam_roots:
+        if os.path.isdir(root):
+            for lib_path in _read_vdf_library_paths(root):
+                candidates.append(os.path.join(lib_path, "steamapps", "workshop", "content", "431960"))
 
     for cand in candidates:
         if cand and os.path.isdir(cand):
@@ -154,6 +192,10 @@ def _sync_hypr_bg_blur(enabled: bool) -> bool:
             [hyprctl, "keyword", "layerrule", "blur 1, match:namespace caelestia-background"],
             [hyprctl, "keyword", "layerrule", "ignore_alpha 0.22, match:namespace caelestia-background"],
         )
+        legacy_attempt: tuple[list[str], ...] = (
+            [hyprctl, "keyword", "layerrule", "blur, caelestia-background"],
+            [hyprctl, "keyword", "layerrule", "ignorealpha 0.22, caelestia-background"],
+        )
     else:
         lua_rule = (
             'hl.layer_rule({ name = "caelestia-bg-blur", match = { namespace = "caelestia-background" }, '
@@ -162,10 +204,14 @@ def _sync_hypr_bg_blur(enabled: bool) -> bool:
         kw_attempt = (
             [hyprctl, "keyword", "layerrule", "blur 0, match:namespace caelestia-background"],
         )
+        legacy_attempt = (
+            [hyprctl, "keyword", "layerrule", "unset, caelestia-background"],
+        )
 
     attempts = (
         ([hyprctl, "eval", lua_rule],),
         kw_attempt,
+        legacy_attempt,
     )
     return _apply_hypr_rule_with_sentinel(hyprctl, "caelestia_hypr_bg_blur", sentinel_val, attempts)
 
@@ -181,6 +227,7 @@ def _ensure_hypr_no_anim() -> None:
     attempts = (
         ([hyprctl, "eval", lua_rule],),
         ([hyprctl, "keyword", "layerrule", "no_anim on, match:namespace ^skwd-(paper|wall).*"],),
+        ([hyprctl, "keyword", "layerrule", "noanim, ^skwd-(paper|wall).*"],),
     )
     _apply_hypr_rule_with_sentinel(hyprctl, "caelestia_hypr_no_anim", sentinel_val, attempts)
 
@@ -692,12 +739,12 @@ def _scan_drm_cards() -> list[dict[str, Any]]:
         kind_hint = "unknown"
         if driver in ("nvidia", "nouveau") or vendor == "nvidia":
             kind_hint = "discrete"
+        elif internal_active:
+            kind_hint = "integrated"
         elif vendor in ("intel", "amd") and is_root_bus and driver in ("i915", "xe", "amdgpu", "radeon"):
             kind_hint = "integrated"
         elif not is_root_bus and driver:
             kind_hint = "discrete"
-        elif internal_active:
-            kind_hint = "integrated"
 
         result.append({
             "card": card,
@@ -854,6 +901,14 @@ def _resolve_gpu_plan(requested_gpu: str, we_type: str, helm_bin: str | None) ->
 
 def _build_skwd_env(gpu: str = "auto", scene_shm: bool = False) -> dict[str, str]:
     env = os.environ.copy()
+    home = _home()
+    path_parts = [p for p in env.get("PATH", "").split(os.pathsep) if p]
+    for extra_dir in (os.path.join(home, ".local", "bin"), os.path.join(home, ".cargo", "bin")):
+        if os.path.isdir(extra_dir) and extra_dir not in path_parts:
+            path_parts.insert(0, extra_dir)
+    if path_parts:
+        env["PATH"] = os.pathsep.join(path_parts)
+
     if gpu in ("integrated", "discrete"):
         env["SKWD_VK_DEVICE"] = gpu
     else:
@@ -903,11 +958,21 @@ def _resolve_max_dimension(paper_bin: str, explicit_max_dim: int) -> int:
     return 0
 
 
+def _drm_label(card: dict[str, Any] | None) -> str:
+    if not card:
+        return ""
+    vendor = str(card.get("vendor") or "").strip()
+    detail = str(card.get("driver") or card.get("card") or "").strip()
+    if vendor and detail:
+        return f"{vendor.upper()} ({detail})"
+    return vendor.upper() if vendor else detail
+
+
 def cmd_probe(args: argparse.Namespace) -> int:
-    paper_bin = shutil.which("skwd-paper-v2")
-    wall_vk_bin = shutil.which("skwd-wall-vk")
-    steam_bin = shutil.which("skwd-steam")
-    helm_bin = shutil.which("skwd-helm")
+    paper_bin = _which("skwd-paper-v2")
+    wall_vk_bin = _which("skwd-wall-vk")
+    steam_bin = _which("skwd-steam")
+    helm_bin = _which("skwd-helm")
 
     if paper_bin:
         _ensure_hypr_no_anim()
@@ -937,7 +1002,11 @@ def cmd_probe(args: argparse.Namespace) -> int:
             "safe": matched,
         })
 
-    has_safe_discrete = any(g["kind"] == "discrete" and g["compositorMatched"] for g in gpus)
+    has_safe_discrete = (
+        any(g["kind"] == "discrete" and g["compositorMatched"] for g in gpus)
+        if gpus
+        else bool(comp_card and comp_card.get("kindHint") == "discrete")
+    )
     has_offload_discrete = (
         any(g["kind"] == "discrete" and not g["compositorMatched"] for g in gpus)
         if gpus
@@ -947,8 +1016,13 @@ def cmd_probe(args: argparse.Namespace) -> int:
     compositor_gpu = next((g["name"] for g in gpus if g["compositorMatched"] and g["name"]), "")
     discrete_gpu = next((g["name"] for g in gpus if g["kind"] == "discrete" and g["name"]), "")
     integrated_gpu = next((g["name"] for g in gpus if g["kind"] == "integrated" and g["name"]), "")
-    if not compositor_gpu and gpus:
-        compositor_gpu = gpus[0]["name"]
+    if not compositor_gpu:
+        compositor_gpu = gpus[0]["name"] if gpus else _drm_label(comp_card)
+    if not gpus:
+        if not discrete_gpu:
+            discrete_gpu = _drm_label(next((c for c in cards if c.get("kindHint") == "discrete"), None))
+        if not integrated_gpu:
+            integrated_gpu = _drm_label(next((c for c in cards if c.get("kindHint") == "integrated"), None))
 
     return _emit({
         "ok": True,
@@ -969,7 +1043,7 @@ def cmd_probe(args: argparse.Namespace) -> int:
 
 
 def cmd_transitions(_args: argparse.Namespace) -> int:
-    return _emit({"ok": True, "transitions": _get_transitions(shutil.which("skwd-paper-v2"))})
+    return _emit({"ok": True, "transitions": _get_transitions(_which("skwd-paper-v2"))})
 
 
 def cmd_list_we(args: argparse.Namespace) -> int:
@@ -1081,7 +1155,7 @@ def cmd_capture_poster(args: argparse.Namespace) -> int:
 
     try:
         if we_type == "scene":
-            paper_bin = shutil.which("skwd-paper-v2")
+            paper_bin = _which("skwd-paper-v2")
             if not paper_bin:
                 return _fail("skwd-paper-v2 is not installed")
             req = json.dumps({
@@ -1186,7 +1260,7 @@ def cmd_capture_poster(args: argparse.Namespace) -> int:
 
 
 def cmd_apply(args: argparse.Namespace) -> int:
-    paper_bin = shutil.which("skwd-paper-v2")
+    paper_bin = _which("skwd-paper-v2")
     if not paper_bin:
         return _fail("skwd-paper-v2 is not installed", rejected=False)
 
@@ -1199,7 +1273,7 @@ def cmd_apply(args: argparse.Namespace) -> int:
     if we_type in ("web", "application"):
         return _fail(f"Wallpaper Engine '{we_type}' items are not supported by skwd", rejected=True)
 
-    helm_bin = shutil.which("skwd-helm")
+    helm_bin = _which("skwd-helm")
     gpu, scene_shm = _resolve_gpu_plan(args.gpu, we_type, helm_bin)
     fps = max(0, min(240, int(args.fps)))
     video_fps = max(0, min(240, int(args.video_fps)))
@@ -1335,43 +1409,65 @@ def cmd_apply(args: argparse.Namespace) -> int:
             except (OSError, subprocess.SubprocessError):
                 pass
 
-    log_offsets = _snapshot_log_offsets()
+    manifest_json = json.dumps(manifest)
 
-    try:
-        res = subprocess.run(
-            [paper_bin, "apply", "--manifest", "-"],
-            input=json.dumps(manifest),
-            env=env,
-            capture_output=True,
-            text=True,
-            timeout=25,
-            check=False,
-        )
-    except (OSError, subprocess.SubprocessError) as exc:
-        return _fail(str(exc), rejected=False)
-
-    assignments: list[Any] = []
-    if res.returncode == 0:
+    def _run_apply_attempt(run_env: dict[str, str]) -> tuple[bool, str, bool]:
+        offsets = _snapshot_log_offsets()
         try:
-            st = subprocess.run([paper_bin, "status"], env=env, capture_output=True, text=True, timeout=5, check=False)
-            if st.returncode == 0:
-                parsed = _extract_last_json(st.stdout)
-                if isinstance(parsed, dict):
-                    result = parsed.get("result") if isinstance(parsed.get("result"), dict) else parsed
-                    raw_assign = result.get("assignments")
-                    if isinstance(raw_assign, list):
-                        assignments = raw_assign
-        except (OSError, subprocess.SubprocessError):
-            pass
+            res = subprocess.run(
+                [paper_bin, "apply", "--manifest", "-"],
+                input=manifest_json,
+                env=run_env,
+                capture_output=True,
+                text=True,
+                timeout=25,
+                check=False,
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            return False, str(exc), False
 
-    if res.returncode != 0 or not assignments:
-        log_err, log_rejected = _read_recent_skwd_error(log_offsets)
+        assignments: list[Any] = []
+        if res.returncode == 0:
+            try:
+                st = subprocess.run([paper_bin, "status"], env=run_env, capture_output=True, text=True, timeout=5, check=False)
+                if st.returncode == 0:
+                    parsed = _extract_last_json(st.stdout)
+                    if isinstance(parsed, dict):
+                        result = parsed.get("result") if isinstance(parsed.get("result"), dict) else parsed
+                        raw_assign = result.get("assignments")
+                        if isinstance(raw_assign, list):
+                            assignments = raw_assign
+            except (OSError, subprocess.SubprocessError):
+                pass
+
+        if res.returncode == 0 and assignments:
+            return True, "", False
+
+        log_err, log_rejected = _read_recent_skwd_error(offsets)
         cli_err = (res.stderr or res.stdout or "").strip()
-        rejected = log_rejected or bool(
+        is_rejected = log_rejected or bool(
             re.search(r"native-scene-gap|rejected|unsupported", cli_err, re.IGNORECASE)
         )
         msg = cli_err if (res.returncode != 0 and cli_err) else (log_err or cli_err or "skwd-paper-v2 failed to apply wallpaper")
-        return _fail(msg, rejected=rejected)
+        return False, msg, is_rejected
+
+    ok_apply, err_msg, rejected = _run_apply_attempt(env)
+    if not ok_apply and not rejected and gpu != "auto":
+        _unload_skwd_processes(paper_bin)
+        gpu = "auto"
+        scene_shm = False
+        desired_fp["gpu"] = "auto"
+        desired_fp["scene_shm"] = False
+        try:
+            with open(fp_path, "w", encoding="utf-8") as fh:
+                json.dump(desired_fp, fh)
+        except OSError:
+            pass
+        env = _build_skwd_env("auto", scene_shm=False)
+        ok_apply, err_msg, rejected = _run_apply_attempt(env)
+
+    if not ok_apply:
+        return _fail(err_msg, rejected=rejected)
 
     return _emit({
         "ok": True,
@@ -1395,7 +1491,7 @@ def cmd_set_blur(args: argparse.Namespace) -> int:
 
 
 def cmd_pause(_args: argparse.Namespace) -> int:
-    paper_bin = shutil.which("skwd-paper-v2")
+    paper_bin = _which("skwd-paper-v2")
     if not paper_bin:
         return _fail("skwd-paper-v2 is not installed")
     ok, err = _set_paper_paused(True, paper_bin=paper_bin)
@@ -1405,7 +1501,7 @@ def cmd_pause(_args: argparse.Namespace) -> int:
 
 
 def cmd_resume(_args: argparse.Namespace) -> int:
-    paper_bin = shutil.which("skwd-paper-v2")
+    paper_bin = _which("skwd-paper-v2")
     if not paper_bin:
         return _fail("skwd-paper-v2 is not installed")
     ok, err = _set_paper_paused(False, paper_bin=paper_bin)
@@ -1415,7 +1511,7 @@ def cmd_resume(_args: argparse.Namespace) -> int:
 
 
 def cmd_audio(args: argparse.Namespace) -> int:
-    paper_bin = shutil.which("skwd-paper-v2")
+    paper_bin = _which("skwd-paper-v2")
     if not paper_bin:
         return _fail("skwd-paper-v2 is not installed")
 
@@ -1438,7 +1534,7 @@ def cmd_audio(args: argparse.Namespace) -> int:
 
 
 def cmd_stop(args: argparse.Namespace) -> int:
-    paper_bin = shutil.which("skwd-paper-v2")
+    paper_bin = _which("skwd-paper-v2")
     if not paper_bin:
         return _emit({"ok": True, "unloaded": bool(args.unload)})
 
@@ -1454,7 +1550,7 @@ def cmd_stop(args: argparse.Namespace) -> int:
 
 
 def cmd_status(_args: argparse.Namespace) -> int:
-    paper_bin = shutil.which("skwd-paper-v2")
+    paper_bin = _which("skwd-paper-v2")
     if not paper_bin:
         return _fail("skwd-paper-v2 is not installed")
     try:
@@ -1471,7 +1567,7 @@ def cmd_status(_args: argparse.Namespace) -> int:
 
 
 def cmd_steam_inventory(args: argparse.Namespace) -> int:
-    steam_bin = shutil.which("skwd-steam")
+    steam_bin = _which("skwd-steam")
     if not steam_bin:
         return _fail("skwd-steam is not installed")
     cmd = [steam_bin, "inventory", *args.ids]
@@ -1494,7 +1590,7 @@ def cmd_steam_inventory(args: argparse.Namespace) -> int:
 
 
 def cmd_steam_search(args: argparse.Namespace) -> int:
-    steam_bin = shutil.which("skwd-steam")
+    steam_bin = _which("skwd-steam")
     if not steam_bin:
         return _fail("skwd-steam is not installed")
     try:
@@ -1520,7 +1616,7 @@ def cmd_steam_search(args: argparse.Namespace) -> int:
 
 
 def cmd_steam_sub(args: argparse.Namespace) -> int:
-    steam_bin = shutil.which("skwd-steam")
+    steam_bin = _which("skwd-steam")
     wid = str(args.id).strip()
     if not wid.isdigit():
         sys.stdout.write(json.dumps({
@@ -1719,7 +1815,7 @@ def cmd_steam_sub(args: argparse.Namespace) -> int:
 
 
 def cmd_steam_unsub(args: argparse.Namespace) -> int:
-    steam_bin = shutil.which("skwd-steam")
+    steam_bin = _which("skwd-steam")
     wid = str(args.id).strip()
     if not wid.isdigit():
         return _fail("Invalid workshop item ID")

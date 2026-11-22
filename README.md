@@ -105,7 +105,11 @@ cd shell
 ./install.sh
 ```
 
-Checks dependencies and installs missing ones (pacman + yay/paru, bootstraps `yay` if needed), pulls in the [vacuited CLI](https://github.com/vacuited/cli) if `caelestia` is missing, builds the plugin, and deploys the QML to `~/.config/quickshell/caelestia`. Existing configs that differ are backed up first. Options: `-y`/`--yes`, `--skip-deps`, `--skip-cli`, `--update-cli`, `--with-optional`, `--qml-only`, `--clean`, `--no-backup`, `--hardware`, `--no-hardware`, `--uninstall`, `--dry-run`. On other distros it verifies prerequisites and lists what is missing.
+One command handles dependencies (Arch pacman + AUR, bootstrapping `yay` if needed), installs the [vacuited CLI](https://github.com/vacuited/cli) if missing, builds the C++ plugin, deploys QML to `~/.config/quickshell/caelestia` (backing up differing configs), and optionally sets up Wallpaper Engine (`--with-wallpaper-engine`) or HP Victus fan/profile controls (`--hardware`, auto-detected).
+
+Options: `-y`/`--yes`, `--skip-deps`, `--skip-cli`, `--update-cli`, `--with-optional`, `--with-wallpaper-engine`, `--qml-only`, `--clean`, `--no-backup`, `--hardware`, `--no-hardware`, `--uninstall`, `--dry-run`. On other distros it verifies prerequisites and lists what is missing.
+
+To auto-start on login, add `exec-once = caelestia shell -d` (alongside the Global Shortcuts above) to your Hyprland config.
 
 ### Manual Build
 

@@ -631,6 +631,48 @@ PageBase {
             }
         }
 
+        // Backend missing banner
+        StyledRect {
+            visible: root.currentMode === 0 && Skwd.probeCompleted && !Skwd.paperAvailable
+            Layout.fillWidth: true
+            radius: Tokens.rounding.large
+            color: Colours.tPalette.m3surfaceContainer
+            implicitHeight: backendMissingRow.implicitHeight + Tokens.padding.large * 2
+
+            RowLayout {
+                id: backendMissingRow
+
+                anchors.fill: parent
+                anchors.margins: Tokens.padding.large
+                spacing: Tokens.spacing.medium
+
+                MaterialIcon {
+                    text: "info"
+                    color: Colours.palette.m3primary
+                    fontStyle: Tokens.font.icon.large
+                }
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: Tokens.spacing.extraSmall
+
+                    StyledText {
+                        text: qsTr("Wallpaper Engine Backend Not Installed")
+                        color: Colours.palette.m3onSurface
+                        font: Tokens.font.title.small
+                    }
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: qsTr("Install skwd-paper-bin to render Wallpaper Engine scenes and videos:\n./install.sh --with-wallpaper-engine  (or: paru/yay -S skwd-paper-bin skwd-deck-bin skwd-deck-steamworks-bin)\nOther distros: https://github.com/liixini/skwd-wall")
+                        color: Colours.palette.m3onSurfaceVariant
+                        font: Tokens.font.body.small
+                        wrapMode: Text.Wrap
+                    }
+                }
+            }
+        }
+
         // Engine failure banner
         StyledRect {
             visible: Skwd.engineFailed && Skwd.lastError !== ""
@@ -885,7 +927,7 @@ PageBase {
             label: qsTr("Graphics Processor")
             subtext: {
                 if (Skwd.effectiveGpu === "discrete" && Skwd.hasOffloadDiscrete)
-                    return qsTr("Scenes on %1 (SHM); videos on Intel VAAPI").arg(Skwd.discreteGpuName || "dGPU");
+                    return qsTr("Scenes on %1 (SHM); videos on %2 (VAAPI)").arg(Skwd.discreteGpuName || qsTr("dGPU")).arg(Skwd.integratedGpuName || Skwd.compositorGpuName || qsTr("iGPU"));
                 if (Skwd.effectiveGpu === "discrete")
                     return qsTr("Active: %1").arg(Skwd.discreteGpuName || "dGPU");
                 return qsTr("Active: %1").arg(Skwd.compositorGpuName || Skwd.integratedGpuName || "Integrated GPU");
@@ -1372,7 +1414,7 @@ PageBase {
 
                     StyledText {
                         Layout.fillWidth: true
-                        text: qsTr("To browse, search, and download wallpapers directly from Steam Workshop, install skwd-deck-steamworks-bin:\nparu -S skwd-deck-steamworks-bin")
+                        text: qsTr("To browse, search, and download wallpapers directly from Steam Workshop, install skwd-deck-steamworks-bin:\n./install.sh --with-wallpaper-engine  (or: paru/yay -S skwd-deck-steamworks-bin)")
                         color: Colours.palette.m3onSurfaceVariant
                         font: Tokens.font.body.small
                         wrapMode: Text.Wrap
