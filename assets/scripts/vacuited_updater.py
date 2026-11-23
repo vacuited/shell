@@ -57,6 +57,21 @@ BACKUP_NAME_RE = re.compile(r"^caelestia\.bak\.(\d{8}-\d{6})$")
 BACKUP_KEEP = 3
 
 HARDWARE_HELPER_BIN = Path("/usr/local/bin/caelestia-hardware-helper")
+CAELESTIA_SHIM_BIN = Path("/usr/local/bin/caelestia")
+CAELESTIA_SHIM_MARKER = "# vacuited-cli-shim"
+CAELESTIA_SHIM_CONTENT = (
+    "#!/bin/sh\n"
+    "# vacuited-cli-shim — dispatches to the invoking user's vacuited-cli install\n"
+    'case ":${PATH:-}:" in\n'
+    '    *:"${HOME}/.local/bin":*) ;;\n'
+    '    *) export PATH="${HOME}/.local/bin${PATH:+:${PATH}}" ;;\n'
+    "esac\n"
+    'if [ -x "${HOME}/.local/bin/caelestia" ]; then\n'
+    '    exec "${HOME}/.local/bin/caelestia" "$@"\n'
+    "fi\n"
+    'printf \'%s\\n\' "caelestia: not installed for ${USER:-user} (${HOME}/.local/bin/caelestia missing)" >&2\n'
+    "exit 127\n"
+)
 LEGACY_LIBS = (
     "Caelestia/Components/libcaelestia-components.so",
     "Caelestia/Config/libcaelestia-config.so",
@@ -1168,6 +1183,62 @@ def verify_plugin_install(qt_qml_dir: str) -> None:
             raise RuntimeError(f"Plugin install verification failed: {qmldir} is missing")
 
 
+def ensure_user_login_path() -> None:
+    try:
+        local_bin = _HOME / ".local" / "bin"
+        if not (local_bin / "caelestia").is_file():
+            return
+        env_dir = CONFIG_HOME / "environment.d"
+        env_file = env_dir / "10-vacuited-path.conf"
+        if not env_file.exists():
+            env_dir.mkdir(parents=True, exist_ok=True)
+            env_file.write_text(
+                f"# Managed by vacuited-cli install.sh\nPATH={local_bin}:$PATH\n",
+                encoding="utf-8",
+            )
+
+        candidates: list[Path] = []
+        if (_HOME / ".profile").is_file() or not (_HOME / ".bash_profile").is_file():
+            candidates.append(_HOME / ".profile")
+        if (_HOME / ".bash_profile").is_file():
+            candidates.append(_HOME / ".bash_profile")
+        if shutil.which("zsh") or (_HOME / ".zshrc").is_file() or (_HOME / ".zprofile").is_file():
+            candidates.append(_HOME / ".zprofile")
+
+        snippet = (
+            "# Added by vacuited-cli install.sh\n"
+            'case ":$PATH:" in\n'
+            '    *:"$HOME/.local/bin":*) ;;\n'
+            '    *) export PATH="$HOME/.local/bin:$PATH" ;;\n'
+            "esac\n"
+        )
+        for pf in candidates:
+            if pf.is_file():
+                text = pf.read_text(encoding="utf-8", errors="ignore")
+                if ".local/bin" in text:
+                    continue
+                sep = "" if (not text or text.endswith("\n\n")) else ("\n" if text.endswith("\n") else "\n\n")
+                pf.write_text(text + sep + snippet, encoding="utf-8")
+            else:
+                pf.write_text(snippet, encoding="utf-8")
+    except Exception:
+        pass
+
+
+def should_install_cli_shim() -> bool:
+    try:
+        if not (_HOME / ".local" / "bin" / "caelestia").is_file():
+            return False
+        if not CAELESTIA_SHIM_BIN.exists() and not CAELESTIA_SHIM_BIN.is_symlink():
+            return True
+        if CAELESTIA_SHIM_BIN.is_file() and not CAELESTIA_SHIM_BIN.is_symlink():
+            text = CAELESTIA_SHIM_BIN.read_text(encoding="utf-8", errors="ignore")
+            return CAELESTIA_SHIM_MARKER in text and text != CAELESTIA_SHIM_CONTENT
+    except OSError:
+        return False
+    return False
+
+
 def cmd_update(args: argparse.Namespace) -> int:
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     lock_fh = UPDATE_LOCK_PATH.open("w", encoding="utf-8")
@@ -1210,6 +1281,7 @@ def cmd_update(args: argparse.Namespace) -> int:
             )
             if rc != 0:
                 raise RuntimeError(f"CLI install failed with exit code {rc}")
+            ensure_user_login_path()
 
             _, tag_cli_ver = read_repo_meta(CLI_CACHE)
             cli_ver = tag_cli_ver or detect_installed_cli_version()
@@ -1319,6 +1391,7 @@ def cmd_update(args: argparse.Namespace) -> int:
 
                 emit_progress("Waiting for administrator authentication...", 70, "shell")
                 update_hw = should_update_hardware_helper(meta.get("shell", {}).get("pluginCommit", ""))
+                install_shim = should_install_cli_shim()
                 legacy_list = " ".join(shlex.quote(rel) for rel in LEGACY_LIBS)
                 priv_script = (
                     "set -e\n"
@@ -1326,6 +1399,7 @@ def cmd_update(args: argparse.Namespace) -> int:
                     'qt_qml_dir="$2"\n'
                     'shell_dir="$3"\n'
                     'update_hw="$4"\n'
+                    'install_shim="$5"\n'
                     f'for rel in {legacy_list}; do\n'
                     '    [ -e "$qt_qml_dir/$rel" ] && rm -f "$qt_qml_dir/$rel"\n'
                     "done\n"
@@ -1333,6 +1407,16 @@ def cmd_update(args: argparse.Namespace) -> int:
                     'if [ "$update_hw" = "1" ]; then\n'
                     '    install -Dm755 "$shell_dir/scripts/caelestia-hardware-helper" /usr/local/bin/caelestia-hardware-helper\n'
                     '    install -Dm644 "$shell_dir/scripts/50-caelestia-hardware.rules" /etc/polkit-1/rules.d/50-caelestia-hardware.rules\n'
+                    "fi\n"
+                    'if [ "$install_shim" = "1" ]; then\n'
+                    f"    if {{ [ ! -e /usr/local/bin/caelestia ] && [ ! -L /usr/local/bin/caelestia ]; }} || {{ [ -f /usr/local/bin/caelestia ] && grep -qF {shlex.quote(CAELESTIA_SHIM_MARKER)} /usr/local/bin/caelestia 2>/dev/null; }}; then\n"
+                    "        mkdir -p /usr/local/bin\n"
+                    "        cat <<'VACUITED_SHIM_EOF' > /usr/local/bin/.caelestia.shim.tmp\n"
+                    f"{CAELESTIA_SHIM_CONTENT}"
+                    "VACUITED_SHIM_EOF\n"
+                    "        chmod 0755 /usr/local/bin/.caelestia.shim.tmp\n"
+                    "        mv -f /usr/local/bin/.caelestia.shim.tmp /usr/local/bin/caelestia\n"
+                    "    fi\n"
                     "fi\n"
                 )
                 rc = run_streamed(
@@ -1346,6 +1430,7 @@ def cmd_update(args: argparse.Namespace) -> int:
                         qt_qml_dir,
                         str(SHELL_CACHE),
                         "1" if update_hw else "0",
+                        "1" if install_shim else "0",
                     ],
                     component="shell",
                 )
@@ -1384,6 +1469,7 @@ def cmd_update(args: argparse.Namespace) -> int:
                 validate_shell_source(QS_DEST)
             finally:
                 _deploying_critical = False
+            ensure_user_login_path()
 
             stamp = now_iso()
 

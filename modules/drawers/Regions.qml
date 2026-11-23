@@ -51,7 +51,7 @@ Region {
 
         panel: root.panels.sessionWrapper
         x: root.Config.bar.position === "right" ? 0 : root.win.width - sessionRegion.width
-        width: panel.width * (1 - root.panels.session.offsetScale) + root.borderThickness + sidebarRegion.width
+        width: panel.width * (1 - root.panels.session.offsetScale) + sidebarRegion.width
     }
 
     R {
@@ -74,7 +74,7 @@ Region {
 
         panel: root.panels.osdWrapper
         x: root.Config.bar.position === "right" ? 0 : root.win.width - osdRegion.width
-        width: panel.width * (1 - root.panels.osd.offsetScale) + root.borderThickness + sessionRegion.width
+        width: panel.width * (1 - root.panels.osd.offsetScale) + sessionRegion.width
     }
 
     R {

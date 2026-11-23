@@ -157,7 +157,7 @@ Variants {
 
             readonly property bool isWidgetCanvas: true
             readonly property int barExclusiveZone: Visibilities.bars.get(win.modelData.name)?.exclusiveZone ?? (Tokens.sizes.bar.innerWidth + Math.max(Tokens.padding.small, Config.border.thickness))
-            readonly property int edgeBorderInset: GlobalConfig.appearance.islands ? 0 : Config.border.thickness
+            readonly property int edgeBorderInset: Config.border.clampedThickness
             readonly property int safeGap: Tokens.spacing.medium
             readonly property real safeLeft: Math.round((Config.bar.position === "left" ? barExclusiveZone : edgeBorderInset) + safeGap)
             readonly property real safeTop: Math.round((Config.bar.position === "top" ? barExclusiveZone : edgeBorderInset) + safeGap)

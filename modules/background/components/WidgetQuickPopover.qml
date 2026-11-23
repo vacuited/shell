@@ -137,6 +137,7 @@ Item {
             // Consume pointer events inside card so clicks do not dismiss or drag behind it.
             MouseArea {
                 anchors.fill: parent
+                acceptedButtons: Qt.LeftButton | Qt.RightButton
             }
 
             Flickable {

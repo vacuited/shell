@@ -48,6 +48,9 @@ StyledWindow {
     property color surfaceColour: Colours.tPalette.m3surface
 
     readonly property int dragMaskPadding: {
+        if (!(interactions?.pressed ?? false))
+            return 0;
+
         if (focusGrab.active || panels.popouts.isDetached)
             return 0;
 
@@ -58,7 +61,7 @@ StyledWindow {
         for (const panel of ["dashboard", "launcher", "session", "sidebar"])
             if (contentItem.Config[panel].enabled)
                 thresholds.push(contentItem.Config[panel].dragThreshold);
-        return Math.max(...thresholds);
+        return thresholds.length > 0 ? Math.max(...thresholds) : 0;
     }
 
     onHasFullscreenChanged: {

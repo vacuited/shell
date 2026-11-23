@@ -624,6 +624,57 @@ if [ "$QML_ONLY" -eq 0 ]; then
             warn "Skipped. Install it later from https://github.com/vacuited/cli"
         fi
     fi
+
+    if [ -x "$HOME/.local/bin/caelestia" ] || [ "$DRY_RUN" -eq 1 ]; then
+        _env_dir="$CONFIG_HOME/environment.d"
+        _env_file="$_env_dir/10-vacuited-path.conf"
+        if [ ! -f "$_env_file" ]; then
+            if [ "$DRY_RUN" -eq 1 ]; then
+                info "[dry-run] would write $_env_file (PATH=$HOME/.local/bin:\$PATH)"
+            else
+                mkdir -p "$_env_dir"
+                printf '# Managed by vacuited-cli install.sh\nPATH=%s:$PATH\n' "$HOME/.local/bin" > "$_env_file"
+                info "Configured systemd user environment PATH in $_env_file"
+            fi
+        fi
+
+        _shim_path="/usr/local/bin/caelestia"
+        _shim_needed=0
+        if [ ! -e "$_shim_path" ] && [ ! -L "$_shim_path" ]; then
+            _shim_needed=1
+        elif [ -f "$_shim_path" ] && grep -qF '# vacuited-cli-shim' "$_shim_path" 2>/dev/null; then
+            _shim_needed=1
+        fi
+        if [ "$_shim_needed" -eq 1 ] && [ -n "$SUDO" ]; then
+            _tmp_shim="$(mktemp)"
+            CLEANUP_PATHS+=("$_tmp_shim")
+            cat <<'EOF' > "$_tmp_shim"
+#!/bin/sh
+# vacuited-cli-shim — dispatches to the invoking user's vacuited-cli install
+case ":${PATH:-}:" in
+    *:"${HOME}/.local/bin":*) ;;
+    *) export PATH="${HOME}/.local/bin${PATH:+:${PATH}}" ;;
+esac
+if [ -x "${HOME}/.local/bin/caelestia" ]; then
+    exec "${HOME}/.local/bin/caelestia" "$@"
+fi
+printf '%s\n' "caelestia: not installed for ${USER:-user} (${HOME}/.local/bin/caelestia missing)" >&2
+exit 127
+EOF
+            if [ ! -f "$_shim_path" ] || ! cmp -s "$_tmp_shim" "$_shim_path" 2>/dev/null; then
+                if [ "$DRY_RUN" -eq 1 ]; then
+                    if confirm "Install /usr/local/bin/caelestia shim so display managers and Hyprland always find 'caelestia' on boot?" y; then
+                        run_priv install -Dm755 "<tmp>/caelestia" "$_shim_path"
+                    fi
+                elif (: </dev/tty) 2>/dev/null || "$SUDO" -n true 2>/dev/null; then
+                    if confirm "Install /usr/local/bin/caelestia shim so display managers and Hyprland always find 'caelestia' on boot?" y; then
+                        run_priv install -Dm755 "$_tmp_shim" "$_shim_path"
+                        log "Installed system-wide login shim at $_shim_path"
+                    fi
+                fi
+            fi
+        fi
+    fi
 fi
 
 # ---------------------------------------------------------------------------
@@ -896,6 +947,12 @@ if command -v systemctl >/dev/null 2>&1; then
     done
 fi
 
+if [ -d "$CONFIG_HOME/hypr" ]; then
+    if ! grep -rqsE 'caelestia[[:space:]]+shell|qs[[:space:]]+-c[[:space:]]+caelestia' --exclude-dir=.git "$CONFIG_HOME/hypr" 2>/dev/null; then
+        warn "No 'caelestia shell -d' autostart found in $CONFIG_HOME/hypr. Add 'exec-once = caelestia shell -d' to your Hyprland config so the shell starts on login."
+    fi
+fi
+
 if ! command -v skwd-paper-v2 >/dev/null 2>&1; then
     info "Wallpaper Engine (optional): run ./install.sh --with-wallpaper-engine (or install from https://github.com/liixini/skwd-wall)"
 fi
@@ -923,5 +980,9 @@ EOF
 
 case ":$ORIG_PATH:" in
     *":$HOME/.local/bin:"*) ;;
-    *) warn "Add ~/.local/bin to your PATH so the 'caelestia' command is found." ;;
+    *)
+        if ! ([ -f /usr/local/bin/caelestia ] && grep -qF '# vacuited-cli-shim' /usr/local/bin/caelestia 2>/dev/null); then
+            warn "Add ~/.local/bin to your PATH so the 'caelestia' command is found."
+        fi
+        ;;
 esac
