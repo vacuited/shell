@@ -93,7 +93,7 @@ vec3 evalGradient(float uFreq, float hNorm, float ampVal) {
 void main() {
     float w = dims.x;
     float h = dims.y;
-    if (w <= 0.0 || h <= 0.0) {
+    if (qt_Opacity <= 0.001 || w <= 0.0 || h <= 0.0) {
         fragColor = vec4(0.0);
         return;
     }

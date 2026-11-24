@@ -1,5 +1,7 @@
 #include "beattracker.hpp"
 
+#include <cmath>
+
 #include "audiocollector.hpp"
 #include "audioprovider.hpp"
 
@@ -28,7 +30,23 @@ void BeatProcessor::process() {
         return;
     }
 
-    AudioCollector::instance().readChunk(m_in->data);
+    const quint32 count = AudioCollector::instance().readChunk(m_in->data);
+
+    bool silent = true;
+    for (quint32 i = 0; i < count; ++i) {
+        if (std::abs(m_in->data[i]) > 1e-6f) {
+            silent = false;
+            break;
+        }
+    }
+    if (silent) {
+        if (m_silentChunks >= 4) {
+            return;
+        }
+        ++m_silentChunks;
+    } else {
+        m_silentChunks = 0;
+    }
 
     aubio_tempo_do(m_tempo, m_in, m_out);
     if (!qFuzzyIsNull(m_out->data[0])) {

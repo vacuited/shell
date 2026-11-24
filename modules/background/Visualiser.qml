@@ -16,14 +16,16 @@ Item {
     required property Item wallpaper
 
     readonly property var vis: Config.background.visualiser
-    readonly property bool shouldBeActive: vis.enabled && !(GameMode.enabled && GlobalConfig.utilities.gameMode.disableVisualizer) && (!vis.autoHide || (Hypr.monitorFor(screen)?.activeWorkspace?.toplevels?.values.every(t => t.lastIpcObject?.floating) ?? true))
+    readonly property bool workspaceOccupied: !(Hypr.monitorFor(screen)?.activeWorkspace?.toplevels?.values.every(t => t.lastIpcObject?.floating) ?? true)
+    readonly property bool workspaceFullscreen: Hypr.monitorFor(screen)?.activeWorkspace?.toplevels?.values.some(t => (t.lastIpcObject?.fullscreen ?? 0) > 0) ?? false
+    readonly property bool shouldBeActive: vis.enabled && !workspaceFullscreen && !(GameMode.enabled && GlobalConfig.utilities.gameMode.disableVisualizer) && (!vis.autoHide || !workspaceOccupied)
     property real offset: shouldBeActive ? 0 : screen.height * 0.2
 
     readonly property int barExclusiveZone: Visibilities.bars.get(root.screen.name)?.exclusiveZone ?? (Tokens.sizes.bar.innerWidth + Math.max(Tokens.padding.small, Config.border.thickness))
 
     readonly property bool useGpuPipeline: vis.renderer !== "cpu" || vis.style !== "bars"
     readonly property bool weActive: !!(wallpaper?.item?.weSurfaceVisible || wallpaper?.item?.weRunning || wallpaper?.weSurfaceActive || wallpaper?.weSurfaceVisible)
-    readonly property bool workspaceOccupied: !(Hypr.monitorFor(root.screen)?.activeWorkspace?.toplevels?.values.every(t => t.lastIpcObject?.floating) ?? true)
+    readonly property bool visFadedOut: visLoader.item?.fadedOut ?? false
 
     property color primaryCol: Qt.alpha(resolveM3Color(vis.primaryColorRole), vis.opacity)
     property color secondaryCol: Qt.alpha(resolveM3Color(vis.secondaryColorRole), vis.opacity)
@@ -67,7 +69,7 @@ Item {
     Loader {
         asynchronous: true
         anchors.fill: parent
-        active: root.opacity > 0 && root.vis.blur && !root.weActive
+        active: root.opacity > 0 && root.vis.blur && !root.weActive && !root.visFadedOut
 
         sourceComponent: MultiEffect {
             source: root.wallpaper
@@ -86,9 +88,11 @@ Item {
         id: wrapper
 
         anchors.fill: parent
-        layer.enabled: root.opacity > 0 && root.vis.blur && !root.weActive
+        layer.enabled: root.opacity > 0 && root.vis.blur && !root.weActive && !root.visFadedOut
 
         Loader {
+            id: visLoader
+
             asynchronous: true
             anchors.fill: parent
             anchors.topMargin: root.offset
@@ -97,12 +101,14 @@ Item {
             active: root.opacity > 0
 
             sourceComponent: Item {
+                readonly property bool fadedOut: root.useGpuPipeline && gpuView.fadedOut
+
                 ServiceRef {
                     service: Audio.cava
                 }
 
                 ServiceRef {
-                    service: root.useGpuPipeline && root.vis.beatReactivity > 0.001 ? Audio.beatTracker : null
+                    service: root.useGpuPipeline && root.vis.beatReactivity > 0.001 && !gpuView.idle && !gpuView.settled ? Audio.beatTracker : null
                 }
 
                 Binding {
@@ -118,7 +124,7 @@ Item {
                     }
 
                     target: Audio.beatTracker
-                    enabled: root.useGpuPipeline && root.vis.beatReactivity > 0.001
+                    enabled: root.useGpuPipeline && root.vis.beatReactivity > 0.001 && !gpuView.idle && !gpuView.settled
                 }
 
                 Item {
@@ -179,7 +185,7 @@ Item {
                         anchors.fill: parent
                         visible: !root.useGpuPipeline
 
-                        values: Audio.cava.values
+                        values: !root.useGpuPipeline ? Audio.cava.values : []
                         mirrored: root.vis.mirrored
                         singleRow: root.vis.layout === "full"
                         primaryColor: root.primaryCol

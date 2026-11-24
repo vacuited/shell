@@ -13,6 +13,9 @@ using Qt::StringLiterals::operator""_s;
 
 namespace {
 
+constexpr qreal k_liveThreshold = 0.015;
+constexpr qreal k_fadeInvisible = 0.001;
+
 bool fuzzyFloatArrayEqual(const float* a, const float* b, int count) {
     for (int i = 0; i < count; ++i) {
         if (!qFuzzyCompare(a[i] + 1.0f, b[i] + 1.0f))
@@ -66,8 +69,24 @@ void VisualiserView::wakeUp() {
     update();
 }
 
+void VisualiserView::setIdle(bool idle) {
+    if (m_idle == idle)
+        return;
+    m_idle = idle;
+    emit idleChanged();
+}
+
+void VisualiserView::setFadedOut(bool fadedOut) {
+    if (m_fadedOut == fadedOut)
+        return;
+    m_fadedOut = fadedOut;
+    emit fadedOutChanged();
+}
+
 void VisualiserView::triggerBeat(qreal bpm) {
     Q_UNUSED(bpm);
+    if (m_fadedOut || m_idle)
+        return;
     const qreal strength = std::clamp(m_beatReactivity, 0.0, 1.0);
     if (strength <= 0.001)
         return;
@@ -98,7 +117,7 @@ void VisualiserView::advance(qreal dt) {
     for (qsizetype i = 0; i < count; ++i)
         maxInput = std::max(maxInput, m_targetValues[i]);
 
-    const bool liveActive = maxInput > 0.015;
+    const bool liveActive = maxInput > k_liveThreshold;
     const bool usePreviewSynth = m_previewMode && !liveActive;
 
     // Detect sub-bass transient kicks when live audio is active
@@ -128,14 +147,39 @@ void VisualiserView::advance(qreal dt) {
             m_idleFactor = std::min(1.0, m_idleFactor + clampedDt / 1.2);
         }
     }
+    const bool idleNow = !liveActive && !usePreviewSynth && (m_silenceSec >= m_idleTimeout);
+    setIdle(idleNow);
 
     // Idle fade opacity
     const bool isFadeMode = (m_idleMode == u"fade"_s);
-    const qreal targetFade = (isFadeMode && m_silenceSec >= m_idleTimeout) ? 0.0 : 1.0;
+    const qreal targetFade = (isFadeMode && idleNow) ? 0.0 : 1.0;
     const qreal fadeTau = targetFade < m_fadeOpacity ? 450.0 : 180.0;
     m_fadeOpacity += (targetFade - m_fadeOpacity) * (1.0 - std::exp(-dtMs / fadeTau));
     if (std::abs(targetFade - m_fadeOpacity) < 0.002)
         m_fadeOpacity = targetFade;
+
+    const bool fadedNow = isFadeMode && idleNow && (m_fadeOpacity <= k_fadeInvisible);
+    if (fadedNow) {
+        m_fadeOpacity = 0.0;
+        m_beatEnergy = 0.0;
+        m_prevBass = 0.0;
+        std::fill(m_displayValues.begin(), m_displayValues.end(), 0.0);
+        std::fill(m_peakValues.begin(), m_peakValues.end(), 0.0);
+        std::fill(m_peakHoldTimers.begin(), m_peakHoldTimers.end(), 0.0);
+        std::fill(m_peakVelocities.begin(), m_peakVelocities.end(), 0.0);
+        std::fill(m_sparkValues.begin(), m_sparkValues.end(), 0.0);
+
+        const bool justFaded = !m_fadedOut;
+        setFadedOut(true);
+        if (justFaded)
+            update();
+        if (!m_settled) {
+            m_settled = true;
+            emit settledChanged();
+        }
+        return;
+    }
+    setFadedOut(false);
 
     const qreal attackTau = std::max(5.0, static_cast<qreal>(m_attackMs) / 3.0);
     const qreal decayTau = std::max(10.0, static_cast<qreal>(m_decayMs) / 3.0);
@@ -301,7 +345,7 @@ void VisualiserView::resolveStyleOptionFloats(Style styleEnum, float out[4]) con
 QSGNode* VisualiserView::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* data) {
     Q_UNUSED(data);
 
-    if (width() <= 0 || height() <= 0 || !window()) {
+    if (width() <= 0 || height() <= 0 || !window() || m_fadeOpacity <= k_fadeInvisible) {
         delete oldNode;
         return nullptr;
     }
@@ -389,9 +433,19 @@ void VisualiserView::setValues(const QVector<double>& values) {
         m_peakHoldTimers.resize(values.size(), 0.0);
         m_peakVelocities.resize(values.size(), 0.0);
         m_sparkValues.resize(values.size(), 0.0);
-        rebuildDataImage();
+        if (!m_fadedOut)
+            rebuildDataImage();
     }
     emit valuesChanged();
+
+    if (m_settled) {
+        qreal maxInput = 0.0;
+        for (qsizetype i = 0; i < m_targetValues.size(); ++i)
+            maxInput = std::max(maxInput, m_targetValues[i]);
+        const qreal wakeThreshold = m_fadedOut ? k_liveThreshold : 0.001;
+        if (maxInput <= wakeThreshold)
+            return;
+    }
     wakeUp();
 }
 
@@ -593,6 +647,8 @@ void VisualiserView::setPreviewMode(bool previewMode) {
 }
 
 bool VisualiserView::settled() const { return m_settled; }
+bool VisualiserView::idle() const { return m_idle; }
+bool VisualiserView::fadedOut() const { return m_fadedOut; }
 
 // --- Material & Shader ---
 

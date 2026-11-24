@@ -42,6 +42,8 @@ class VisualiserView : public QQuickItem {
     Q_PROPERTY(QVariantMap styleOptions READ styleOptions WRITE setStyleOptions NOTIFY styleOptionsChanged)
     Q_PROPERTY(bool previewMode READ previewMode WRITE setPreviewMode NOTIFY previewModeChanged)
     Q_PROPERTY(bool settled READ settled NOTIFY settledChanged)
+    Q_PROPERTY(bool idle READ idle NOTIFY idleChanged)
+    Q_PROPERTY(bool fadedOut READ fadedOut NOTIFY fadedOutChanged)
 
 public:
     enum class Style : quint8 {
@@ -121,6 +123,8 @@ public:
     void setPreviewMode(bool previewMode);
 
     [[nodiscard]] bool settled() const;
+    [[nodiscard]] bool idle() const;
+    [[nodiscard]] bool fadedOut() const;
 
 signals:
     void valuesChanged();
@@ -145,6 +149,8 @@ signals:
     void styleOptionsChanged();
     void previewModeChanged();
     void settledChanged();
+    void idleChanged();
+    void fadedOutChanged();
 
 protected:
     QSGNode* updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* data) override;
@@ -158,6 +164,8 @@ private:
     void resolveStyleOptionFloats(Style styleEnum, float out[4]) const;
     void rebuildDataImage();
     void wakeUp();
+    void setIdle(bool idle);
+    void setFadedOut(bool fadedOut);
 
     QVector<double> m_targetValues;
     QVector<double> m_displayValues;
@@ -188,6 +196,8 @@ private:
     bool m_previewMode = false;
 
     bool m_settled = false;
+    bool m_idle = false;
+    bool m_fadedOut = false;
     qreal m_timeSec = 0.0;
     qreal m_silenceSec = 0.0;
     qreal m_idleFactor = 1.0;

@@ -57,7 +57,7 @@ void main() {
     float w = dims.x;
     float h = dims.y;
     int barCount = int(params0.x + 0.5);
-    if (barCount <= 0 || w <= 0.0 || h <= 0.0) {
+    if (qt_Opacity <= 0.001 || barCount <= 0 || w <= 0.0 || h <= 0.0) {
         fragColor = vec4(0.0);
         return;
     }

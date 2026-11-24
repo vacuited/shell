@@ -5,6 +5,7 @@
 #include <cava/cavacore.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 
 #include "audiocollector.hpp"
@@ -38,6 +39,17 @@ void CavaProcessor::process() {
 
     const int count = static_cast<int>(AudioCollector::instance().readChunk(m_in));
 
+    bool inputSilent = true;
+    for (int i = 0; i < count; ++i) {
+        if (std::abs(m_in[i]) > 1e-6) {
+            inputSilent = false;
+            break;
+        }
+    }
+    if (inputSilent && m_allZero) {
+        return;
+    }
+
     // Process in data via cava
     cava_execute(m_in, count, m_out, m_plan);
 
@@ -65,8 +77,25 @@ void CavaProcessor::process() {
         }
     }
 
+    bool allZero = true;
+    bool changed = (values.size() != m_values.size());
+    for (int i = 0; i < m_bars; ++i) {
+        if (values[i] < 0.0005) {
+            values[i] = 0.0;
+        } else {
+            allZero = false;
+        }
+        if (!changed && std::abs(values[i] - m_values[i]) > 0.0005) {
+            changed = true;
+        }
+    }
+    if (allZero && !m_allZero) {
+        changed = true;
+    }
+    m_allZero = allZero;
+
     // Update values
-    if (values != m_values) {
+    if (changed) {
         m_values = std::move(values);
         emit valuesChanged(m_values);
     }
@@ -89,6 +118,8 @@ void CavaProcessor::setMonstercat(bool monstercat) {
 }
 
 void CavaProcessor::reload() {
+    m_allZero = false;
+    m_values.clear();
     cleanup();
     initCava();
 }

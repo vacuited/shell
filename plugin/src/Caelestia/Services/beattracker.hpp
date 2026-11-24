@@ -25,6 +25,7 @@ private:
     aubio_tempo_t* m_tempo;
     fvec_t* m_in;
     fvec_t* m_out;
+    int m_silentChunks = 0;
 };
 
 class BeatTracker : public AudioProvider {

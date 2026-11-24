@@ -33,6 +33,7 @@ private:
 
     int m_bars;
     std::atomic<bool> m_monstercat{ true };
+    bool m_allZero = false;
     QVector<double> m_values;
 
     void reload();
