@@ -343,7 +343,7 @@ Item {
                 if (Hardware.isSupported) {
                     if (Hardware.profile === "cool")
                         return cool.icon;
-                    if (Hardware.profile === "quiet")
+                    if (Hardware.profile === "quiet" || Hardware.profile === "low-power")
                         return saver.icon;
                     if (Hardware.profile === "performance")
                         return perf.icon;
