@@ -84,7 +84,7 @@ PageBase {
                 StyledText {
                     Layout.alignment: Qt.AlignHCenter
                     Layout.topMargin: Tokens.spacing.small
-                    text: qsTr("by vacuit")
+                    text: qsTr("by vacuit • Basically Caelestia#")
                     color: Colours.palette.m3onSurfaceVariant
                     font: Tokens.font.label.medium
                     opacity: 0.8

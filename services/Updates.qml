@@ -356,7 +356,7 @@ Singleton {
         id: startupCheckTimer
         interval: 60000
         repeat: false
-        running: true
+        running: root.adapterReady && prefsAdapter.autoCheck && prefsAdapter.checkIntervalHours > 0
         onTriggered: {
             if (!root.adapterReady || !prefsAdapter.autoCheck || prefsAdapter.checkIntervalHours <= 0)
                 return;
@@ -389,9 +389,9 @@ Singleton {
         JsonAdapter {
             id: prefsAdapter
 
-            property bool autoCheck: true
+            property bool autoCheck: false
             property int checkIntervalHours: 6
-            property bool notifyOnUpdate: true
+            property bool notifyOnUpdate: false
             property string lastNotifiedSha: ""
             property string lastCheckedIso: ""
         }

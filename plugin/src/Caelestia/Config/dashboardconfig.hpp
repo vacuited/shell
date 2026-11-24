@@ -29,8 +29,8 @@ class DashboardConfig : public settings::ObjectNode {
     CONFIG_PROPERTY(bool, showPerformance, true)
     CONFIG_PROPERTY(bool, showWeather, true)
     CONFIG_PROPERTY(bool, showWeatherLocation, true)
-    CONFIG_PROPERTY(bool, showTerminal, true)
-    CONFIG_PROPERTY(bool, showFocus, true)
+    CONFIG_PROPERTY(bool, showTerminal, false)
+    CONFIG_PROPERTY(bool, showFocus, false)
     CONFIG_PROPERTY(bool, showHyprlandSplash, false)
     CONFIG_PROPERTY(bool, colorizeMediaGif, true)
     CONFIG_PROPERTY(bool, useMediaShapes, false)
@@ -49,10 +49,10 @@ class DashboardConfig : public settings::ObjectNode {
             LIST_ENTRY(media, true),
             LIST_ENTRY(weather, true),
             LIST_ENTRY(performance, true),
-            LIST_ENTRY(hardware, true),
-            LIST_ENTRY(terminal, true),
-            LIST_ENTRY(focus, true),
-            LIST_ENTRY(notes, true),
+            LIST_ENTRY(hardware, false),
+            LIST_ENTRY(terminal, false),
+            LIST_ENTRY(focus, false),
+            LIST_ENTRY(notes, false),
         }))
 };
 

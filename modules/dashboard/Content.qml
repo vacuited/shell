@@ -85,7 +85,7 @@ Item {
             return list;
         }
 
-        const defaultOrder = ["dashboard", "media", "weather", "performance", "hardware", "terminal", "focus", "notes"];
+        const defaultOrder = ["dashboard", "media", "weather", "performance"];
         return defaultOrder
             .map(id => tabDefs[id])
             .filter(def => def && (def.available === undefined || def.available));
