@@ -24,7 +24,12 @@ err()  { printf '%s[-]%s %s\n' "$C_R" "$C_0" "$*" >&2; }
 die()  { err "$*"; exit 1; }
 
 CLEANUP_PATHS=()
+INHIBIT_PID=""
 cleanup() {
+    if [ -n "${INHIBIT_PID:-}" ]; then
+        kill "$INHIBIT_PID" 2>/dev/null || true
+        wait "$INHIBIT_PID" 2>/dev/null || true
+    fi
     local p
     for p in "${CLEANUP_PATHS[@]+"${CLEANUP_PATHS[@]}"}"; do
         [ -n "$p" ] && rm -rf "$p" 2>/dev/null || true
@@ -87,6 +92,9 @@ UNINSTALL=0
 DRY_RUN=0
 HARDWARE=auto
 SUDO=""
+CLI_INSTALLED=0
+SHELL_RUNNING=0
+LEGACY_QS_PIDS=""
 
 usage() {
     cat <<EOF
@@ -267,8 +275,20 @@ if [ "$UNINSTALL" -eq 1 ]; then
     do_uninstall
 fi
 
+start_idle_inhibit() {
+    [ "$DRY_RUN" -eq 0 ] && [ "$QML_ONLY" -eq 0 ] || return 0
+    command -v systemd-inhibit >/dev/null 2>&1 || return 0
+    systemd-inhibit --what=idle:sleep --who="vacuited-shell" --why="Installing vacuited-shell" -- true >/dev/null 2>&1 || return 0
+    systemd-inhibit --what=idle:sleep --who="vacuited-shell" --why="Installing vacuited-shell" \
+        -- sh -c 'sp=""; trap '\''[ -n "$sp" ] && kill "$sp" 2>/dev/null; exit 0'\'' TERM INT; while kill -0 "$1" 2>/dev/null; do sleep 5 & sp=$!; wait "$sp" 2>/dev/null || true; done' _ "$$" \
+        </dev/null >/dev/null 2>&1 &
+    INHIBIT_PID=$!
+    info "Inhibiting idle lock and sleep while building/installing."
+}
+
 echo "=== Installing vacuited-shell ==="
 [ -f "$SCRIPT_DIR/shell.qml" ] && [ -f "$SCRIPT_DIR/CMakeLists.txt" ] || die "Run this script from inside the shell repository."
+start_idle_inhibit
 
 # ---------------------------------------------------------------------------
 # Dependencies & Arch conflict resolution
@@ -322,32 +342,19 @@ font_missing_pkgs() {
     done
 }
 
-resolve_arch_conflicts() {
+remove_conflicting_shell_pkgs() {
     [ "$IS_ARCH" -eq 1 ] || return 0
     local pkg
     for pkg in caelestia-shell caelestia-shell-git; do
         if pacman -Qq "$pkg" >/dev/null 2>&1; then
             warn "System package '$pkg' is installed and conflicts with vacuited-shell."
             if confirm "Remove conflicting package '$pkg' now?" y; then
-                run_priv pacman -Rdd "${YES_FLAG[@]}" "$pkg"
+                run_priv pacman -Rdd "${YES_FLAG[@]+"${YES_FLAG[@]}"}" "$pkg"
+            else
+                warn "Keeping '$pkg'; files in $QT_QML_DIR/Caelestia may conflict with pacman."
             fi
         fi
     done
-
-    if [ "$SKIP_DEPS" -eq 0 ]; then
-        if pacman -Qq quickshell >/dev/null 2>&1 && ! pacman -Qq quickshell-git >/dev/null 2>&1; then
-            warn "Package 'quickshell' conflicts with required AUR package 'quickshell-git'."
-            if confirm "Remove 'quickshell' before installing 'quickshell-git'?" y; then
-                run_priv pacman -Rdd "${YES_FLAG[@]}" quickshell
-            fi
-        fi
-        if pacman -Qq qt6-m3shapes >/dev/null 2>&1 && ! pacman -Qq qt6-m3shapes-git >/dev/null 2>&1; then
-            warn "Package 'qt6-m3shapes' conflicts with required AUR package 'qt6-m3shapes-git'."
-            if confirm "Remove 'qt6-m3shapes' before installing 'qt6-m3shapes-git'?" y; then
-                run_priv pacman -Rdd "${YES_FLAG[@]}" qt6-m3shapes
-            fi
-        fi
-    fi
 }
 
 install_deps_arch() {
@@ -402,7 +409,50 @@ install_deps_arch() {
         info "Missing (AUR): ${aur_need[*]}"
         confirm "Install missing AUR packages now?" y || die "Cannot continue without required AUR dependencies."
         detect_aur_helper || bootstrap_aur_helper
-        run "$AUR_HELPER" -S --needed "${YES_FLAG[@]}" "${aur_need[@]}"
+
+        local aur_conflicts=() need_qs_git=0 need_m3_git=0 cs_ver="" helper_help=""
+        local aur_flags=(--needed "${YES_FLAG[@]+"${YES_FLAG[@]}"}")
+        for p in "${aur_need[@]}"; do
+            case "$p" in
+                quickshell-git) need_qs_git=1 ;;
+                qt6-m3shapes-git) need_m3_git=1 ;;
+            esac
+        done
+        if [ "$need_qs_git" -eq 1 ] && pacman -Qq quickshell >/dev/null 2>&1 && ! pacman -Qq quickshell-git >/dev/null 2>&1; then
+            aur_conflicts+=(quickshell)
+        fi
+        if [ "$need_m3_git" -eq 1 ] && pacman -Qq qt6-m3shapes >/dev/null 2>&1 && ! pacman -Qq qt6-m3shapes-git >/dev/null 2>&1; then
+            aur_conflicts+=(qt6-m3shapes)
+        fi
+        if [ "$need_m3_git" -eq 1 ] && pacman -Qq caelestia-shell >/dev/null 2>&1; then
+            cs_ver="$(pacman -Q caelestia-shell 2>/dev/null | awk '{print $2}' || true)"
+            if [ -n "$cs_ver" ] && command -v vercmp >/dev/null 2>&1 && [ "$(vercmp "$cs_ver" "2.4.0")" -lt 0 ]; then
+                aur_conflicts+=(caelestia-shell)
+            fi
+        fi
+
+        if [ ${#aur_conflicts[@]} -gt 0 ]; then
+            if [ "$ASSUME_YES" -eq 0 ]; then
+                info "Keeping installed package(s) (${aur_conflicts[*]}) intact while building AUR packages; answer 'y' if pacman prompts to replace them after compiling."
+            else
+                if command -v "$AUR_HELPER" >/dev/null 2>&1; then
+                    helper_help="$("$AUR_HELPER" --help 2>&1 || true)"
+                fi
+                if [[ "$helper_help" == *"--useask"* ]]; then
+                    aur_flags+=(--useask)
+                else
+                    warn "Removing conflicting package(s) (${aur_conflicts[*]}) before unattended AUR install."
+                    run_priv pacman -Rdd "${YES_FLAG[@]+"${YES_FLAG[@]}"}" "${aur_conflicts[@]}"
+                fi
+            fi
+        fi
+
+        if ! run "$AUR_HELPER" -S "${aur_flags[@]}" "${aur_need[@]}"; then
+            if [ ${#aur_conflicts[@]} -gt 0 ]; then
+                err "AUR install failed. If pacman aborted on a conflict (${aur_conflicts[*]}), re-run and answer 'y' to replace the conflicting package."
+            fi
+            exit 1
+        fi
     elif [ ${#pac_need[@]} -eq 0 ] && [ ${#font_pac[@]} -eq 0 ]; then
         log "All required dependencies are installed."
     fi
@@ -539,8 +589,6 @@ verify_prereqs() {
 }
 
 if [ "$QML_ONLY" -eq 0 ]; then
-    resolve_arch_conflicts
-
     if [ "$SKIP_DEPS" -eq 1 ]; then
         warn "Skipping dependency installation (--skip-deps)."
     else
@@ -590,6 +638,7 @@ install_cli() {
     else
         bash "$cli_dir/install.sh" "${args[@]+"${args[@]}"}"
     fi
+    CLI_INSTALLED=1
 }
 
 ORIG_PATH="$PATH"
@@ -735,6 +784,8 @@ if [ "$QML_ONLY" -eq 0 ]; then
         -DDISTRIBUTOR=vacuited
     run cmake --build "$BUILD_DIR" -j "$(nproc)"
 
+    remove_conflicting_shell_pkgs
+
     log "Installing the plugin to $QT_QML_DIR (privileged)..."
     for lib in "${LEGACY_LIBS[@]}"; do
         if [ -e "$lib" ]; then run_priv rm -f "$lib"; fi
@@ -862,6 +913,43 @@ deploy_qml_shell() {
 
 deploy_qml_shell
 
+check_quickshell_shadowing() {
+    local qs_root="${CONFIG_HOME}/quickshell"
+    local root_qml="${qs_root}/shell.qml"
+    if [ -e "$root_qml" ] || [ -L "$root_qml" ]; then
+        warn "Found ${root_qml}."
+        warn "Quickshell treats a root shell.qml as the 'default' config and ignores subdirectories (including 'caelestia')."
+        local bak="${root_qml}.bak.$(date +%Y%m%d-%H%M%S)"
+        if confirm "Rename ${root_qml} to $(basename "$bak") so 'caelestia shell -d' can find vacuited-shell?" y; then
+            run mv "$root_qml" "$bak"
+            log "Moved conflicting root shell.qml to $bak"
+        else
+            warn "Kept ${root_qml}. 'caelestia shell -d' will fail until it is moved or removed."
+        fi
+    fi
+
+    local manifest="${qs_root}/manifest.conf"
+    if [ -e "$manifest" ] || [ -L "$manifest" ]; then
+        if ! grep -qE '^[[:space:]]*caelestia[[:space:]]*=' "$manifest" 2>/dev/null; then
+            warn "Found ${manifest} without a 'caelestia' entry; Quickshell uses manifest.conf for '-c' lookup and may ignore ${QS_DEST}."
+            local mbak="${manifest}.bak.$(date +%Y%m%d-%H%M%S)"
+            if confirm "Rename deprecated ${manifest} to $(basename "$mbak")?" y; then
+                run mv "$manifest" "$mbak"
+                log "Moved deprecated manifest to $mbak"
+            fi
+        fi
+    fi
+
+    if [ -n "${QS_CONFIG_PATH:-}" ]; then
+        warn "Environment variable QS_CONFIG_PATH is set (${QS_CONFIG_PATH}); it overrides 'qs -c caelestia'."
+    fi
+    if [ -n "${QS_MANIFEST:-}" ]; then
+        warn "Environment variable QS_MANIFEST is set (${QS_MANIFEST}); it may override 'qs -c caelestia' discovery."
+    fi
+}
+
+check_quickshell_shadowing
+
 # ---------------------------------------------------------------------------
 # HP Victus hardware helper (optional)
 # ---------------------------------------------------------------------------
@@ -929,6 +1017,45 @@ if [ "$DRY_RUN" -eq 0 ]; then
     [ -f "$QS_DEST/shell.qml" ] || die "Deploy check failed: $QS_DEST/shell.qml missing."
     log "Install verified."
 
+    qs_bin="$(command -v qs 2>/dev/null || command -v quickshell 2>/dev/null || true)"
+    if [ -n "$qs_bin" ]; then
+        qs_list_rc=0
+        qs_list_out="$("$qs_bin" -c caelestia list 2>&1)" || qs_list_rc=$?
+        if [ "$qs_list_rc" -ne 0 ]; then
+            warn "Quickshell could not discover the 'caelestia' config: $qs_list_out"
+            warn "Check for a stray shell.qml or manifest.conf in ${CONFIG_HOME}/quickshell/ (or unset QS_MANIFEST/QS_CONFIG_PATH)."
+        elif [[ "$qs_list_out" != "No running instances"* ]]; then
+            SHELL_RUNNING=1
+        fi
+
+        if command -v python3 >/dev/null 2>&1; then
+            qs_all_json="$("$qs_bin" list --all --json 2>/dev/null || "$qs_bin" list --all -j 2>/dev/null || true)"
+            if [ -n "$qs_all_json" ]; then
+                LEGACY_QS_PIDS="$(printf '%s' "$qs_all_json" | python3 -c '
+import json, sys
+try:
+    data = json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+if not isinstance(data, list):
+    sys.exit(0)
+pids = [
+    str(item["pid"])
+    for item in data
+    if isinstance(item, dict)
+    and str(item.get("config_path") or "").startswith("/etc/xdg/quickshell/caelestia")
+    and isinstance(item.get("pid"), int)
+]
+print(" ".join(pids))
+' 2>/dev/null || true)"
+            fi
+        fi
+        if [ -n "$LEGACY_QS_PIDS" ]; then
+            warn "An older system caelestia-shell instance (PID ${LEGACY_QS_PIDS}) is still running from /etc/xdg/quickshell/caelestia."
+            warn "Stop it before starting the new shell (otherwise 'caelestia shell -d -r' will not replace it)."
+        fi
+    fi
+
     if [ "$GIT_REV" = "unknown" ]; then
         detect_git_meta
     fi
@@ -965,12 +1092,33 @@ cat <<EOF
   Plugin QML Dir:  $([ "$QML_ONLY" -eq 1 ] && echo "skipped" || echo "$QT_QML_DIR/Caelestia")
   Wallpaper Eng.:  $(command -v skwd-paper-v2 >/dev/null 2>&1 && echo "installed" || echo "not installed (optional)")
   Hardware Helper: $HARDWARE_STATUS
+EOF
+
+if [ -n "$LEGACY_QS_PIDS" ]; then
+    cat <<EOF
+
+Stop the lingering system shell instance, then start the new shell:
+    kill $LEGACY_QS_PIDS
+    caelestia shell -d
+EOF
+elif [ "$SHELL_RUNNING" -eq 1 ]; then
+    cat <<EOF
+
+Reload the running shell:
+    caelestia shell -d -r
+EOF
+else
+    cat <<EOF
 
 Start the shell (fish or bash):
     caelestia shell -d
 
 If it was already running, reload it:
     caelestia shell -d -r
+EOF
+fi
+
+cat <<EOF
 
 Add autostart + keybinds in your Hyprland config, e.g.:
     exec-once = caelestia shell -d
@@ -986,3 +1134,7 @@ case ":$ORIG_PATH:" in
         fi
         ;;
 esac
+
+if [ "$CLI_INSTALLED" -eq 1 ]; then
+    info "If 'caelestia' isn't found in this terminal after replacing an older CLI, open a new terminal (or run 'hash -r' in bash/zsh)."
+fi
