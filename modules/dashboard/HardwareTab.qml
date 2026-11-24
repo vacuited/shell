@@ -18,7 +18,30 @@ Item {
     implicitHeight: 384
 
     property bool initialized: false
-    Component.onCompleted: Qt.callLater(() => root.initialized = true)
+    property bool _hwRefHeld: false
+
+    function _syncHwRef(): void {
+        const want = root.visible;
+        if (want && !_hwRefHeld) {
+            _hwRefHeld = true;
+            Hardware.refCount++;
+        } else if (!want && _hwRefHeld) {
+            _hwRefHeld = false;
+            Hardware.refCount = Math.max(0, Hardware.refCount - 1);
+        }
+    }
+
+    onVisibleChanged: _syncHwRef()
+    Component.onCompleted: {
+        Qt.callLater(() => root.initialized = true);
+        _syncHwRef();
+    }
+    Component.onDestruction: {
+        if (_hwRefHeld) {
+            _hwRefHeld = false;
+            Hardware.refCount = Math.max(0, Hardware.refCount - 1);
+        }
+    }
 
     ColumnLayout {
         anchors.fill: parent

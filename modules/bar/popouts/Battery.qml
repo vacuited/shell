@@ -43,6 +43,9 @@ Item {
     required property var popouts
     property bool _isSidebarOpen: popouts && popouts.sidebarOpen && popouts.isHorizontal && popouts.currentSection === "end"
 
+    Component.onCompleted: Hardware.refCount++
+    Component.onDestruction: Hardware.refCount = Math.max(0, Hardware.refCount - 1)
+
     readonly property bool charging: [UPowerDeviceState.Charging, UPowerDeviceState.FullyCharged, UPowerDeviceState.PendingCharge].includes(UPower.displayDevice.state)
     readonly property bool isLowBattery: UPower.onBattery && UPower.displayDevice.percentage <= 0.2
     property real animPerc: UPower.displayDevice.percentage

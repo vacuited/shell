@@ -35,15 +35,14 @@ ShellRoot {
         Notifs;
         Players;
         Brightness;
-        AiProviders;
-        AiTools;
-        AiEngine;
         HyprSunset;
         ScreenTime;
         Updates;
 
         if (GlobalConfig.utilities.vpn.enabled)
             VPN;
+        if (GlobalConfig.services.arpcEnabled)
+            DiscordRPC;
 
         Qt.callLater(() => {
             Weather.reload();
@@ -90,8 +89,15 @@ ShellRoot {
     BluetoothReconnect {}
 
     // Force service initialization
-    property var _arpcInit: DiscordRPC
     property var _gameModeInit: GameMode
     property var _pipInit: PipManager
     property var _systemTrayInit: SystemTray
+
+    Connections {
+        target: GlobalConfig.services
+        function onArpcEnabledChanged(): void {
+            if (GlobalConfig.services.arpcEnabled)
+                DiscordRPC;
+        }
+    }
 }

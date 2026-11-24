@@ -583,7 +583,7 @@ Singleton {
             root.days[root.todayKey].apps[appClass] = (root.days[root.todayKey].apps[appClass] || 0) + 1;
             root.dirty = true;
 
-            if (root.liveTick % 5 === 0) {
+            if (!GameMode.enabled && root.liveTick % 5 === 0) {
                 root.revision++;
             }
         }
@@ -598,10 +598,19 @@ Singleton {
 
     Timer {
         id: saveTimer
-        interval: 15000
+        interval: 60000
         repeat: true
-        running: root.dirty
+        running: root.dirty && !GameMode.enabled
         onTriggered: root.saveImmediate()
+    }
+
+    Connections {
+        target: GameMode
+
+        function onEnabledChanged(): void {
+            if (!GameMode.enabled && root.dirty)
+                root.saveImmediate();
+        }
     }
 
     Component.onCompleted: {

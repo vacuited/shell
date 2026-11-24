@@ -38,7 +38,15 @@ Item {
         Anim {}
     }
 
-    property bool isStreaming: AiEngine.isStreaming
+    property bool isStreaming: false
+
+    Timer {
+        id: gcTimer
+
+        interval: 600
+        repeat: false
+        onTriggered: gc()
+    }
 
     Loader {
         id: content
@@ -51,6 +59,10 @@ Item {
         anchors.bottomMargin: 0
 
         active: root.shouldBeActive || root.visible || root.isStreaming
+        onActiveChanged: {
+            if (!active)
+                gcTimer.restart();
+        }
 
         sourceComponent: Content {
             implicitWidth: root.implicitWidth - content.anchors.leftMargin - content.anchors.margins

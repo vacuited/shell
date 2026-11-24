@@ -33,8 +33,8 @@ Item {
         }
     }
     Component.onCompleted: {
-        readTokenProc.running = true;
         if (root.active) {
+            readTokenProc.running = true;
             DiscordIpc.connectIpc(root.clientId);
         }
     }

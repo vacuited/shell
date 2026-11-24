@@ -66,10 +66,8 @@ Item {
     readonly property int displayHour: Units.twelveHourClock ? ((Time.hours % 12) || 12) : Time.hours
     readonly property int clockMinute: Time.minutes
     readonly property int clockSecond: Time.seconds
-    readonly property string todayKey: Qt.formatDate(Time.date, "yyyy-MM-dd")
-    readonly property date todayDate: FocusLedger.parseLocalDate(todayKey) ?? new Date()
-    readonly property string dayStr: Qt.formatDate(todayDate, "d")
-    readonly property string monthStr: Qt.formatDate(todayDate, "MM")
+    readonly property string dayStr: Qt.formatDate(Time.date, "d")
+    readonly property string monthStr: Qt.formatDate(Time.date, "MM")
     readonly property string displayFont: Qt.fontFamilies().includes("Titan One") ? "Titan One" : (Tokens.font.body.large.family || "Sans Serif")
     readonly property bool shouldSpin: constantlyRotate && !surfaceHidden && !desktopOccluded && !GameMode.enabled
     readonly property real spinFitScale: constantlyRotate ? 0.80 : 1.0

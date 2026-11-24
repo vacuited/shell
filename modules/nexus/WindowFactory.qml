@@ -26,6 +26,14 @@ Singleton {
         id: dummy
     }
 
+    Timer {
+        id: gcTimer
+
+        interval: 600
+        repeat: false
+        onTriggered: gc()
+    }
+
     Component {
         id: nexusComp
 
@@ -39,8 +47,10 @@ Singleton {
             surfaceFormat.opaque: false
 
             onVisibleChanged: {
-                if (!visible)
+                if (!visible) {
                     destroy();
+                    gcTimer.restart();
+                }
             }
 
             implicitWidth: nexus.implicitWidth
@@ -62,7 +72,10 @@ Singleton {
                 nState.isWindow: true
                 nState.currentPageIdx: win.initialPageIdx
                 nState.pendingSubPageIdx: win.initialSubPageIdx
-                onClose: win.destroy()
+                onClose: {
+                    win.destroy();
+                    gcTimer.restart();
+                }
             }
 
             Behavior on color {

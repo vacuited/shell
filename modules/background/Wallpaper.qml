@@ -308,7 +308,7 @@ Item {
         Loader {
             id: maskLoader
             anchors.fill: parent
-            active: img.animsEnabled
+            active: img.animsEnabled && !root.isPlaceholder && img.renderActive && img.maskRadius < (img.maxRadius - 1.5)
 
             sourceComponent: Item {
                 id: maskContainer
@@ -413,7 +413,7 @@ Item {
                 anchors.fill: parent
                 // Only GIFs go through the animated-image path; videos are handled
                 // by the video channel loader below and must never reach AnimatedImage.
-                path: img.isGif ? img.verifiedPath : ""
+                path: (img.isGif && img.renderActive) ? img.verifiedPath : ""
                 playing: !root.isPlaceholder && !WallpaperPauser.paused
                 visible: img.isGif && !img.isVideo
                 asynchronous: true
@@ -427,9 +427,9 @@ Item {
             CachingImage {
                 id: thumbImg
                 anchors.fill: parent
-                path: img.verifiedPath
+                path: img.renderActive ? img.verifiedPath : ""
                 source: {
-                    if (!img.verifiedPath)
+                    if (!img.renderActive || !img.verifiedPath)
                         return "";
                     if (img.isVideo) {
                         const thumb = Wallpapers.getWallpaperThumb(img.verifiedPath, Wallpapers.cacheBuster);

@@ -28,7 +28,7 @@ StyledRect {
     radius: Tokens.rounding.full
 
     ServiceRef {
-        service: Config.bar.spotify.showVisualiser ? Audio.cava : null
+        service: Config.bar.spotify.showVisualiser && root.isPlaying && !GameMode.enabled ? Audio.cava : null
     }
 
     GridLayout {

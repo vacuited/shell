@@ -79,6 +79,36 @@ Item {
     implicitWidth: WidgetMetrics.widthFor(effectiveSize, s)
     implicitHeight: WidgetMetrics.heightFor(effectiveSize, "battery", s)
 
+    property bool _hwRefHeld: false
+
+    function _syncHwRef(): void {
+        const want = !root.isLaptop && root.visible && Hardware.isSupported;
+        if (want && !_hwRefHeld) {
+            _hwRefHeld = true;
+            Hardware.refCount++;
+        } else if (!want && _hwRefHeld) {
+            _hwRefHeld = false;
+            Hardware.refCount = Math.max(0, Hardware.refCount - 1);
+        }
+    }
+
+    onVisibleChanged: _syncHwRef()
+    onIsLaptopChanged: _syncHwRef()
+    Component.onCompleted: _syncHwRef()
+    Component.onDestruction: {
+        if (_hwRefHeld) {
+            _hwRefHeld = false;
+            Hardware.refCount = Math.max(0, Hardware.refCount - 1);
+        }
+    }
+
+    Connections {
+        target: Hardware
+        function onIsSupportedChanged(): void {
+            root._syncHwRef();
+        }
+    }
+
     Loader {
         active: root.visible && !root.isLaptop && root.desktopGpuPower <= 0 && Gpu.type !== GpuType.None && !GameMode.enabled
         sourceComponent: Component {

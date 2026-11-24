@@ -320,89 +320,93 @@ Item {
         }
     }
 
-    WidgetQuickPopover {
-        id: quickPopover
+    Loader {
+        anchors.fill: parent
+        z: 80
+        active: root.editingCard !== null && Visibilities.desktopWidgetsUnlocked
 
-        open: root.editingCard !== null && Visibilities.desktopWidgetsUnlocked
-        widgetId: root.editingCard?.widgetId ?? ""
-        widgetType: root.editingCard?.widgetType ?? ""
-        sizeMode: root.editingCard?.resolvedSizeMode ?? "1x1"
-        itemScale: root.editingCard?.itemScale ?? 1.0
-        supportedSizes: root.editingCard?.supportedSizes ?? []
-        surfaceStyle: root.editingCard?.entry?.style ?? ""
-        glassBlurEnabled: root.widgetConfig.blur
-        widgetOptions: root.editingCard?.entryOptions ?? ({})
-        anchorX: root.editingCard?.x ?? 0
-        anchorY: root.editingCard?.y ?? 0
-        anchorWidth: root.editingCard?.width ?? 164
-        anchorHeight: root.editingCard?.height ?? 164
-        safeLeft: root.safeLeft
-        safeTop: root.safeTop
-        safeRight: root.safeRight
-        safeBottom: root.safeBottom
+        sourceComponent: WidgetQuickPopover {
+            open: true
+            widgetId: root.editingCard?.widgetId ?? ""
+            widgetType: root.editingCard?.widgetType ?? ""
+            sizeMode: root.editingCard?.resolvedSizeMode ?? "1x1"
+            itemScale: root.editingCard?.itemScale ?? 1.0
+            supportedSizes: root.editingCard?.supportedSizes ?? []
+            surfaceStyle: root.editingCard?.entry?.style ?? ""
+            glassBlurEnabled: root.widgetConfig.blur
+            widgetOptions: root.editingCard?.entryOptions ?? ({})
+            anchorX: root.editingCard?.x ?? 0
+            anchorY: root.editingCard?.y ?? 0
+            anchorWidth: root.editingCard?.width ?? 164
+            anchorHeight: root.editingCard?.height ?? 164
+            safeLeft: root.safeLeft
+            safeTop: root.safeTop
+            safeRight: root.safeRight
+            safeBottom: root.safeBottom
 
-        onClosed: root.closeQuickPopover()
-        onSizeModeSelected: mode => root.editingCard?.commitSizeMode(mode)
-        onItemScaleSelected: nextScale => root.editingCard?.commitItemScale(nextScale)
-        onSurfaceStyleSelected: style => root.editingCard?.commitSurfaceStyle(style)
-        onToggleGlassBlur: {
-            const scr = root.targetScreenName();
-            const scrCfg = scr !== "" ? Config.forScreen(scr) : null;
-            const hasScrOverride = scrCfg && scrCfg.background.desktopWidgets.isOverride("blur");
-            const target = hasScrOverride ? scrCfg : GlobalConfig;
-            target.background.desktopWidgets.blur = !root.widgetConfig.blur;
-            target.save();
-        }
-        onOptionPatched: patch => root.editingCard?.mergeOptions(patch, true)
-        onActionTriggered: actionName => {
-            const target = root.editingCard?.widgetContent;
-            if (!target)
-                return;
-            if (actionName === "pickFile" && target.openPicker)
-                target.openPicker();
-            else if (actionName === "jumpToday" && target.jumpToToday)
-                target.jumpToToday();
-            else if (actionName === "refreshWeather" && target.refresh)
-                target.refresh();
-        }
-        onDuplicateRequested: {
-            const card = root.editingCard;
-            if (!card)
-                return;
-            const scr = root.targetScreenName();
-            const entries = root.useScreenOverrideLayer()
-                ? Config.forScreen(scr).background.desktopWidgets.entries
-                : GlobalConfig.background.desktopWidgets.entries;
-            const wType = WidgetMetrics.normalizeType(card.widgetType);
-            if (!WidgetMetrics.isMultiInstance(wType))
-                return;
-            let suffix = Date.now();
-            while (entries.values.some(e => e.id === `${wType}-${suffix}`))
-                suffix++;
-            const step = Math.round(24 * root.widgetScale);
-            const nextX = Math.round(Math.max(root.safeLeft, Math.min(Math.max(root.safeLeft, root.safeRight - card.width), card.x + step)));
-            const nextY = Math.round(Math.max(root.safeTop, Math.min(Math.max(root.safeTop, root.safeBottom - card.height), card.y + step)));
-            entries.insert({
-                id: `${wType}-${suffix}`,
-                type: wType,
-                enabled: true,
-                sizeMode: card.resolvedSizeMode,
-                style: card.entry?.style ?? "",
-                options: Object.assign({}, card.entryOptions || ({})),
-                x: nextX,
-                y: nextY
-            });
-            root.saveConfig();
-        }
-        onHideWidgetRequested: {
-            const id = root.editingCard?.widgetId ?? "";
-            const target = root.writableEntryFor(id);
-            if (target) {
-                target.enabled = false;
+            onClosed: root.closeQuickPopover()
+            onSizeModeSelected: mode => root.editingCard?.commitSizeMode(mode)
+            onItemScaleSelected: nextScale => root.editingCard?.commitItemScale(nextScale)
+            onSurfaceStyleSelected: style => root.editingCard?.commitSurfaceStyle(style)
+            onToggleGlassBlur: {
+                const scr = root.targetScreenName();
+                const scrCfg = scr !== "" ? Config.forScreen(scr) : null;
+                const hasScrOverride = scrCfg && scrCfg.background.desktopWidgets.isOverride("blur");
+                const target = hasScrOverride ? scrCfg : GlobalConfig;
+                target.background.desktopWidgets.blur = !root.widgetConfig.blur;
+                target.save();
+            }
+            onOptionPatched: patch => root.editingCard?.mergeOptions(patch, true)
+            onActionTriggered: actionName => {
+                const target = root.editingCard?.widgetContent;
+                if (!target)
+                    return;
+                if (actionName === "pickFile" && target.openPicker)
+                    target.openPicker();
+                else if (actionName === "jumpToday" && target.jumpToToday)
+                    target.jumpToToday();
+                else if (actionName === "refreshWeather" && target.refresh)
+                    target.refresh();
+            }
+            onDuplicateRequested: {
+                const card = root.editingCard;
+                if (!card)
+                    return;
+                const scr = root.targetScreenName();
+                const entries = root.useScreenOverrideLayer()
+                    ? Config.forScreen(scr).background.desktopWidgets.entries
+                    : GlobalConfig.background.desktopWidgets.entries;
+                const wType = WidgetMetrics.normalizeType(card.widgetType);
+                if (!WidgetMetrics.isMultiInstance(wType))
+                    return;
+                let suffix = Date.now();
+                while (entries.values.some(e => e.id === `${wType}-${suffix}`))
+                    suffix++;
+                const step = Math.round(24 * root.widgetScale);
+                const nextX = Math.round(Math.max(root.safeLeft, Math.min(Math.max(root.safeLeft, root.safeRight - card.width), card.x + step)));
+                const nextY = Math.round(Math.max(root.safeTop, Math.min(Math.max(root.safeTop, root.safeBottom - card.height), card.y + step)));
+                entries.insert({
+                    id: `${wType}-${suffix}`,
+                    type: wType,
+                    enabled: true,
+                    sizeMode: card.resolvedSizeMode,
+                    style: card.entry?.style ?? "",
+                    options: Object.assign({}, card.entryOptions || ({})),
+                    x: nextX,
+                    y: nextY
+                });
                 root.saveConfig();
             }
+            onHideWidgetRequested: {
+                const id = root.editingCard?.widgetId ?? "";
+                const target = root.writableEntryFor(id);
+                if (target) {
+                    target.enabled = false;
+                    root.saveConfig();
+                }
+            }
+            onOpenNexusRequested: WindowFactory.openPage ? WindowFactory.openPage(PageRegistry.indexOfKey("background"), 5) : WindowFactory.create()
         }
-        onOpenNexusRequested: WindowFactory.openPage ? WindowFactory.openPage(PageRegistry.indexOfKey("background"), 5) : WindowFactory.create()
     }
 
     component WidgetCard: WidgetWrapper {

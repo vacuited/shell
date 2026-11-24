@@ -5,6 +5,7 @@ import Quickshell
 import Quickshell.Io
 import Caelestia
 import Caelestia.Config
+import qs.services
 
 Singleton {
     id: root
@@ -21,6 +22,7 @@ Singleton {
     property bool turbo: true
     property bool isSupported: false
     property bool isBusy: false
+    property int refCount: 0
 
     function refreshStatus(): void {
         if (!statusProc.running) {
@@ -122,8 +124,9 @@ Singleton {
     Timer {
         id: pollTimer
         interval: 2000
-        running: true
+        running: root.isSupported && root.refCount > 0 && !GameMode.enabled
         repeat: true
+        triggeredOnStart: true
         onTriggered: root.refreshStatus()
     }
 

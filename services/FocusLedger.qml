@@ -758,17 +758,14 @@ Singleton {
     }
 
     Timer {
-        interval: 30000
+        interval: 60000
         repeat: true
         running: true
-        onTriggered: root.checkTodayKey()
-    }
-
-    Timer {
-        interval: 15000
-        repeat: true
-        running: true
-        onTriggered: root.refreshWeekNames()
+        onTriggered: {
+            root.checkTodayKey();
+            if (root.dirty)
+                root.refreshWeekNames();
+        }
     }
 
     Component.onCompleted: {

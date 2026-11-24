@@ -80,6 +80,7 @@ Variants {
             readonly property alias wallpaperLoader: wallpaper
             readonly property var monitor: Hypr.monitorFor(win.modelData)
             readonly property bool workspaceOccupied: !(monitor?.activeWorkspace?.toplevels?.values.every(t => t.lastIpcObject?.floating) ?? true)
+            readonly property bool workspaceFullscreen: monitor?.activeWorkspace?.toplevels?.values.some(t => (t.lastIpcObject?.fullscreen ?? 0) > 0) ?? false
 
             screen: modelData
             name: "background"
@@ -119,6 +120,7 @@ Variants {
             id: behindClock
 
             readonly property bool weSurfaceActive: wallpaper.item?.weSurfaceVisible ?? false
+            readonly property bool desktopFullscreen: win.workspaceFullscreen
 
             anchors.fill: parent
 
@@ -510,85 +512,89 @@ Variants {
                 }
             }
 
-            ClockQuickPopover {
-                id: clockPopover
+            Loader {
+                anchors.fill: parent
+                z: 80
+                active: desktopCanvas.clockEditing && Visibilities.desktopWidgetsUnlocked && Config.background.desktopClock.enabled
 
-                open: desktopCanvas.clockEditing && Visibilities.desktopWidgetsUnlocked && Config.background.desktopClock.enabled
-                clockStyle: Config.background.desktopClock.style || "classic"
-                surfaceStyle: clockLoader.item?.surfaceStyle ?? (Config.background.desktopClock.surfaceStyle || "glass")
-                clockScale: Config.background.desktopClock.scale
-                cardBackground: clockLoader.item?.cardBackground ?? Config.background.desktopClock.background.enabled
-                bgBlur: Config.background.desktopClock.background.blur
-                bgOpacity: Config.background.desktopClock.background.opacity
-                shadowEnabled: Config.background.desktopClock.shadow.enabled
-                invertColors: Config.background.desktopClock.invertColors
-                hasCustomPos: clockWrapper.hasCustomPos
-                clockOptions: Config.background.desktopClock.options || ({})
-                anchorX: clockWrapper.x
-                anchorY: clockWrapper.y
-                anchorWidth: clockWrapper.width
-                anchorHeight: clockWrapper.height
-                safeLeft: desktopCanvas.safeLeft
-                safeTop: desktopCanvas.safeTop
-                safeRight: desktopCanvas.safeRight
-                safeBottom: desktopCanvas.safeBottom
+                sourceComponent: ClockQuickPopover {
+                    open: true
+                    clockStyle: Config.background.desktopClock.style || "classic"
+                    surfaceStyle: clockLoader.item?.surfaceStyle ?? (Config.background.desktopClock.surfaceStyle || "glass")
+                    clockScale: Config.background.desktopClock.scale
+                    cardBackground: clockLoader.item?.cardBackground ?? Config.background.desktopClock.background.enabled
+                    bgBlur: Config.background.desktopClock.background.blur
+                    bgOpacity: Config.background.desktopClock.background.opacity
+                    shadowEnabled: Config.background.desktopClock.shadow.enabled
+                    invertColors: Config.background.desktopClock.invertColors
+                    hasCustomPos: clockWrapper.hasCustomPos
+                    clockOptions: Config.background.desktopClock.options || ({})
+                    anchorX: clockWrapper.x
+                    anchorY: clockWrapper.y
+                    anchorWidth: clockWrapper.width
+                    anchorHeight: clockWrapper.height
+                    safeLeft: desktopCanvas.safeLeft
+                    safeTop: desktopCanvas.safeTop
+                    safeRight: desktopCanvas.safeRight
+                    safeBottom: desktopCanvas.safeBottom
 
-                onClosed: desktopCanvas.closeClockPopover()
-                onStyleSelected: style => {
-                    const target = desktopCanvas.clockTargetFor("style", "");
-                    target.background.desktopClock.style = style;
-                    target.save();
-                }
-                onSurfaceStyleSelected: style => desktopCanvas.setClockSurfaceStyle(style)
-                onCardBackgroundToggled: enabled => desktopCanvas.setUnifiedCardBackground(enabled)
-                onToggleGlassBlur: {
-                    const target = desktopCanvas.clockTargetFor("blur", "background");
-                    target.background.desktopClock.background.blur = !Config.background.desktopClock.background.blur;
-                    target.save();
-                }
-                onOpacityChangedLive: (nextOpacity, save) => {
-                    const target = desktopCanvas.clockTargetFor("opacity", "background");
-                    target.background.desktopClock.background.opacity = nextOpacity;
-                    if (save)
+                    onClosed: desktopCanvas.closeClockPopover()
+                    onStyleSelected: style => {
+                        const target = desktopCanvas.clockTargetFor("style", "");
+                        target.background.desktopClock.style = style;
                         target.save();
-                }
-                onScaleChangedLive: (nextScale, save) => {
-                    const target = desktopCanvas.clockTargetFor("scale", "");
-                    target.background.desktopClock.scale = nextScale;
-                    if (save)
+                    }
+                    onSurfaceStyleSelected: style => desktopCanvas.setClockSurfaceStyle(style)
+                    onCardBackgroundToggled: enabled => desktopCanvas.setUnifiedCardBackground(enabled)
+                    onToggleGlassBlur: {
+                        const target = desktopCanvas.clockTargetFor("blur", "background");
+                        target.background.desktopClock.background.blur = !Config.background.desktopClock.background.blur;
                         target.save();
+                    }
+                    onOpacityChangedLive: (nextOpacity, save) => {
+                        const target = desktopCanvas.clockTargetFor("opacity", "background");
+                        target.background.desktopClock.background.opacity = nextOpacity;
+                        if (save)
+                            target.save();
+                    }
+                    onScaleChangedLive: (nextScale, save) => {
+                        const target = desktopCanvas.clockTargetFor("scale", "");
+                        target.background.desktopClock.scale = nextScale;
+                        if (save)
+                            target.save();
+                    }
+                    onShadowToggled: enabled => {
+                        const target = desktopCanvas.clockTargetFor("enabled", "shadow");
+                        target.background.desktopClock.shadow.enabled = enabled;
+                        target.save();
+                    }
+                    onInvertColorsToggled: enabled => {
+                        const target = desktopCanvas.clockTargetFor("invertColors", "");
+                        target.background.desktopClock.invertColors = enabled;
+                        target.save();
+                    }
+                    onOptionPatched: patch => desktopCanvas.patchClockOptions(patch, true)
+                    onCenterRequested: {
+                        const target = desktopCanvas.clockPositionTarget();
+                        const cx = Math.round(desktopCanvas.workCenterX - clockWrapper.width / 2);
+                        const cy = Math.round(desktopCanvas.workCenterY - clockWrapper.height / 2);
+                        target.background.desktopClock.x = Math.round(clockWrapper.clampX(cx, clockWrapper.width));
+                        target.background.desktopClock.y = Math.round(clockWrapper.clampY(cy, clockWrapper.height));
+                        target.save();
+                    }
+                    onResetPositionRequested: {
+                        const target = desktopCanvas.clockPositionTarget();
+                        target.background.desktopClock.x = -1;
+                        target.background.desktopClock.y = -1;
+                        target.save();
+                    }
+                    onHideClockRequested: {
+                        const target = desktopCanvas.clockTargetFor("enabled", "");
+                        target.background.desktopClock.enabled = false;
+                        target.save();
+                    }
+                    onOpenNexusRequested: WindowFactory.openPage(PageRegistry.indexOfKey("background"), 1)
                 }
-                onShadowToggled: enabled => {
-                    const target = desktopCanvas.clockTargetFor("enabled", "shadow");
-                    target.background.desktopClock.shadow.enabled = enabled;
-                    target.save();
-                }
-                onInvertColorsToggled: enabled => {
-                    const target = desktopCanvas.clockTargetFor("invertColors", "");
-                    target.background.desktopClock.invertColors = enabled;
-                    target.save();
-                }
-                onOptionPatched: patch => desktopCanvas.patchClockOptions(patch, true)
-                onCenterRequested: {
-                    const target = desktopCanvas.clockPositionTarget();
-                    const cx = Math.round(desktopCanvas.workCenterX - clockWrapper.width / 2);
-                    const cy = Math.round(desktopCanvas.workCenterY - clockWrapper.height / 2);
-                    target.background.desktopClock.x = Math.round(clockWrapper.clampX(cx, clockWrapper.width));
-                    target.background.desktopClock.y = Math.round(clockWrapper.clampY(cy, clockWrapper.height));
-                    target.save();
-                }
-                onResetPositionRequested: {
-                    const target = desktopCanvas.clockPositionTarget();
-                    target.background.desktopClock.x = -1;
-                    target.background.desktopClock.y = -1;
-                    target.save();
-                }
-                onHideClockRequested: {
-                    const target = desktopCanvas.clockTargetFor("enabled", "");
-                    target.background.desktopClock.enabled = false;
-                    target.save();
-                }
-                onOpenNexusRequested: WindowFactory.openPage(PageRegistry.indexOfKey("background"), 1)
             }
 
             WidgetWrapper {
@@ -672,117 +678,121 @@ Variants {
                 }
             }
 
-            LyricsQuickPopover {
-                id: lyricsPopover
+            Loader {
+                anchors.fill: parent
+                z: 80
+                active: desktopCanvas.lyricsEditing && Visibilities.desktopWidgetsUnlocked && lyricsWrapper.lyricsEnabledOnCanvas
 
-                open: desktopCanvas.lyricsEditing && Visibilities.desktopWidgetsUnlocked && lyricsWrapper.lyricsEnabledOnCanvas
-                lyricsStyle: Config.background.desktopLyrics.style || "apple"
-                surfaceStyle: Config.background.desktopLyrics.surfaceStyle || "glass"
-                lyricsScale: Config.background.desktopLyrics.scale
-                lyricsWidth: Config.background.desktopLyrics.width
-                alignment: Config.background.desktopLyrics.alignment
-                cardBackground: Config.background.desktopLyrics.background.enabled
-                bgBlur: Config.background.desktopLyrics.background.blur
-                bgOpacity: Config.background.desktopLyrics.background.opacity
-                shadowEnabled: Config.background.desktopLyrics.shadow.enabled
-                invertColors: Config.background.desktopLyrics.invertColors
-                hasCustomPos: lyricsWrapper.hasCustomPos
-                positionPreset: Config.background.desktopLyrics.position
-                lyricsOptions: Config.background.desktopLyrics.options || ({})
-                anchorX: lyricsWrapper.x
-                anchorY: lyricsWrapper.y
-                anchorWidth: lyricsWrapper.width
-                anchorHeight: lyricsWrapper.height
-                safeLeft: desktopCanvas.safeLeft
-                safeTop: desktopCanvas.safeTop
-                safeRight: desktopCanvas.safeRight
-                safeBottom: desktopCanvas.safeBottom
+                sourceComponent: LyricsQuickPopover {
+                    open: true
+                    lyricsStyle: Config.background.desktopLyrics.style || "apple"
+                    surfaceStyle: Config.background.desktopLyrics.surfaceStyle || "glass"
+                    lyricsScale: Config.background.desktopLyrics.scale
+                    lyricsWidth: Config.background.desktopLyrics.width
+                    alignment: Config.background.desktopLyrics.alignment
+                    cardBackground: Config.background.desktopLyrics.background.enabled
+                    bgBlur: Config.background.desktopLyrics.background.blur
+                    bgOpacity: Config.background.desktopLyrics.background.opacity
+                    shadowEnabled: Config.background.desktopLyrics.shadow.enabled
+                    invertColors: Config.background.desktopLyrics.invertColors
+                    hasCustomPos: lyricsWrapper.hasCustomPos
+                    positionPreset: Config.background.desktopLyrics.position
+                    lyricsOptions: Config.background.desktopLyrics.options || ({})
+                    anchorX: lyricsWrapper.x
+                    anchorY: lyricsWrapper.y
+                    anchorWidth: lyricsWrapper.width
+                    anchorHeight: lyricsWrapper.height
+                    safeLeft: desktopCanvas.safeLeft
+                    safeTop: desktopCanvas.safeTop
+                    safeRight: desktopCanvas.safeRight
+                    safeBottom: desktopCanvas.safeBottom
 
-                onClosed: desktopCanvas.closeLyricsPopover()
-                onStyleSelected: style => {
-                    const target = desktopCanvas.lyricsTargetFor("style", "");
-                    target.background.desktopLyrics.style = style;
-                    target.save();
-                }
-                onSurfaceStyleSelected: style => {
-                    const target = desktopCanvas.lyricsTargetFor("surfaceStyle", "");
-                    target.background.desktopLyrics.surfaceStyle = style;
-                    target.save();
-                }
-                onAlignmentSelected: align => {
-                    const target = desktopCanvas.lyricsTargetFor("alignment", "");
-                    target.background.desktopLyrics.alignment = align;
-                    target.save();
-                }
-                onPositionPresetSelected: pos => {
-                    const posTarget = desktopCanvas.lyricsTargetFor("position", "");
-                    const xyTarget = desktopCanvas.lyricsPositionTarget();
-                    posTarget.background.desktopLyrics.position = pos;
-                    xyTarget.background.desktopLyrics.x = -1;
-                    xyTarget.background.desktopLyrics.y = -1;
-                    posTarget.save();
-                    if (xyTarget !== posTarget)
-                        xyTarget.save();
-                }
-                onCardBackgroundToggled: enabled => {
-                    const target = desktopCanvas.lyricsTargetFor("enabled", "background");
-                    target.background.desktopLyrics.background.enabled = enabled;
-                    target.save();
-                }
-                onToggleGlassBlur: {
-                    const target = desktopCanvas.lyricsTargetFor("blur", "background");
-                    target.background.desktopLyrics.background.blur = !Config.background.desktopLyrics.background.blur;
-                    target.save();
-                }
-                onOpacityChangedLive: (nextOpacity, save) => {
-                    const target = desktopCanvas.lyricsTargetFor("opacity", "background");
-                    target.background.desktopLyrics.background.opacity = nextOpacity;
-                    if (save)
+                    onClosed: desktopCanvas.closeLyricsPopover()
+                    onStyleSelected: style => {
+                        const target = desktopCanvas.lyricsTargetFor("style", "");
+                        target.background.desktopLyrics.style = style;
                         target.save();
-                }
-                onScaleChangedLive: (nextScale, save) => {
-                    const target = desktopCanvas.lyricsTargetFor("scale", "");
-                    target.background.desktopLyrics.scale = nextScale;
-                    if (save)
+                    }
+                    onSurfaceStyleSelected: style => {
+                        const target = desktopCanvas.lyricsTargetFor("surfaceStyle", "");
+                        target.background.desktopLyrics.surfaceStyle = style;
                         target.save();
-                }
-                onWidthChangedLive: (nextWidth, save) => {
-                    const target = desktopCanvas.lyricsTargetFor("width", "");
-                    target.background.desktopLyrics.width = Math.max(260, Math.min(1100, Math.round(nextWidth)));
-                    if (save)
+                    }
+                    onAlignmentSelected: align => {
+                        const target = desktopCanvas.lyricsTargetFor("alignment", "");
+                        target.background.desktopLyrics.alignment = align;
                         target.save();
+                    }
+                    onPositionPresetSelected: pos => {
+                        const posTarget = desktopCanvas.lyricsTargetFor("position", "");
+                        const xyTarget = desktopCanvas.lyricsPositionTarget();
+                        posTarget.background.desktopLyrics.position = pos;
+                        xyTarget.background.desktopLyrics.x = -1;
+                        xyTarget.background.desktopLyrics.y = -1;
+                        posTarget.save();
+                        if (xyTarget !== posTarget)
+                            xyTarget.save();
+                    }
+                    onCardBackgroundToggled: enabled => {
+                        const target = desktopCanvas.lyricsTargetFor("enabled", "background");
+                        target.background.desktopLyrics.background.enabled = enabled;
+                        target.save();
+                    }
+                    onToggleGlassBlur: {
+                        const target = desktopCanvas.lyricsTargetFor("blur", "background");
+                        target.background.desktopLyrics.background.blur = !Config.background.desktopLyrics.background.blur;
+                        target.save();
+                    }
+                    onOpacityChangedLive: (nextOpacity, save) => {
+                        const target = desktopCanvas.lyricsTargetFor("opacity", "background");
+                        target.background.desktopLyrics.background.opacity = nextOpacity;
+                        if (save)
+                            target.save();
+                    }
+                    onScaleChangedLive: (nextScale, save) => {
+                        const target = desktopCanvas.lyricsTargetFor("scale", "");
+                        target.background.desktopLyrics.scale = nextScale;
+                        if (save)
+                            target.save();
+                    }
+                    onWidthChangedLive: (nextWidth, save) => {
+                        const target = desktopCanvas.lyricsTargetFor("width", "");
+                        target.background.desktopLyrics.width = Math.max(260, Math.min(1100, Math.round(nextWidth)));
+                        if (save)
+                            target.save();
+                    }
+                    onShadowToggled: enabled => {
+                        const target = desktopCanvas.lyricsTargetFor("enabled", "shadow");
+                        target.background.desktopLyrics.shadow.enabled = enabled;
+                        target.save();
+                    }
+                    onInvertColorsToggled: enabled => {
+                        const target = desktopCanvas.lyricsTargetFor("invertColors", "");
+                        target.background.desktopLyrics.invertColors = enabled;
+                        target.save();
+                    }
+                    onOptionPatched: patch => desktopCanvas.patchLyricsOptions(patch, true)
+                    onCenterRequested: {
+                        const target = desktopCanvas.lyricsPositionTarget();
+                        const cx = Math.round(desktopCanvas.workCenterX - lyricsWrapper.width / 2);
+                        const cy = Math.round(desktopCanvas.workCenterY - lyricsWrapper.height / 2);
+                        target.background.desktopLyrics.x = Math.round(lyricsWrapper.clampX(cx, lyricsWrapper.width));
+                        target.background.desktopLyrics.y = Math.round(lyricsWrapper.clampY(cy, lyricsWrapper.height));
+                        target.save();
+                    }
+                    onResetPositionRequested: {
+                        const target = desktopCanvas.lyricsPositionTarget();
+                        target.background.desktopLyrics.x = -1;
+                        target.background.desktopLyrics.y = -1;
+                        target.save();
+                    }
+                    onHideLyricsRequested: {
+                        const target = desktopCanvas.lyricsTargetFor("enabled", "");
+                        target.background.desktopLyrics.enabled = false;
+                        target.save();
+                    }
+                    onOpenNexusRequested: WindowFactory.openPage(PageRegistry.indexOfKey("background"), 2)
                 }
-                onShadowToggled: enabled => {
-                    const target = desktopCanvas.lyricsTargetFor("enabled", "shadow");
-                    target.background.desktopLyrics.shadow.enabled = enabled;
-                    target.save();
-                }
-                onInvertColorsToggled: enabled => {
-                    const target = desktopCanvas.lyricsTargetFor("invertColors", "");
-                    target.background.desktopLyrics.invertColors = enabled;
-                    target.save();
-                }
-                onOptionPatched: patch => desktopCanvas.patchLyricsOptions(patch, true)
-                onCenterRequested: {
-                    const target = desktopCanvas.lyricsPositionTarget();
-                    const cx = Math.round(desktopCanvas.workCenterX - lyricsWrapper.width / 2);
-                    const cy = Math.round(desktopCanvas.workCenterY - lyricsWrapper.height / 2);
-                    target.background.desktopLyrics.x = Math.round(lyricsWrapper.clampX(cx, lyricsWrapper.width));
-                    target.background.desktopLyrics.y = Math.round(lyricsWrapper.clampY(cy, lyricsWrapper.height));
-                    target.save();
-                }
-                onResetPositionRequested: {
-                    const target = desktopCanvas.lyricsPositionTarget();
-                    target.background.desktopLyrics.x = -1;
-                    target.background.desktopLyrics.y = -1;
-                    target.save();
-                }
-                onHideLyricsRequested: {
-                    const target = desktopCanvas.lyricsTargetFor("enabled", "");
-                    target.background.desktopLyrics.enabled = false;
-                    target.save();
-                }
-                onOpenNexusRequested: WindowFactory.openPage(PageRegistry.indexOfKey("background"), 2)
             }
 
         Loader {

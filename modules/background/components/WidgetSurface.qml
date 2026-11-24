@@ -34,6 +34,7 @@ Item {
     property real shadowOpacity: 0.35
     property real shadowBlur: 0.6
     property real shadowVerticalOffset: 4
+    property bool paused: false
 
     // Optional explicit coordinates in wallpaper space; -1 auto-tracks ancestor positions.
     property real absX: -1
@@ -43,7 +44,8 @@ Item {
     readonly property bool isBlur: surfaceStyle === "blur"
     readonly property bool isFrosted: surfaceStyle === "frosted"
     readonly property bool isGlass: !isMaterial && !isBlur && !isFrosted
-    readonly property bool hasWallpaperPixels: root.visible && !GameMode.enabled && !weActive && wallpaper !== null && wallpaper.width > 0 && wallpaper.height > 0
+    readonly property bool wallpaperHidden: Boolean(wallpaper?.desktopFullscreen)
+    readonly property bool hasWallpaperPixels: root.visible && !GameMode.enabled && !root.paused && !wallpaperHidden && !weActive && wallpaper !== null && wallpaper.width > 0 && wallpaper.height > 0
     readonly property bool canQmlBlur: (isBlur || isFrosted || blur) && hasWallpaperPixels
     readonly property bool blurActive: (isBlur || (isGlass && blur)) && hasWallpaperPixels
     readonly property bool frostedActive: isFrosted && hasWallpaperPixels
@@ -82,7 +84,7 @@ Item {
         // Maintained for callers; origin binding tracks ancestor geometry automatically.
     }
 
-    layer.enabled: root.visible && !GameMode.enabled && !root.weActive && root.shadowEnabled && root.shadowOpacity > 0
+    layer.enabled: root.visible && !GameMode.enabled && !root.paused && !wallpaperHidden && !root.weActive && root.shadowEnabled && root.shadowOpacity > 0
     layer.effect: MultiEffect {
         shadowEnabled: true
         shadowColor: Colours.palette.m3shadow
@@ -175,6 +177,8 @@ Item {
                         source: ShaderEffectSource {
                             sourceItem: root.wallpaper
                             sourceRect: Qt.rect(blurLoader.cropX, blurLoader.cropY, blurLoader.width, blurLoader.height)
+                            smooth: true
+                            textureSize: Qt.size(Math.max(1, Math.round(blurLoader.width * 0.5)), Math.max(1, Math.round(blurLoader.height * 0.5)))
                         }
                         blurEnabled: true
                         blur: 1
@@ -248,6 +252,7 @@ Item {
                     property variant sourceTex: ShaderEffectSource {
                         sourceItem: root.wallpaper
                         sourceRect: Qt.rect(ditherLoader.cropX, ditherLoader.cropY, ditherLoader.cropW, ditherLoader.cropH)
+                        textureSize: Qt.size(Math.max(1, Math.round(ditherLoader.cropW * 0.5)), Math.max(1, Math.round(ditherLoader.cropH * 0.5)))
                         live: true
                         smooth: true
                         hideSource: false

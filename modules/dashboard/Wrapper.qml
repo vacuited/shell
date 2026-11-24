@@ -45,6 +45,14 @@ Item {
         Anim {}
     }
 
+    Timer {
+        id: gcTimer
+
+        interval: 600
+        repeat: false
+        onTriggered: gc()
+    }
+
     Loader {
         id: content
 
@@ -52,6 +60,10 @@ Item {
         anchors.bottom: parent.bottom
 
         active: root.shouldBeActive || root.visible
+        onActiveChanged: {
+            if (!active)
+                gcTimer.restart();
+        }
 
         sourceComponent: Content {
             screenState: root.screenState

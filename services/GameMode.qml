@@ -22,6 +22,7 @@ Singleton {
     }
 
     property bool _autoEnabled: false
+    readonly property bool _autoWatchActive: GlobalConfig.utilities.gameMode.autoEnable && GlobalConfig.utilities.gameMode.autoEnableRegexes.length > 0
 
     function evaluateAutoEnable(): void {
         const regexes = GlobalConfig.utilities.gameMode.autoEnableRegexes;
@@ -48,10 +49,16 @@ Singleton {
     }
 
     Timer {
-        interval: 500
+        interval: 2000
         repeat: true
-        running: true
+        running: root._autoWatchActive
         onTriggered: root.evaluateAutoEnable()
+    }
+
+    Connections {
+        target: Hyprland.toplevels
+        enabled: root._autoWatchActive
+        function onValuesChanged(): void { root.evaluateAutoEnable(); }
     }
 
     Connections {
