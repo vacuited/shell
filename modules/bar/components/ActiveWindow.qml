@@ -27,6 +27,7 @@ Item {
         return title;
     }
 
+    property bool animateTitleChange: true
     readonly property int maxSize: {
         const start = bar.sections[0];
         const end = bar.sections[2];
@@ -43,6 +44,52 @@ Item {
         }
     }
     property Title current: text1
+
+    function levenshteinGreaterThan(first: string, second: string, threshold: int): bool {
+        if (Math.abs(first.length - second.length) > threshold)
+            return true;
+        if (first === second)
+            return false;
+
+        const rows = first.length;
+        const columns = second.length;
+        const beyond = threshold + 1;
+
+        let previous = new Array(columns + 1).fill(beyond);
+        let current = new Array(columns + 1).fill(beyond);
+
+        for (let j = 0; j <= Math.min(columns, threshold); j++)
+            previous[j] = j;
+
+        for (let i = 1; i <= rows; i++) {
+            const start = Math.max(1, i - threshold);
+            const end = Math.min(columns, i + threshold);
+
+            current[0] = Math.min(i, beyond);
+            if (start > 1)
+                current[start - 1] = beyond;
+
+            let minDistance = current[0];
+
+            for (let j = start; j <= end; j++) {
+                const substitutionCost = first[i - 1] === second[j - 1] ? 0 : 1;
+                current[j] = Math.min(current[j - 1] + 1, previous[j] + 1, previous[j - 1] + substitutionCost);
+                minDistance = Math.min(minDistance, current[j]);
+            }
+
+            if (minDistance > threshold)
+                return true;
+
+            if (end < columns)
+                current[end + 1] = beyond;
+
+            const swap = previous;
+            previous = current;
+            current = swap;
+        }
+
+        return previous[columns] > threshold;
+    }
 
     clip: true
     implicitWidth: bar.isHorizontal ? (icon.implicitWidth + current.width + current.anchors.leftMargin) : Math.max(icon.implicitWidth, current.width)
@@ -101,6 +148,7 @@ Item {
         elideWidth: root.maxSize - icon.width
 
         onTextChanged: {
+            root.animateTitleChange = root.levenshteinGreaterThan(root.current.text, elidedText, 2);
             const next = root.current === text1 ? text2 : text1;
             next.text = elidedText;
             root.current = next;
@@ -155,6 +203,8 @@ Item {
         }
 
         Behavior on opacity {
+            enabled: root.animateTitleChange
+
             Anim {
                 type: Anim.DefaultEffects
             }
