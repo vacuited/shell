@@ -68,6 +68,9 @@
 git clone https://github.com/vacuited/shell.git
 cd shell
 ./install.sh
+
+# With Wallpaper Engine + Steam Workshop support (Arch AUR)
+./install.sh --with-wallpaper-engine
 ```
 
 Installs Arch dependencies (pacman + AUR, bootstrapping `yay` if needed), installs [vacuited-cli](https://github.com/vacuited/cli), configures login `PATH`, compiles the C++ plugin, deploys QML to `~/.config/quickshell/caelestia`, and auto-detects HP Victus hardware controls. On other distros it verifies prerequisites and lists what is missing.
