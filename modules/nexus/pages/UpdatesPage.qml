@@ -347,6 +347,49 @@ PageBase {
                         }
                     }
                 }
+
+                StyledRect {
+                    visible: Updates.systemSyncNeeded && !Updates.updating
+                    Layout.fillWidth: true
+                    radius: Tokens.rounding.large
+                    color: Colours.palette.m3secondaryContainer
+                    implicitHeight: sysSyncRow.implicitHeight + Tokens.padding.medium * 2
+
+                    RowLayout {
+                        id: sysSyncRow
+                        anchors.fill: parent
+                        anchors.margins: Tokens.padding.medium
+                        spacing: Tokens.spacing.medium
+
+                        MaterialIcon {
+                            text: "admin_panel_settings"
+                            fontStyle: Tokens.font.icon.medium
+                            color: Colours.palette.m3onSecondaryContainer
+                        }
+
+                        StyledText {
+                            Layout.fillWidth: true
+                            Layout.minimumWidth: 0
+                            wrapMode: Text.WordWrap
+                            font: Tokens.font.body.small
+                            color: Colours.palette.m3onSecondaryContainer
+                            text: {
+                                const items = Updates.systemSyncReasons.length > 0
+                                    ? Updates.systemSyncReasons.join(", ")
+                                    : qsTr("system hooks/shim");
+                                return qsTr("System setup update available (%1). Click Sync now or re-run ./install.sh.").arg(items);
+                            }
+                        }
+
+                        IconTextButton {
+                            type: IconTextButton.Filled
+                            disabled: Updates.checking || Updates.updating
+                            icon: "sync"
+                            text: qsTr("Sync now")
+                            onClicked: Updates.syncSystem()
+                        }
+                    }
+                }
             }
         }
 

@@ -60,11 +60,17 @@ Singleton {
     property var cliInfo: _defaultComp
     property var backups: []
     property var tools: ({})
+    property var systemSync: ({
+            needed: false,
+            reasons: []
+        })
 
     readonly property bool shellHasUpdate: Boolean(shellInfo?.hasUpdate)
     readonly property bool cliHasUpdate: Boolean(cliInfo?.hasUpdate)
     readonly property bool hasAnyUpdate: shellHasUpdate || cliHasUpdate
     readonly property bool baselineMissing: Boolean(shellInfo?.baselineMissing) || Boolean(cliInfo?.baselineMissing)
+    readonly property bool systemSyncNeeded: Boolean(systemSync?.needed)
+    readonly property var systemSyncReasons: Array.isArray(systemSync?.reasons) ? systemSync.reasons : []
     readonly property int totalUpdateCommits: (shellHasUpdate ? (Number(shellInfo?.aheadBy) || (shellInfo?.commits?.length ?? 0)) : 0)
         + (cliHasUpdate ? (Number(cliInfo?.aheadBy) || (cliInfo?.commits?.length ?? 0)) : 0)
     readonly property string combinedRemoteSha: hasAnyUpdate
@@ -105,6 +111,8 @@ Singleton {
             root.backups = data.backups;
         if (data.tools && typeof data.tools === "object")
             root.tools = data.tools;
+        if (data.systemSync && typeof data.systemSync === "object")
+            root.systemSync = data.systemSync;
         if (data.meta?.lastCheckedAt)
             prefsAdapter.lastCheckedIso = String(data.meta.lastCheckedAt);
     }
@@ -164,8 +172,11 @@ Singleton {
             if (justUpdated.components.includes("cli"))
                 parts.push(justUpdated.cliShort ? `CLI ${justUpdated.cliShort}` : "CLI");
         }
-        const summary = parts.length > 0 ? parts.join(" · ") : qsTr("Updated to latest");
-        Toaster.toast(qsTr("Vacuited updated"), summary, "check_circle", Toast.Success, 6000);
+        const baseSummary = parts.length > 0 ? parts.join(" · ") : qsTr("Updated to latest");
+        const summary = root.systemSyncNeeded
+            ? qsTr("%1 · Open Nexus > Updates to sync system hooks").arg(baseSummary)
+            : baseSummary;
+        Toaster.toast(qsTr("Vacuited updated"), summary, "check_circle", Toast.Success, root.systemSyncNeeded ? 8000 : 6000);
     }
 
     function _handleStreamLine(raw: string): void {
@@ -195,6 +206,8 @@ Singleton {
             root.phase = msg.restarting ? qsTr("Restarting shell...") : (msg.summary || qsTr("Update complete"));
             if (Array.isArray(msg.backups))
                 root.backups = msg.backups;
+            if (msg.systemSync && typeof msg.systemSync === "object")
+                root.systemSync = msg.systemSync;
             if (!msg.restarting) {
                 root.loadStatus();
                 Toaster.toast(
@@ -272,6 +285,23 @@ Singleton {
         if (forceRebuild)
             cmd.push("--force-rebuild");
         updateProc.command = cmd;
+        updateProc.running = true;
+    }
+
+    function syncSystem(): void {
+        if (root.updating || root.checking)
+            return;
+        root.updating = true;
+        root.canceling = false;
+        root.activeTarget = "system";
+        root.phase = qsTr("Syncing system hooks...");
+        root.progress = 0.05;
+        root.logLines = [];
+        root.lastError = "";
+        root.canTerminalFallback = false;
+        root.terminalFallbackCmd = "";
+        updateProc.receivedTerminalEvent = false;
+        updateProc.command = ["python3", root.scriptPath, "sync-system"];
         updateProc.running = true;
     }
 
@@ -632,6 +662,8 @@ Singleton {
                 shellHasUpdate: root.shellHasUpdate,
                 cliHasUpdate: root.cliHasUpdate,
                 baselineMissing: root.baselineMissing,
+                systemSyncNeeded: root.systemSyncNeeded,
+                systemSync: root.systemSync,
                 shell: root.shellInfo,
                 cli: root.cliInfo,
                 backups: root.backups

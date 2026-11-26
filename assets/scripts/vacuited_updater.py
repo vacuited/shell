@@ -57,6 +57,8 @@ BACKUP_NAME_RE = re.compile(r"^caelestia\.bak\.(\d{8}-\d{6})$")
 BACKUP_KEEP = 3
 
 HARDWARE_HELPER_BIN = Path("/usr/local/bin/caelestia-hardware-helper")
+ABI_CHECK_BIN = Path("/usr/local/bin/vacuited-abi-check")
+ABI_HOOK_FILE = Path("/etc/pacman.d/hooks/90-vacuited-shell-abi.hook")
 CAELESTIA_SHIM_BIN = Path("/usr/local/bin/caelestia")
 CAELESTIA_SHIM_MARKER = "# vacuited-cli-shim"
 CAELESTIA_SHIM_CONTENT = (
@@ -670,6 +672,7 @@ def cmd_status(_args: argparse.Namespace) -> int:
         "backups": list_backups(meta),
         "justUpdated": meta.get("justUpdated"),
         "tools": detect_tools(),
+        "systemSync": detect_system_sync(),
     }
     print(json.dumps(payload))
     return 0
@@ -745,6 +748,7 @@ def cmd_mark_synced(args: argparse.Namespace) -> int:
         "shell": make_component_status("shell", meta["shell"], cache.get("latest_shell")),
         "cli": make_component_status("cli", meta["cli"], cache.get("latest_cli")),
         "backups": list_backups(meta),
+        "systemSync": detect_system_sync(),
     }
     print(json.dumps(payload))
     return 0
@@ -776,6 +780,7 @@ def cmd_check(args: argparse.Namespace) -> int:
                 "cli": cli_status,
                 "backups": list_backups(meta),
                 "tools": detect_tools(),
+                "systemSync": detect_system_sync(),
             }
         )
     )
@@ -1275,6 +1280,37 @@ def should_install_cli_shim() -> bool:
     return False
 
 
+def detect_system_sync() -> dict[str, Any]:
+    need_abi_hook = False
+    try:
+        if shutil.which("pacman") is not None:
+            if not ABI_CHECK_BIN.is_file() or not ABI_HOOK_FILE.is_file():
+                need_abi_hook = True
+            else:
+                src_check = SHELL_CACHE / "scripts" / "vacuited-abi-check"
+                src_hook = SHELL_CACHE / "scripts" / "90-vacuited-shell-abi.hook"
+                if src_check.is_file() and src_check.read_bytes() != ABI_CHECK_BIN.read_bytes():
+                    need_abi_hook = True
+                elif src_hook.is_file() and src_hook.read_bytes() != ABI_HOOK_FILE.read_bytes():
+                    need_abi_hook = True
+    except OSError:
+        need_abi_hook = False
+
+    need_cli_shim = should_install_cli_shim()
+    reasons: list[str] = []
+    if need_abi_hook:
+        reasons.append("pacman ABI guard hook")
+    if need_cli_shim:
+        reasons.append("login shim (/usr/local/bin/caelestia)")
+
+    return {
+        "needed": bool(reasons),
+        "needAbiHook": need_abi_hook,
+        "needCliShim": need_cli_shim,
+        "reasons": reasons,
+    }
+
+
 def cmd_update(args: argparse.Namespace) -> int:
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     lock_fh = UPDATE_LOCK_PATH.open("w", encoding="utf-8")
@@ -1302,6 +1338,43 @@ def cmd_update(args: argparse.Namespace) -> int:
         do_shell = args.target in ("all", "shell")
         restarted = False
         summary_parts: list[str] = []
+        prefetched_shell_head: str | None = None
+
+        if do_shell:
+            if os.environ.get("VACUITED_UPDATER_REEXEC") != "1":
+                _check_cancelled()
+                emit_progress("Syncing Shell repository", 8 if do_cli else 12, "shell")
+                prefetched_shell_head = sync_git_cache(SHELL_REPO_URL, SHELL_CACHE, depth=50, component="shell")
+                new_script = SHELL_CACHE / "assets" / "scripts" / "vacuited_updater.py"
+                try:
+                    cur_script = Path(__file__).resolve()
+                    if new_script.is_file() and new_script.resolve() != cur_script:
+                        new_bytes = new_script.read_bytes()
+                        if new_bytes != cur_script.read_bytes():
+                            try:
+                                compile(new_bytes, str(new_script), "exec")
+                            except SyntaxError as exc:
+                                emit_log(f"Fetched updater has syntax error ({exc}); continuing with current updater.", "warn", "shell")
+                            else:
+                                emit_log("Updater script changed upstream — switching to latest updater...", "info", "shell")
+                                sys.stdout.flush()
+                                try:
+                                    UPDATE_PID_PATH.unlink()
+                                except OSError:
+                                    pass
+                                try:
+                                    fcntl.flock(lock_fh, fcntl.LOCK_UN)
+                                except OSError:
+                                    pass
+                                lock_fh.close()
+                                reexec_env = os.environ.copy()
+                                reexec_env["VACUITED_UPDATER_REEXEC"] = "1"
+                                reexec_env["VACUITED_SHELL_CACHE_SYNCED"] = "1"
+                                os.execve(sys.executable, [sys.executable, str(new_script), *sys.argv[1:]], reexec_env)
+                except OSError:
+                    pass
+            elif os.environ.get("VACUITED_SHELL_CACHE_SYNCED") == "1" and (SHELL_CACHE / ".git").is_dir():
+                prefetched_shell_head, _ = read_repo_meta(SHELL_CACHE)
 
         if do_cli:
             _check_cancelled()
@@ -1336,8 +1409,11 @@ def cmd_update(args: argparse.Namespace) -> int:
 
         if do_shell:
             _check_cancelled()
-            emit_progress("Syncing Shell repository", 25 if do_cli else 12, "shell")
-            shell_head = sync_git_cache(SHELL_REPO_URL, SHELL_CACHE, depth=50, component="shell")
+            if prefetched_shell_head:
+                shell_head = prefetched_shell_head
+            else:
+                emit_progress("Syncing Shell repository", 25 if do_cli else 12, "shell")
+                shell_head = sync_git_cache(SHELL_REPO_URL, SHELL_CACHE, depth=50, component="shell")
             _, tag_ver = read_repo_meta(SHELL_CACHE)
             shell_ver = tag_ver or meta.get("shell", {}).get("version") or "1.0.0"
 
@@ -1553,6 +1629,7 @@ def cmd_update(args: argparse.Namespace) -> int:
                 "summary": ", ".join(summary_parts) or "Updated",
                 "meta": meta,
                 "backups": list_backups(meta),
+                "systemSync": detect_system_sync(),
             }
         )
         sys.stdout.flush()
@@ -1568,6 +1645,174 @@ def cmd_update(args: argparse.Namespace) -> int:
                 "type": "cancelled",
                 "ok": False,
                 "message": "Update canceled.",
+            }
+        )
+        return 130
+    except Exception as e:
+        emit(
+            {
+                "type": "error",
+                "ok": False,
+                "message": str(e),
+                "canTerminalFallback": False,
+                "terminalCommand": "",
+            }
+        )
+        return 1
+    finally:
+        try:
+            UPDATE_PID_PATH.unlink()
+        except OSError:
+            pass
+        try:
+            fcntl.flock(lock_fh, fcntl.LOCK_UN)
+        except OSError:
+            pass
+        lock_fh.close()
+
+
+def cmd_sync_system(_args: argparse.Namespace) -> int:
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    lock_fh = UPDATE_LOCK_PATH.open("w", encoding="utf-8")
+    try:
+        fcntl.flock(lock_fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        emit(
+            {
+                "type": "error",
+                "ok": False,
+                "message": "Another Vacuited update is already running.",
+                "canTerminalFallback": False,
+                "terminalCommand": "",
+            }
+        )
+        lock_fh.close()
+        return 1
+
+    try:
+        _install_cancel_handlers()
+        UPDATE_PID_PATH.write_text(str(os.getpid()), encoding="utf-8")
+
+        sync_info = detect_system_sync()
+        if not sync_info["needed"]:
+            meta = load_meta()
+            emit_progress("System hooks up to date", 100, "system")
+            emit(
+                {
+                    "type": "done",
+                    "ok": True,
+                    "restarting": False,
+                    "summary": "System hooks & login shim already up to date",
+                    "systemSync": sync_info,
+                    "meta": meta,
+                    "backups": list_backups(meta),
+                }
+            )
+            return 0
+
+        if sync_info["needAbiHook"] and (
+            not (SHELL_CACHE / "scripts" / "vacuited-abi-check").is_file()
+            or not (SHELL_CACHE / "scripts" / "90-vacuited-shell-abi.hook").is_file()
+        ):
+            _check_cancelled()
+            emit_progress("Fetching hook scripts", 25, "system")
+            sync_git_cache(SHELL_REPO_URL, SHELL_CACHE, depth=5, component="system")
+
+        tape_name = detect_active_tape_name()
+        tape_args = f" --tapes --tape-name {shlex.quote(tape_name)}" if tape_name else ""
+        if (SHELL_CACHE / "install.sh").is_file():
+            term_cmd = f"cd {shlex.quote(str(SHELL_CACHE))} && ./install.sh --skip-deps --skip-cli{tape_args}"
+        else:
+            term_cmd = (
+                f"git clone --depth 1 {shlex.quote(SHELL_REPO_URL)} /tmp/vacuited-shell "
+                f"&& cd /tmp/vacuited-shell && ./install.sh --skip-deps --skip-cli{tape_args}"
+            )
+
+        pkexec_bin = shutil.which("pkexec")
+        if not pkexec_bin:
+            emit(
+                {
+                    "type": "error",
+                    "ok": False,
+                    "message": "pkexec was not found; cannot request root privileges from the GUI.",
+                    "canTerminalFallback": True,
+                    "terminalCommand": term_cmd,
+                }
+            )
+            return 1
+
+        _check_cancelled()
+        emit_progress("Waiting for administrator authentication...", 55, "system")
+        priv_script = (
+            "set -e\n"
+            'shell_dir="$1"\n'
+            'need_abi="$2"\n'
+            'need_shim="$3"\n'
+            'if [ "$need_abi" = "1" ] && command -v pacman >/dev/null 2>&1 && [ -f "$shell_dir/scripts/vacuited-abi-check" ] && [ -f "$shell_dir/scripts/90-vacuited-shell-abi.hook" ]; then\n'
+            '    install -Dm755 "$shell_dir/scripts/vacuited-abi-check" /usr/local/bin/vacuited-abi-check\n'
+            '    install -Dm644 "$shell_dir/scripts/90-vacuited-shell-abi.hook" /etc/pacman.d/hooks/90-vacuited-shell-abi.hook\n'
+            "fi\n"
+            'if [ "$need_shim" = "1" ]; then\n'
+            f"    if {{ [ ! -e /usr/local/bin/caelestia ] && [ ! -L /usr/local/bin/caelestia ]; }} || {{ [ -f /usr/local/bin/caelestia ] && grep -qF {shlex.quote(CAELESTIA_SHIM_MARKER)} /usr/local/bin/caelestia 2>/dev/null; }}; then\n"
+            "        mkdir -p /usr/local/bin\n"
+            "        cat <<'VACUITED_SHIM_EOF' > /usr/local/bin/.caelestia.shim.tmp\n"
+            f"{CAELESTIA_SHIM_CONTENT}"
+            "VACUITED_SHIM_EOF\n"
+            "        chmod 0755 /usr/local/bin/.caelestia.shim.tmp\n"
+            "        mv -f /usr/local/bin/.caelestia.shim.tmp /usr/local/bin/caelestia\n"
+            "    fi\n"
+            "fi\n"
+        )
+        rc = run_streamed(
+            [
+                pkexec_bin,
+                "/bin/sh",
+                "-c",
+                priv_script,
+                "vacuited-updater-sync",
+                str(SHELL_CACHE),
+                "1" if sync_info["needAbiHook"] else "0",
+                "1" if sync_info["needCliShim"] else "0",
+            ],
+            component="system",
+        )
+        if rc in (126, 127):
+            emit(
+                {
+                    "type": "error",
+                    "ok": False,
+                    "message": "Authentication was canceled or polkit agent is unavailable.",
+                    "canTerminalFallback": True,
+                    "terminalCommand": term_cmd,
+                }
+            )
+            return 1
+        if rc != 0:
+            raise RuntimeError(f"System sync failed (exit {rc})")
+
+        after = detect_system_sync()
+        meta = load_meta()
+        emit_progress("System sync complete", 100, "system")
+        emit(
+            {
+                "type": "done",
+                "ok": True,
+                "restarting": False,
+                "summary": "System hooks & login shim synced",
+                "systemSync": after,
+                "meta": meta,
+                "backups": list_backups(meta),
+            }
+        )
+        return 0
+
+    except UpdateCancelled:
+        _kill_active_subproc()
+        emit(
+            {
+                "type": "cancelled",
+                "ok": False,
+                "message": "System sync canceled.",
             }
         )
         return 130
@@ -1797,6 +2042,8 @@ def build_parser() -> argparse.ArgumentParser:
     upd.add_argument("--plugin-rebuild", choices=("auto", "yes", "no"), default="auto")
     upd.add_argument("--no-restart", action="store_true")
 
+    sub.add_parser("sync-system", help="Install or refresh pacman ABI hook and login shim")
+
     rb = sub.add_parser("rollback", help="Restore a QML backup snapshot")
     rb.add_argument("backup_name")
     rb.add_argument("--no-restart", action="store_true")
@@ -1820,6 +2067,7 @@ def main() -> int:
         "mark-synced": cmd_mark_synced,
         "check": cmd_check,
         "update": cmd_update,
+        "sync-system": cmd_sync_system,
         "rollback": cmd_rollback,
         "delete-backup": cmd_delete_backup,
         "cancel": cmd_cancel,

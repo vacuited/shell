@@ -282,16 +282,16 @@ is_tape_active() {
 }
 
 run_interactive_menu() {
-    local has_victus=0 mode_choice="" target_choice="" extras_raw="" tok="" name_in=""
+    local has_victus=0 mode_choice="" target_choice="" extras_raw="" tok=""
     local mode_label="" target_label=""
     detect_hp_victus && has_victus=1
 
     printf '\n=== Vacuited Shell Installer ===\n\n'
     printf 'Select install mode:\n'
-    printf '  1) Standard install      (deps + CLI + plugin + QML -> %s) [default]\n' "$QS_DEST"
-    printf '  2) Tapes install         (deps + CLI + plugin + QML -> %s/%s only; leaves ~/.config untouched)\n' "$TAPES_ROOT" "$TAPE_NAME"
-    printf '  3) QML / shaders only    (fast QML + shader update, skips deps/CLI/plugin)\n'
-    printf '  4) Uninstall             (remove vacuited-shell, plugin, hooks, tape, and helper)\n'
+    printf '  1) Install / Update   (standard install -> %s) [default]\n' "$QS_DEST"
+    printf '  2) Install with Tapes (isolated tape -> %s/%s; leaves ~/.config untouched)\n' "$TAPES_ROOT" "$TAPE_NAME"
+    printf '  3) Fast QML update    (UI files only, skips deps & C++ rebuild)\n'
+    printf '  4) Uninstall\n'
     printf '  0) Cancel\n\n'
 
     while true; do
@@ -321,44 +321,25 @@ run_interactive_menu() {
             esac
         done
     else
-        printf '\nOptional features (numbers separated by spaces, '\''all'\'', or Enter for defaults):\n'
-        printf '  1) Optional runtime extras  (hyprsunset, hyprshutdown, screen recorder, mpv, bluetooth, avahi, papirus)\n'
-        printf '  2) Wallpaper Engine         (skwd-paper-v2 + Steam Workshop via AUR)\n'
-        printf '  3) Force update vacuited-cli\n'
-        printf '  4) Clean CMake build cache  (--clean)\n'
-        printf '  5) Skip dependency install  (--skip-deps)\n'
-        printf '  6) Skip config backup       (--no-backup)\n'
-        if [ "$has_victus" -eq 1 ]; then
-            printf '  7) Skip HP Victus hardware helper (--no-hardware)\n'
-        fi
-        printf '\n'
+        printf '\nOptional addons (e.g. '\''1 2'\'', '\''all'\'', or press Enter to skip):\n'
+        printf '  1) Wallpaper Engine   (animated Steam Workshop wallpapers)\n'
+        printf '  2) Extra tools        (night light, logout screen, screen recorder, bluetooth, media)\n'
+        printf '  3) Reinstall CLI too  (update vacuited-cli if already installed)\n\n'
 
         while true; do
             local bad_tok=0
-            read -r -p "Options [none]: " extras_raw </dev/tty || extras_raw=""
+            read -r -p "Addons [skip]: " extras_raw </dev/tty || extras_raw=""
             extras_raw="${extras_raw//,/ }"
             for tok in $extras_raw; do
                 case "${tok,,}" in
                     all)
-                        WITH_OPTIONAL=1
                         WITH_WE=1
+                        WITH_OPTIONAL=1
                         UPDATE_CLI=1
                         ;;
-                    1) WITH_OPTIONAL=1 ;;
-                    2) WITH_WE=1 ;;
+                    1) WITH_WE=1 ;;
+                    2) WITH_OPTIONAL=1 ;;
                     3) UPDATE_CLI=1 ;;
-                    4) CLEAN_BUILD=1 ;;
-                    5) SKIP_DEPS=1 ;;
-                    6) NO_BACKUP=1 ;;
-                    7)
-                        if [ "$has_victus" -eq 1 ]; then
-                            HARDWARE=no
-                        else
-                            warn "Invalid option '$tok'."
-                            bad_tok=1
-                            break
-                        fi
-                        ;;
                     *)
                         warn "Invalid option '$tok'."
                         bad_tok=1
@@ -370,33 +351,20 @@ run_interactive_menu() {
         done
     fi
 
-    if [ "$TAPES_MODE" -eq 1 ]; then
-        while true; do
-            read -r -p "Tape name [$TAPE_NAME]: " name_in </dev/tty || name_in=""
-            name_in="${name_in:-$TAPE_NAME}"
-            name_in="${name_in,,}"
-            if validate_tape_name "$name_in"; then
-                TAPE_NAME="$name_in"
-                break
-            fi
-            warn "Invalid tape name '$name_in' (use lowercase letters, digits, ., _, -)."
-        done
-    fi
-
     MENU_USED=1
     OPT_DECIDED=1
     WE_DECIDED=1
 
     if [ "$QML_ONLY" -eq 1 ]; then
         if [ "$TAPES_MODE" -eq 1 ]; then
-            mode_label="QML / shaders only (Tapes)"
+            mode_label="Fast QML update (Tapes)"
         else
-            mode_label="QML / shaders only"
+            mode_label="Fast QML update"
         fi
     elif [ "$TAPES_MODE" -eq 1 ]; then
-        mode_label="Tapes install"
+        mode_label="Install with Tapes"
     else
-        mode_label="Standard install"
+        mode_label="Install / Update"
     fi
     if [ "$TAPES_MODE" -eq 1 ]; then
         target_label="$TAPES_ROOT/$TAPE_NAME/quickshell/caelestia (tape: $TAPE_NAME)"
@@ -408,18 +376,11 @@ run_interactive_menu() {
     printf '  Mode:             %s\n' "$mode_label"
     printf '  Target:           %s\n' "$target_label"
     if [ "$QML_ONLY" -eq 0 ]; then
-        printf '  Optional extras:  %s\n' "$([ "$WITH_OPTIONAL" -eq 1 ] && echo yes || echo no)"
         printf '  Wallpaper Engine: %s\n' "$([ "$WITH_WE" -eq 1 ] && echo yes || echo no)"
-        printf '  Force CLI update: %s\n' "$([ "$UPDATE_CLI" -eq 1 ] && echo yes || echo no)"
-        printf '  Clean build:      %s\n' "$([ "$CLEAN_BUILD" -eq 1 ] && echo yes || echo no)"
-        printf '  Skip deps:        %s\n' "$([ "$SKIP_DEPS" -eq 1 ] && echo yes || echo no)"
-        printf '  Skip backup:      %s\n' "$([ "$NO_BACKUP" -eq 1 ] && echo yes || echo no)"
-        if [ "$HARDWARE" = no ]; then
-            printf '  Hardware helper:  skipped\n'
-        elif [ "$has_victus" -eq 1 ]; then
+        printf '  Extra tools:      %s\n' "$([ "$WITH_OPTIONAL" -eq 1 ] && echo yes || echo no)"
+        printf '  Reinstall CLI:    %s\n' "$([ "$UPDATE_CLI" -eq 1 ] && echo yes || echo no)"
+        if [ "$has_victus" -eq 1 ]; then
             printf '  Hardware helper:  auto (HP Victus/OMEN detected)\n'
-        else
-            printf '  Hardware helper:  auto (skipped on this machine)\n'
         fi
     fi
     printf '\n'
@@ -848,9 +809,9 @@ install_cli() {
         cli_dir="$CLI_CLONE_DIR"
     fi
     if [ "$DRY_RUN" -eq 1 ] && [ ! -f "$cli_dir/install.sh" ]; then
-        run bash "$cli_dir/install.sh" "${args[@]+"${args[@]}"}"
+        run env VACUITED_FROM_SHELL_INSTALLER=1 bash "$cli_dir/install.sh" "${args[@]+"${args[@]}"}"
     else
-        bash "$cli_dir/install.sh" "${args[@]+"${args[@]}"}"
+        VACUITED_FROM_SHELL_INSTALLER=1 bash "$cli_dir/install.sh" "${args[@]+"${args[@]}"}"
     fi
     CLI_INSTALLED=1
 }
@@ -947,14 +908,10 @@ exit 127
 EOF
             if [ ! -f "$_shim_path" ] || ! cmp -s "$_tmp_shim" "$_shim_path" 2>/dev/null; then
                 if [ "$DRY_RUN" -eq 1 ]; then
-                    if confirm "Install /usr/local/bin/caelestia shim so display managers and Hyprland always find 'caelestia' on boot?" y; then
-                        run_priv install -Dm755 "<tmp>/caelestia" "$_shim_path"
-                    fi
+                    run_priv install -Dm755 "<tmp>/caelestia" "$_shim_path"
                 elif (: </dev/tty) 2>/dev/null || "$SUDO" -n true 2>/dev/null; then
-                    if confirm "Install /usr/local/bin/caelestia shim so display managers and Hyprland always find 'caelestia' on boot?" y; then
-                        run_priv install -Dm755 "$_tmp_shim" "$_shim_path"
-                        log "Installed system-wide login shim at $_shim_path"
-                    fi
+                    run_priv install -Dm755 "$_tmp_shim" "$_shim_path"
+                    log "Installed system-wide login shim at $_shim_path"
                 fi
             fi
         fi
