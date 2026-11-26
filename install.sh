@@ -288,8 +288,8 @@ run_interactive_menu() {
 
     printf '\n=== Vacuited Shell Installer ===\n\n'
     printf 'Select install mode:\n'
-    printf '  1) Full install          (deps + CLI + C++ plugin + QML -> %s) [default]\n' "$QS_DEST"
-    printf '  2) Full install + Tapes  (deps + CLI + C++ plugin + QML -> %s/%s via tapes)\n' "$TAPES_ROOT" "$TAPE_NAME"
+    printf '  1) Standard install      (deps + CLI + plugin + QML -> %s) [default]\n' "$QS_DEST"
+    printf '  2) Tapes install         (deps + CLI + plugin + QML -> %s/%s only; leaves ~/.config untouched)\n' "$TAPES_ROOT" "$TAPE_NAME"
     printf '  3) QML / shaders only    (fast QML + shader update, skips deps/CLI/plugin)\n'
     printf '  4) Uninstall             (remove vacuited-shell, plugin, hooks, tape, and helper)\n'
     printf '  0) Cancel\n\n'
@@ -388,12 +388,17 @@ run_interactive_menu() {
     WE_DECIDED=1
 
     if [ "$QML_ONLY" -eq 1 ]; then
-        mode_label="QML / shaders only"
+        if [ "$TAPES_MODE" -eq 1 ]; then
+            mode_label="QML / shaders only (Tapes)"
+        else
+            mode_label="QML / shaders only"
+        fi
+    elif [ "$TAPES_MODE" -eq 1 ]; then
+        mode_label="Tapes install"
     else
-        mode_label="Full install"
+        mode_label="Standard install"
     fi
     if [ "$TAPES_MODE" -eq 1 ]; then
-        mode_label="$mode_label + Tapes"
         target_label="$TAPES_ROOT/$TAPE_NAME/quickshell/caelestia (tape: $TAPE_NAME)"
     else
         target_label="$QS_DEST"

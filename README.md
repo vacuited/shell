@@ -74,7 +74,7 @@ cd shell
 ./install.sh --tapes
 ```
 
-Running `./install.sh` opens an interactive numbered menu (Full install, Tapes mode, QML-only, Wallpaper Engine, and optional extras). It installs Arch dependencies (pacman + AUR, bootstrapping `yay` if needed), installs [vacuited-cli](https://github.com/vacuited/cli), configures login `PATH`, compiles the C++ plugin, deploys QML to `~/.config/quickshell/caelestia` (or `~/.tapes/<name>` with `--tapes`), and auto-detects HP Victus hardware controls. On other distros it verifies prerequisites and lists what is missing.
+Running `./install.sh` opens an interactive numbered menu (Standard install, Tapes install, QML-only, Wallpaper Engine, and optional extras). It installs Arch dependencies (pacman + AUR, bootstrapping `yay` if needed), installs [vacuited-cli](https://github.com/vacuited/cli), configures login `PATH`, compiles the C++ plugin, deploys QML to `~/.config/quickshell/caelestia` (or `~/.tapes/<name>` with `--tapes`), and auto-detects HP Victus hardware controls. On other distros it verifies prerequisites and lists what is missing.
 
 <details>
 <summary>Installer options</summary>
