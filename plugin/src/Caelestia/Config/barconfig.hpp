@@ -1,5 +1,6 @@
 #pragma once
 
+#include <qjsonvalue.h>
 #include <qstring.h>
 #include <qstringlist.h>
 #include <qvariantlist.h>
@@ -132,8 +133,8 @@ class BarSpotify : public settings::ObjectNode {
 
 // Bar entries split into three anchored sections. `start` hugs the top/left edge,
 // `center` sits at the monitor centre and `end` hugs the bottom/right edge.
-// The legacy flat `bar.entries` array is not migrated; it is rejected by the
-// schema sync and the defaults are used instead.
+// Legacy flat `bar.entries` arrays from upstream configs are auto-migrated into
+// `start`, `center`, and `end` around `spacer` entries on load.
 class BarSections : public settings::ObjectNode {
     CONFIG_NODE(BarSections, settings::ObjectNode)
 
@@ -153,6 +154,9 @@ class BarSections : public settings::ObjectNode {
             LIST_ENTRY(statusIcons, true),
             LIST_ENTRY(power, true),
         }))
+
+public:
+    bool syncJson(const QJsonValue& json, QList<settings::Diagnostic>& diagnostics) override;
 };
 
 class BarConfig : public settings::ObjectNode {

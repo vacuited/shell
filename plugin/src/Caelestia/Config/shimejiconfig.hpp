@@ -10,7 +10,7 @@ namespace caelestia::shell::config {
 class ShimejiConfig : public settings::ObjectNode {
     CONFIG_NODE(ShimejiConfig, settings::ObjectNode)
 
-    CONFIG_PROPERTY(bool, enabled, true)
+    CONFIG_PROPERTY(bool, enabled, false)
     CONFIG_PROPERTY(bool, autoHide, true)
     CONFIG_PROPERTY(QString, path, QStringLiteral("root:/assets/shimeji/pusheen/"))
     CONFIG_PROPERTY(QStringList, excludedScreens, {})

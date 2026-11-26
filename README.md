@@ -69,18 +69,22 @@ git clone https://github.com/vacuited/shell.git
 cd shell
 ./install.sh
 
-# With Wallpaper Engine + Steam Workshop support (Arch AUR)
+# Direct flags (skip the interactive numbered menu)
 ./install.sh --with-wallpaper-engine
+./install.sh --tapes
 ```
 
-Installs Arch dependencies (pacman + AUR, bootstrapping `yay` if needed), installs [vacuited-cli](https://github.com/vacuited/cli), configures login `PATH`, compiles the C++ plugin, deploys QML to `~/.config/quickshell/caelestia`, and auto-detects HP Victus hardware controls. On other distros it verifies prerequisites and lists what is missing.
+Running `./install.sh` opens an interactive numbered menu (Full install, Tapes mode, QML-only, Wallpaper Engine, and optional extras). It installs Arch dependencies (pacman + AUR, bootstrapping `yay` if needed), installs [vacuited-cli](https://github.com/vacuited/cli), configures login `PATH`, compiles the C++ plugin, deploys QML to `~/.config/quickshell/caelestia` (or `~/.tapes/<name>` with `--tapes`), and auto-detects HP Victus hardware controls. On other distros it verifies prerequisites and lists what is missing.
 
 <details>
 <summary>Installer options</summary>
 
 | Flag | Description |
 | :--- | :--- |
+| `-i`, `--interactive` | Show the interactive numbered setup menu |
 | `-y`, `--yes` | Non-interactive install (passes `--noconfirm` to package managers) |
+| `--tapes` | Deploy QML shell as a `tapes` tape (`~/.tapes/vacuited`) |
+| `--tape-name <name>` | Custom tape name (implies `--tapes`) |
 | `--qml-only` | Deploy QML files and shaders only (skips deps, CLI, plugin, hardware) |
 | `--with-optional` | Install optional runtime packages automatically (Arch) |
 | `--with-wallpaper-engine` | Install Wallpaper Engine backend and Steam Workshop tools (Arch AUR) |

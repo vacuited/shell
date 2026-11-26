@@ -11,8 +11,10 @@ Singleton {
     property var events: []
     property bool loaded: false
     property bool loading: false
+    property bool requested: false
 
     function reload() {
+        requested = true;
         if (loading) return;
         loading = true;
 
@@ -42,7 +44,7 @@ Singleton {
     Connections {
         target: Nmcli
         function onIsConnectedChanged() {
-            if (Nmcli.isConnected && !root.loaded) {
+            if (Nmcli.isConnected && root.requested && !root.loaded) {
                 root.reload();
             }
         }

@@ -1,98 +1,188 @@
 pragma Singleton
+
 import QtQuick
+import Quickshell
 import Caelestia
 import Caelestia.Config
-import Caelestia.Services
 
-QtObject {
+Singleton {
     id: root
 
-    property bool isEnabled: QuickShareService.isEnabled
-    property bool isVisible: QuickShareService.isVisible
-    property var nearbyDevices: QuickShareService.nearbyDevices
-    property var transferHistory: QuickShareService.transferHistory
+    property bool available: true
+    property string loadError: ""
+    property bool isEnabled: false
+    property bool isVisible: false
+    property var nearbyDevices: []
+    property var transferHistory: []
 
     property var currentNotification: null
     property string currentDeviceName: ""
     property string currentFileName: ""
     property string currentPinCode: ""
 
-    function setEnabled(enabled: bool) {
-        QuickShareService.isEnabled = enabled
-    }
+    property QtObject _bridge: null
+    property var _service: null
+    property bool _loadAttempted: false
 
-    function setVisible(visible: bool) {
-        QuickShareService.isVisible = visible
-    }
+    function _ensureBackend(notifyOnError: bool): bool {
+        if (root._service)
+            return true;
 
-    function sendFile(deviceId: string, filePath: string) {
-        QuickShareService.sendFile(deviceId, filePath)
-    }
+        if (root._loadAttempted) {
+            if (notifyOnError)
+                Toaster.toast(qsTr("Quick Share unavailable"), root.loadError || qsTr("Quick Share plugin could not be loaded. Rebuild vacuited-shell if system libraries updated."), "error");
+            return false;
+        }
 
-    function acceptIncomingTransfer() {
-        QuickShareService.acceptIncomingTransfer()
-    }
+        root._loadAttempted = true;
+        const comp = Qt.createComponent(Qt.resolvedUrl("quickshare/QuickShareBridge.qml"), Component.PreferSynchronous);
+        if (comp.status !== Component.Ready) {
+            root.available = false;
+            root.loadError = comp.errorString().trim();
+            console.warn("[QuickShare] Failed to load Caelestia.QuickShare backend:", root.loadError);
+            if (notifyOnError)
+                Toaster.toast(qsTr("Quick Share unavailable"), root.loadError || qsTr("Quick Share plugin could not be loaded. Rebuild vacuited-shell if system libraries updated."), "error");
+            return false;
+        }
 
-    function rejectIncomingTransfer() {
-        QuickShareService.rejectIncomingTransfer()
-    }
+        const bridge = comp.createObject(root);
+        if (!bridge || !bridge.service) {
+            root.available = false;
+            root.loadError = qsTr("QuickShareService singleton could not be instantiated.");
+            console.warn("[QuickShare]", root.loadError);
+            if (notifyOnError)
+                Toaster.toast(qsTr("Quick Share unavailable"), root.loadError, "error");
+            return false;
+        }
 
-    function clearHistory() {
-        QuickShareService.clearHistory()
-    }
+        const svc = bridge.service;
+        root._bridge = bridge;
+        root._service = svc;
+        root.available = true;
+        root.loadError = "";
 
-    function removeHistoryEntry(index: int) {
-        QuickShareService.removeHistoryEntry(index)
-    }
+        root.isEnabled = svc.isEnabled;
+        root.isVisible = svc.isVisible;
+        root.nearbyDevices = svc.nearbyDevices;
+        root.transferHistory = svc.transferHistory;
 
-    function startBleWakeupBroadcast() {
-        QuickShareService.startBleWakeupBroadcast()
-    }
+        svc.isEnabledChanged.connect(() => {
+            root.isEnabled = svc.isEnabled;
+        });
+        svc.isVisibleChanged.connect(() => {
+            root.isVisible = svc.isVisible;
+        });
+        svc.nearbyDevicesChanged.connect(() => {
+            root.nearbyDevices = svc.nearbyDevices;
+        });
+        svc.transferHistoryChanged.connect(() => {
+            root.transferHistory = svc.transferHistory;
+        });
 
-    function stopBleWakeupBroadcast() {
-        QuickShareService.stopBleWakeupBroadcast()
-    }
-
-    // Connect to C++ signals
-    Component.onCompleted: {
-        QuickShareService.incomingTransferRequested.connect(function(deviceName, fileName, fileSize) {
-            console.log("Quick Share: Incoming transfer from " + deviceName + " - " + fileName)
-            root.currentDeviceName = deviceName
-            root.currentFileName = fileName
-            let body = qsTr("%1 wants to share %2").arg(deviceName).arg(fileName)
+        svc.incomingTransferRequested.connect((deviceName, fileName, fileSize) => {
+            console.log("Quick Share: Incoming transfer from " + deviceName + " - " + fileName);
+            root.currentDeviceName = deviceName;
+            root.currentFileName = fileName;
+            let body = qsTr("%1 wants to share %2").arg(deviceName).arg(fileName);
             if (root.currentPinCode)
-                body += qsTr("\nPIN: %1").arg(root.currentPinCode)
+                body += qsTr("\nPIN: %1").arg(root.currentPinCode);
             root.currentNotification = Notifs.addCustomNotification(
                 qsTr("Incoming file"),
                 body,
                 "",
                 [
-                    { text: qsTr("Decline"), invoke: function() { QuickShareService.rejectIncomingTransfer(); } },
-                    { text: qsTr("Accept"), invoke: function() { QuickShareService.acceptIncomingTransfer(); } }
+                    { text: qsTr("Decline"), invoke: () => { if (root._service) root._service.rejectIncomingTransfer(); } },
+                    { text: qsTr("Accept"), invoke: () => { if (root._service) root._service.acceptIncomingTransfer(); } }
                 ],
                 true
             );
-        })
-        QuickShareService.incomingTransferPinReady.connect(function(pinCode) {
-            root.currentPinCode = pinCode
+        });
+        svc.incomingTransferPinReady.connect(pinCode => {
+            root.currentPinCode = pinCode;
             if (root.currentNotification) {
-                root.currentNotification.body = qsTr("%1 wants to share %2\nPIN: %3").arg(root.currentDeviceName).arg(root.currentFileName).arg(pinCode)
+                root.currentNotification.body = qsTr("%1 wants to share %2\nPIN: %3").arg(root.currentDeviceName).arg(root.currentFileName).arg(pinCode);
             }
-        })
-        QuickShareService.errorOccurred.connect(function(message) {
+        });
+        svc.errorOccurred.connect(message => {
             Toaster.toast(qsTr("Quick Share Error"), message, "error");
-        })
-        QuickShareService.transferFinished.connect(function(deviceId, success) {
+        });
+        svc.transferFinished.connect((deviceId, success) => {
             if (root.currentNotification) {
                 root.currentNotification.close();
                 root.currentNotification = null;
             }
-            root.currentDeviceName = ""
-            root.currentFileName = ""
-            root.currentPinCode = ""
-        })
+            root.currentDeviceName = "";
+            root.currentFileName = "";
+            root.currentPinCode = "";
+        });
 
-        if (GlobalConfig.services.quickShareAutoStart) {
+        return true;
+    }
+
+    function setEnabled(enabled: bool): void {
+        if (enabled) {
+            if (!root._ensureBackend(true))
+                return;
+            root._service.isEnabled = true;
+        } else if (root._service) {
+            root._service.isEnabled = false;
+        }
+    }
+
+    function setVisible(visible: bool): void {
+        if (visible) {
+            if (!root._ensureBackend(true))
+                return;
+            root._service.isVisible = true;
+        } else if (root._service) {
+            root._service.isVisible = false;
+        }
+    }
+
+    function sendFile(deviceId: string, filePath: string): void {
+        if (!root._ensureBackend(true))
+            return;
+        root._service.sendFile(deviceId, filePath);
+    }
+
+    function acceptIncomingTransfer(): void {
+        if (!root._service)
+            return;
+        root._service.acceptIncomingTransfer();
+    }
+
+    function rejectIncomingTransfer(): void {
+        if (!root._service)
+            return;
+        root._service.rejectIncomingTransfer();
+    }
+
+    function clearHistory(): void {
+        if (!root._service)
+            return;
+        root._service.clearHistory();
+    }
+
+    function removeHistoryEntry(index: int): void {
+        if (!root._service)
+            return;
+        root._service.removeHistoryEntry(index);
+    }
+
+    function startBleWakeupBroadcast(): void {
+        if (!root._ensureBackend(true))
+            return;
+        root._service.startBleWakeupBroadcast();
+    }
+
+    function stopBleWakeupBroadcast(): void {
+        if (!root._service)
+            return;
+        root._service.stopBleWakeupBroadcast();
+    }
+
+    Component.onCompleted: {
+        if (GlobalConfig.services.quickShareAutoStart && root._ensureBackend(false)) {
             root.setEnabled(true);
             root.setVisible(true);
         }

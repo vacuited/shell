@@ -112,7 +112,7 @@ Singleton {
             if (Hypr.usingLua) {
                 Hypr.extras.batchMessage([`eval hl.window_rule({ match = { class = ".*" }, opaque = true })`]);
             } else {
-                Hypr.extras.batchMessage([`keyword windowrulev2 opaque, class:.*`]);
+                Hypr.extras.batchMessage([`keyword windowrule opaque on, match:class .*`]);
             }
         }
     }

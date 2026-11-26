@@ -9,12 +9,18 @@ Scope {
     id: root
 
     PolkitAgent {
-        id: agent
+        id: polkitAgent
         // PolkitAgent handles dbus registration automatically.
     }
 
-    PolkitDialog {
-        agent: agent
-        screen: Quickshell.screens[0]
+    Variants {
+        model: Quickshell.screens.length > 0 ? [Quickshell.screens[0]] : []
+
+        PolkitDialog {
+            required property ShellScreen modelData
+
+            agent: polkitAgent
+            screen: modelData
+        }
     }
 }

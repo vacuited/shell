@@ -67,7 +67,28 @@ CAELESTIA_SHIM_CONTENT = (
     '    *) export PATH="${HOME}/.local/bin${PATH:+:${PATH}}" ;;\n'
     "esac\n"
     'if [ -x "${HOME}/.local/bin/caelestia" ]; then\n'
+    '    _pyver=""\n'
+    "    if [ -L /usr/bin/python3 ]; then\n"
+    '        _pybin="$(readlink /usr/bin/python3 2>/dev/null || true)"\n'
+    '        _pybin="${_pybin##*/}"\n'
+    '        case "$_pybin" in\n'
+    '            python3.*) _pyver="$_pybin" ;;\n'
+    "        esac\n"
+    "    fi\n"
+    '    if [ -n "$_pyver" ] \\\n'
+    '        && [ ! -d "${HOME}/.local/lib/${_pyver}/site-packages/caelestia" ] \\\n'
+    '        && [ ! -d "${HOME}/.local/lib64/${_pyver}/site-packages/caelestia" ]; then\n'
+    '        for _old_sp in "${HOME}/.local/lib"/python3.*/site-packages/caelestia "${HOME}/.local/lib64"/python3.*/site-packages/caelestia; do\n'
+    '            if [ -d "$_old_sp" ] && ! /usr/bin/python3 -c \'import caelestia\' >/dev/null 2>&1; then\n'
+    '                printf \'%s\\n\' "caelestia: Python updated to ${_pyver}; rebuild vacuited-cli (~/.local/bin/caelestia) with ./install.sh or \'caelestia\' repo install.sh" >&2\n'
+    "                exit 1\n"
+    "            fi\n"
+    "        done\n"
+    "    fi\n"
     '    exec "${HOME}/.local/bin/caelestia" "$@"\n'
+    "fi\n"
+    "if [ -x /usr/bin/caelestia ]; then\n"
+    '    exec /usr/bin/caelestia "$@"\n'
     "fi\n"
     'printf \'%s\\n\' "caelestia: not installed for ${USER:-user} (${HOME}/.local/bin/caelestia missing)" >&2\n'
     "exit 127\n"
@@ -1176,6 +1197,21 @@ def spawn_detached_reload() -> None:
     )
 
 
+def detect_active_tape_name() -> str:
+    try:
+        tapes_root = (_HOME / ".tapes").resolve()
+        resolved = QS_DEST.resolve()
+        rel = resolved.relative_to(tapes_root)
+    except (OSError, ValueError):
+        return ""
+    parts = rel.parts
+    if len(parts) == 3 and parts[1] == "quickshell" and parts[2] == "caelestia":
+        name = parts[0]
+        if re.fullmatch(r"[a-z0-9][a-z0-9._-]*", name):
+            return name
+    return ""
+
+
 def verify_plugin_install(qt_qml_dir: str) -> None:
     for sub in ("", "Config", "Services", "Multimedia", "Shaders"):
         qmldir = Path(qt_qml_dir) / "Caelestia" / sub / "qmldir"
@@ -1376,7 +1412,10 @@ def cmd_update(args: argparse.Namespace) -> int:
 
                 _check_cancelled()
                 pkexec_bin = shutil.which("pkexec")
+                tape_name = detect_active_tape_name()
                 term_cmd = f"cd {shlex.quote(str(SHELL_CACHE))} && ./install.sh --skip-deps --skip-cli"
+                if tape_name:
+                    term_cmd += f" --tapes --tape-name {shlex.quote(tape_name)}"
                 if not pkexec_bin:
                     emit(
                         {
@@ -1407,6 +1446,10 @@ def cmd_update(args: argparse.Namespace) -> int:
                     'if [ "$update_hw" = "1" ]; then\n'
                     '    install -Dm755 "$shell_dir/scripts/caelestia-hardware-helper" /usr/local/bin/caelestia-hardware-helper\n'
                     '    install -Dm644 "$shell_dir/scripts/50-caelestia-hardware.rules" /etc/polkit-1/rules.d/50-caelestia-hardware.rules\n'
+                    "fi\n"
+                    'if command -v pacman >/dev/null 2>&1 && [ -f "$shell_dir/scripts/vacuited-abi-check" ] && [ -f "$shell_dir/scripts/90-vacuited-shell-abi.hook" ]; then\n'
+                    '    install -Dm755 "$shell_dir/scripts/vacuited-abi-check" /usr/local/bin/vacuited-abi-check\n'
+                    '    install -Dm644 "$shell_dir/scripts/90-vacuited-shell-abi.hook" /etc/pacman.d/hooks/90-vacuited-shell-abi.hook\n'
                     "fi\n"
                     'if [ "$install_shim" = "1" ]; then\n'
                     f"    if {{ [ ! -e /usr/local/bin/caelestia ] && [ ! -L /usr/local/bin/caelestia ]; }} || {{ [ -f /usr/local/bin/caelestia ] && grep -qF {shlex.quote(CAELESTIA_SHIM_MARKER)} /usr/local/bin/caelestia 2>/dev/null; }}; then\n"

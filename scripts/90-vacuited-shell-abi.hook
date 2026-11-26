@@ -1,0 +1,22 @@
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = protobuf
+Target = abseil-cpp
+Target = openssl
+Target = qt6-base
+Target = qt6-declarative
+Target = qt6-multimedia
+Target = libcava
+Target = aubio
+Target = libqalculate
+Target = lm_sensors
+Target = python
+Target = caelestia-shell
+Target = caelestia-shell-git
+
+[Action]
+Description = Checking vacuited-shell plugin ABI and CLI compatibility...
+When = PostTransaction
+Exec = /usr/local/bin/vacuited-abi-check

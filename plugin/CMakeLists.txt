@@ -1,6 +1,10 @@
+option(ENABLE_QUICKSHARE "Build optional Caelestia.QuickShare QML module (requires Protobuf and OpenSSL)" ON)
+
 find_package(Qt6 REQUIRED COMPONENTS ShaderTools Core Qml Gui Quick QuickControls2 Concurrent Sql Network DBus Multimedia)
-find_package(Protobuf REQUIRED)
-find_package(OpenSSL REQUIRED)
+if(ENABLE_QUICKSHARE)
+    find_package(Protobuf REQUIRED)
+    find_package(OpenSSL REQUIRED)
+endif()
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(Qalculate IMPORTED_TARGET libqalculate REQUIRED)
 pkg_check_modules(Pipewire IMPORTED_TARGET libpipewire-0.3 REQUIRED)
@@ -23,3 +27,8 @@ target_include_directories(caelestia-util INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}
 
 add_subdirectory(3rdparty/rgbcx)
 add_subdirectory(src/Caelestia)
+
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/.vacuited-plugin"
+    "distributor=${DISTRIBUTOR}\nversion=${VERSION}\nrevision=${GIT_REVISION}\n"
+)
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/.vacuited-plugin" DESTINATION "${INSTALL_QMLDIR}/Caelestia")

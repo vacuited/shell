@@ -117,7 +117,7 @@ Singleton {
             messages.push(rule.arg("caelestia-desktopLyricsOverlay").arg("ignore_alpha").arg(ignoreAlpha));
             messages.push(rule.arg("hyprshutdown").arg("blur").arg(trEnabled));
             messages.push(rule.arg("hyprshutdown").arg("ignore_alpha").arg(ignoreAlpha));
-            messages.push("keyword layerrule noanim, match:namespace caelestia-shimeji");
+            messages.push("keyword layerrule no_anim on, match:namespace caelestia-shimeji");
         }
         Hypr.extras.batchMessage(messages);
     }

@@ -47,6 +47,11 @@ CustomMouseArea {
     acceptedButtons: Qt.MiddleButton
     onClicked: root.screenState.dashboardDate = new Date()
 
+    Component.onCompleted: {
+        if (!PastafarianCalendar.loaded)
+            PastafarianCalendar.reload();
+    }
+
     Anim {
         id: trOutAnim
 

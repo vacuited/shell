@@ -90,17 +90,32 @@ CLEAN_BUILD=0
 QML_ONLY=0
 UNINSTALL=0
 DRY_RUN=0
+TAPES_MODE=0
+TAPE_NAME="vacuited"
+FORCE_INTERACTIVE=0
+EXPLICIT_FLAGS=0
+MENU_USED=0
+OPT_DECIDED=0
+WE_DECIDED=0
+TAPE_WAS_ACTIVE=0
 HARDWARE=auto
 SUDO=""
 CLI_INSTALLED=0
 SHELL_RUNNING=0
 LEGACY_QS_PIDS=""
+TAPES_ROOT="${HOME}/.tapes"
+TAPES_INSTALL_URL="https://raw.githubusercontent.com/futurekismo-oss/tapes/main/install.sh"
 
 usage() {
     cat <<EOF
 Usage: ./install.sh [options]
 
+Running with no flags in a terminal opens an interactive numbered menu.
+
+  -i, --interactive           Show the interactive numbered setup menu
   -y, --yes                   Non-interactive (answer yes, pass --noconfirm to package managers)
+      --tapes                 Deploy QML shell as a tapes-v2 tape (~/.tapes/<name>)
+      --tape-name <name>      Custom tape name (default: vacuited; implies --tapes)
       --skip-deps             Do not check or install dependencies
       --skip-cli              Do not install the vacuited CLI when 'caelestia' is missing
       --update-cli            Force rebuild and update of the vacuited CLI
@@ -111,7 +126,7 @@ Usage: ./install.sh [options]
       --no-backup             Do not create a backup of existing QML config before overwriting
       --hardware              Install the HP Victus hardware helper + polkit rule
       --no-hardware           Skip hardware helper install (never removes an existing working helper)
-      --uninstall             Remove installed shell config, QML plugin, and hardware helper
+      --uninstall             Remove installed shell config, QML plugin, tape, and hardware helper
       --dry-run               Print what would run without changing anything
   -h, --help                  Show this help
 
@@ -120,20 +135,42 @@ Other distros: dependencies are verified and missing ones are reported.
 EOF
 }
 
+validate_tape_name() {
+    local name="$1"
+    [[ "$name" =~ ^[a-z0-9][a-z0-9._-]*$ ]]
+}
+
 while [ $# -gt 0 ]; do
     case "$1" in
-        -y|--yes) ASSUME_YES=1 ;;
-        --skip-deps) SKIP_DEPS=1 ;;
-        --skip-cli) SKIP_CLI=1 ;;
-        --update-cli) UPDATE_CLI=1 ;;
-        --with-optional) WITH_OPTIONAL=1 ;;
-        --with-wallpaper-engine) WITH_WE=1 ;;
-        --qml-only) QML_ONLY=1 ;;
-        --clean) CLEAN_BUILD=1 ;;
-        --no-backup) NO_BACKUP=1 ;;
-        --hardware) HARDWARE=yes ;;
-        --no-hardware) HARDWARE=no ;;
-        --uninstall) UNINSTALL=1 ;;
+        -i|--interactive) FORCE_INTERACTIVE=1 ;;
+        -y|--yes) ASSUME_YES=1; EXPLICIT_FLAGS=1 ;;
+        --tapes) TAPES_MODE=1; EXPLICIT_FLAGS=1 ;;
+        --tape-name)
+            [ $# -ge 2 ] || die "--tape-name requires a name argument."
+            TAPE_NAME="${2,,}"
+            validate_tape_name "$TAPE_NAME" || die "Invalid tape name '$2' (use lowercase letters, digits, ., _, -)."
+            TAPES_MODE=1
+            EXPLICIT_FLAGS=1
+            shift
+            ;;
+        --tape-name=*)
+            TAPE_NAME="${1#--tape-name=}"
+            TAPE_NAME="${TAPE_NAME,,}"
+            validate_tape_name "$TAPE_NAME" || die "Invalid tape name '${1#--tape-name=}' (use lowercase letters, digits, ., _, -)."
+            TAPES_MODE=1
+            EXPLICIT_FLAGS=1
+            ;;
+        --skip-deps) SKIP_DEPS=1; EXPLICIT_FLAGS=1 ;;
+        --skip-cli) SKIP_CLI=1; EXPLICIT_FLAGS=1 ;;
+        --update-cli) UPDATE_CLI=1; EXPLICIT_FLAGS=1 ;;
+        --with-optional) WITH_OPTIONAL=1; OPT_DECIDED=1; EXPLICIT_FLAGS=1 ;;
+        --with-wallpaper-engine) WITH_WE=1; WE_DECIDED=1; EXPLICIT_FLAGS=1 ;;
+        --qml-only) QML_ONLY=1; EXPLICIT_FLAGS=1 ;;
+        --clean) CLEAN_BUILD=1; EXPLICIT_FLAGS=1 ;;
+        --no-backup) NO_BACKUP=1; EXPLICIT_FLAGS=1 ;;
+        --hardware) HARDWARE=yes; EXPLICIT_FLAGS=1 ;;
+        --no-hardware) HARDWARE=no; EXPLICIT_FLAGS=1 ;;
+        --uninstall) UNINSTALL=1; EXPLICIT_FLAGS=1 ;;
         --dry-run) DRY_RUN=1 ;;
         -h|--help) usage; exit 0 ;;
         *) err "Unknown option: $1"; usage; exit 1 ;;
@@ -231,6 +268,160 @@ detect_qt_qml_dir() {
 
 QT_QML_DIR="$(detect_qt_qml_dir)"
 
+detect_hp_victus() {
+    compgen -G "/sys/devices/platform/hp-wmi/hwmon/hwmon*/pwm1_enable" >/dev/null \
+        && compgen -G "/sys/devices/platform/hp-wmi/hwmon/hwmon*/fan1_input" >/dev/null \
+        && compgen -G "/sys/devices/platform/hp-wmi/hwmon/hwmon*/fan2_input" >/dev/null \
+        && grep -qiE 'victus|omen' /sys/class/dmi/id/product_name 2>/dev/null \
+        && grep -qw 'cool' /sys/firmware/acpi/platform_profile_choices 2>/dev/null
+}
+
+is_tape_active() {
+    command -v tapes >/dev/null 2>&1 || return 1
+    tapes status 2>/dev/null | grep -qiFx "Tape name: $TAPE_NAME"
+}
+
+run_interactive_menu() {
+    local has_victus=0 mode_choice="" target_choice="" extras_raw="" tok="" name_in=""
+    local mode_label="" target_label=""
+    detect_hp_victus && has_victus=1
+
+    printf '\n=== Vacuited Shell Installer ===\n\n'
+    printf 'Select install mode:\n'
+    printf '  1) Full install          (deps + CLI + C++ plugin + QML -> %s) [default]\n' "$QS_DEST"
+    printf '  2) Full install + Tapes  (deps + CLI + C++ plugin + QML -> %s/%s via tapes)\n' "$TAPES_ROOT" "$TAPE_NAME"
+    printf '  3) QML / shaders only    (fast QML + shader update, skips deps/CLI/plugin)\n'
+    printf '  4) Uninstall             (remove vacuited-shell, plugin, hooks, tape, and helper)\n'
+    printf '  0) Cancel\n\n'
+
+    while true; do
+        read -r -p "Choice [1]: " mode_choice </dev/tty || mode_choice=""
+        mode_choice="${mode_choice:-1}"
+        case "$mode_choice" in
+            0) info "Cancelled."; exit 0 ;;
+            1) QML_ONLY=0; TAPES_MODE=0; UNINSTALL=0; break ;;
+            2) QML_ONLY=0; TAPES_MODE=1; UNINSTALL=0; break ;;
+            3) QML_ONLY=1; UNINSTALL=0; break ;;
+            4) UNINSTALL=1; return 0 ;;
+            *) warn "Invalid choice '$mode_choice'. Enter 0, 1, 2, 3, or 4." ;;
+        esac
+    done
+
+    if [ "$QML_ONLY" -eq 1 ]; then
+        printf '\nDeploy QML target:\n'
+        printf '  1) Standard (%s) [default]\n' "$QS_DEST"
+        printf '  2) Tapes    (%s/%s)\n\n' "$TAPES_ROOT" "$TAPE_NAME"
+        while true; do
+            read -r -p "Target [1]: " target_choice </dev/tty || target_choice=""
+            target_choice="${target_choice:-1}"
+            case "$target_choice" in
+                1) TAPES_MODE=0; break ;;
+                2) TAPES_MODE=1; break ;;
+                *) warn "Invalid choice '$target_choice'. Enter 1 or 2." ;;
+            esac
+        done
+    else
+        printf '\nOptional features (numbers separated by spaces, '\''all'\'', or Enter for defaults):\n'
+        printf '  1) Optional runtime extras  (hyprsunset, hyprshutdown, screen recorder, mpv, bluetooth, avahi, papirus)\n'
+        printf '  2) Wallpaper Engine         (skwd-paper-v2 + Steam Workshop via AUR)\n'
+        printf '  3) Force update vacuited-cli\n'
+        printf '  4) Clean CMake build cache  (--clean)\n'
+        printf '  5) Skip dependency install  (--skip-deps)\n'
+        printf '  6) Skip config backup       (--no-backup)\n'
+        if [ "$has_victus" -eq 1 ]; then
+            printf '  7) Skip HP Victus hardware helper (--no-hardware)\n'
+        fi
+        printf '\n'
+
+        while true; do
+            local bad_tok=0
+            read -r -p "Options [none]: " extras_raw </dev/tty || extras_raw=""
+            extras_raw="${extras_raw//,/ }"
+            for tok in $extras_raw; do
+                case "${tok,,}" in
+                    all)
+                        WITH_OPTIONAL=1
+                        WITH_WE=1
+                        UPDATE_CLI=1
+                        ;;
+                    1) WITH_OPTIONAL=1 ;;
+                    2) WITH_WE=1 ;;
+                    3) UPDATE_CLI=1 ;;
+                    4) CLEAN_BUILD=1 ;;
+                    5) SKIP_DEPS=1 ;;
+                    6) NO_BACKUP=1 ;;
+                    7)
+                        if [ "$has_victus" -eq 1 ]; then
+                            HARDWARE=no
+                        else
+                            warn "Invalid option '$tok'."
+                            bad_tok=1
+                            break
+                        fi
+                        ;;
+                    *)
+                        warn "Invalid option '$tok'."
+                        bad_tok=1
+                        break
+                        ;;
+                esac
+            done
+            [ "$bad_tok" -eq 0 ] && break
+        done
+    fi
+
+    if [ "$TAPES_MODE" -eq 1 ]; then
+        while true; do
+            read -r -p "Tape name [$TAPE_NAME]: " name_in </dev/tty || name_in=""
+            name_in="${name_in:-$TAPE_NAME}"
+            name_in="${name_in,,}"
+            if validate_tape_name "$name_in"; then
+                TAPE_NAME="$name_in"
+                break
+            fi
+            warn "Invalid tape name '$name_in' (use lowercase letters, digits, ., _, -)."
+        done
+    fi
+
+    MENU_USED=1
+    OPT_DECIDED=1
+    WE_DECIDED=1
+
+    if [ "$QML_ONLY" -eq 1 ]; then
+        mode_label="QML / shaders only"
+    else
+        mode_label="Full install"
+    fi
+    if [ "$TAPES_MODE" -eq 1 ]; then
+        mode_label="$mode_label + Tapes"
+        target_label="$TAPES_ROOT/$TAPE_NAME/quickshell/caelestia (tape: $TAPE_NAME)"
+    else
+        target_label="$QS_DEST"
+    fi
+
+    printf '\n=== Summary ===\n'
+    printf '  Mode:             %s\n' "$mode_label"
+    printf '  Target:           %s\n' "$target_label"
+    if [ "$QML_ONLY" -eq 0 ]; then
+        printf '  Optional extras:  %s\n' "$([ "$WITH_OPTIONAL" -eq 1 ] && echo yes || echo no)"
+        printf '  Wallpaper Engine: %s\n' "$([ "$WITH_WE" -eq 1 ] && echo yes || echo no)"
+        printf '  Force CLI update: %s\n' "$([ "$UPDATE_CLI" -eq 1 ] && echo yes || echo no)"
+        printf '  Clean build:      %s\n' "$([ "$CLEAN_BUILD" -eq 1 ] && echo yes || echo no)"
+        printf '  Skip deps:        %s\n' "$([ "$SKIP_DEPS" -eq 1 ] && echo yes || echo no)"
+        printf '  Skip backup:      %s\n' "$([ "$NO_BACKUP" -eq 1 ] && echo yes || echo no)"
+        if [ "$HARDWARE" = no ]; then
+            printf '  Hardware helper:  skipped\n'
+        elif [ "$has_victus" -eq 1 ]; then
+            printf '  Hardware helper:  auto (HP Victus/OMEN detected)\n'
+        else
+            printf '  Hardware helper:  auto (skipped on this machine)\n'
+        fi
+    fi
+    printf '\n'
+
+    confirm "Proceed with installation?" y || { info "Cancelled."; exit 0; }
+}
+
 # ---------------------------------------------------------------------------
 # Uninstall
 # ---------------------------------------------------------------------------
@@ -245,6 +436,15 @@ do_uninstall() {
     elif [ -e "$QS_DEST" ]; then
         info "Removing $QS_DEST"
         run rm -rf "$QS_DEST"
+    fi
+
+    if [ -d "$TAPES_ROOT/$TAPE_NAME" ]; then
+        if is_tape_active; then
+            warn "Tape '$TAPE_NAME' is currently active; run 'tapes eject' before removing $TAPES_ROOT/$TAPE_NAME."
+        else
+            info "Removing tape $TAPES_ROOT/$TAPE_NAME"
+            run rm -rf "$TAPES_ROOT/$TAPE_NAME"
+        fi
     fi
 
     if [ -e "$QT_QML_DIR/Caelestia" ]; then
@@ -262,6 +462,9 @@ do_uninstall() {
     info "Removing hardware helper and polkit rule if present (privileged)"
     run_priv rm -f /usr/local/bin/caelestia-hardware-helper /etc/polkit-1/rules.d/50-caelestia-hardware.rules
 
+    info "Removing post-upgrade ABI hook if present (privileged)"
+    run_priv rm -f /usr/local/bin/vacuited-abi-check /etc/pacman.d/hooks/90-vacuited-shell-abi.hook
+
     if [ -d "$BUILD_DIR" ]; then
         info "Removing build directory $BUILD_DIR"
         run rm -rf "$BUILD_DIR"
@@ -270,6 +473,12 @@ do_uninstall() {
     log "vacuited-shell uninstalled."
     exit 0
 }
+
+if [ "$FORCE_INTERACTIVE" -eq 1 ] || { [ "$EXPLICIT_FLAGS" -eq 0 ] && [ "$ASSUME_YES" -eq 0 ] && [ -t 0 ]; }; then
+    if (: </dev/tty) 2>/dev/null; then
+        run_interactive_menu
+    fi
+fi
 
 if [ "$UNINSTALL" -eq 1 ]; then
     do_uninstall
@@ -474,7 +683,7 @@ install_deps_arch() {
         local do_opt=0
         if [ "$WITH_OPTIONAL" -eq 1 ]; then
             do_opt=1
-        elif [ "$ASSUME_YES" -eq 0 ] && confirm "Install optional extras too?" n; then
+        elif [ "$OPT_DECIDED" -eq 0 ] && [ "$ASSUME_YES" -eq 0 ] && confirm "Install optional extras too?" n; then
             do_opt=1
         fi
         if [ "$do_opt" -eq 1 ]; then
@@ -498,7 +707,7 @@ install_deps_arch() {
             local do_we=0
             if [ "$WITH_WE" -eq 1 ]; then
                 do_we=1
-            elif [ "$ASSUME_YES" -eq 0 ] && confirm "Install Wallpaper Engine support (skwd-paper-bin + Steam Workshop)?" n; then
+            elif [ "$WE_DECIDED" -eq 0 ] && [ "$ASSUME_YES" -eq 0 ] && confirm "Install Wallpaper Engine support (skwd-paper-bin + Steam Workshop)?" n; then
                 do_we=1
             fi
             if [ "$do_we" -eq 1 ]; then
@@ -705,7 +914,28 @@ case ":${PATH:-}:" in
     *) export PATH="${HOME}/.local/bin${PATH:+:${PATH}}" ;;
 esac
 if [ -x "${HOME}/.local/bin/caelestia" ]; then
+    _pyver=""
+    if [ -L /usr/bin/python3 ]; then
+        _pybin="$(readlink /usr/bin/python3 2>/dev/null || true)"
+        _pybin="${_pybin##*/}"
+        case "$_pybin" in
+            python3.*) _pyver="$_pybin" ;;
+        esac
+    fi
+    if [ -n "$_pyver" ] \
+        && [ ! -d "${HOME}/.local/lib/${_pyver}/site-packages/caelestia" ] \
+        && [ ! -d "${HOME}/.local/lib64/${_pyver}/site-packages/caelestia" ]; then
+        for _old_sp in "${HOME}/.local/lib"/python3.*/site-packages/caelestia "${HOME}/.local/lib64"/python3.*/site-packages/caelestia; do
+            if [ -d "$_old_sp" ] && ! /usr/bin/python3 -c 'import caelestia' >/dev/null 2>&1; then
+                printf '%s\n' "caelestia: Python updated to ${_pyver}; rebuild vacuited-cli (~/.local/bin/caelestia) with ./install.sh or 'caelestia' repo install.sh" >&2
+                exit 1
+            fi
+        done
+    fi
     exec "${HOME}/.local/bin/caelestia" "$@"
+fi
+if [ -x /usr/bin/caelestia ]; then
+    exec /usr/bin/caelestia "$@"
 fi
 printf '%s\n' "caelestia: not installed for ${USER:-user} (${HOME}/.local/bin/caelestia missing)" >&2
 exit 127
@@ -791,6 +1021,14 @@ if [ "$QML_ONLY" -eq 0 ]; then
         if [ -e "$lib" ]; then run_priv rm -f "$lib"; fi
     done
     run_priv cmake --install "$BUILD_DIR"
+
+    if [ "$IS_ARCH" -eq 1 ] && [ -n "$SUDO" ] && [ -f "$SCRIPT_DIR/scripts/vacuited-abi-check" ] && [ -f "$SCRIPT_DIR/scripts/90-vacuited-shell-abi.hook" ]; then
+        if [ "$DRY_RUN" -eq 1 ] || (: </dev/tty) 2>/dev/null || "$SUDO" -n true 2>/dev/null; then
+            info "Installing pacman post-upgrade ABI check hook (privileged)..."
+            run_priv install -Dm755 "$SCRIPT_DIR/scripts/vacuited-abi-check" /usr/local/bin/vacuited-abi-check
+            run_priv install -Dm644 "$SCRIPT_DIR/scripts/90-vacuited-shell-abi.hook" /etc/pacman.d/hooks/90-vacuited-shell-abi.hook
+        fi
+    fi
 fi
 
 # ---------------------------------------------------------------------------
@@ -825,9 +1063,9 @@ compile_standalone_shaders
 # ---------------------------------------------------------------------------
 
 prune_backups() {
-    local old_bak
+    local base="${1:-$QS_DEST}" old_bak
     shopt -s nullglob
-    local backups=("${QS_DEST}".bak.*)
+    local backups=("${base}".bak.*)
     shopt -u nullglob
     [ ${#backups[@]} -gt 2 ] || return 0
     while IFS= read -r old_bak; do
@@ -837,8 +1075,73 @@ prune_backups() {
     done < <(printf '%s\n' "${backups[@]}" | sort -r | tail -n +3)
 }
 
+backup_if_changed() {
+    local dest="$1" changed=0 item
+    [ -d "$dest" ] && [ ! -L "$dest" ] || return 0
+    for item in "${QML_DIRS[@]}" "${QML_FILES[@]}"; do
+        if [ -e "$dest/$item" ] && ! diff -rq -x '__pycache__' -x '*.pyc' -x '*.orig' -x '*.bak' "$SCRIPT_DIR/$item" "$dest/$item" >/dev/null 2>&1; then
+            changed=1
+            break
+        fi
+    done
+    if [ "$changed" -eq 1 ]; then
+        if [ "$NO_BACKUP" -eq 1 ]; then
+            info "Existing config differs; skipping backup (--no-backup)."
+        else
+            local backup="${dest}.bak.$(date +%Y%m%d-%H%M%S)"
+            warn "Existing config differs from this repo. Backing up to $backup"
+            run cp -a "$dest" "$backup"
+            prune_backups "$dest"
+        fi
+    fi
+}
+
+sync_qml_tree() {
+    local dest="$1" has_rsync=0 item py
+    run mkdir -p "$dest"
+    command -v rsync >/dev/null 2>&1 && has_rsync=1
+    for item in "${QML_DIRS[@]}"; do
+        if [ "$has_rsync" -eq 1 ]; then
+            run mkdir -p "$dest/$item"
+            run rsync -a --delete \
+                --exclude='__pycache__' \
+                --exclude='*.pyc' \
+                --exclude='*.orig' \
+                --exclude='*.bak' \
+                "$SCRIPT_DIR/$item/" "$dest/$item/"
+        else
+            run rm -rf "$dest/$item"
+            run mkdir -p "$dest/$item"
+            run cp -a "$SCRIPT_DIR/$item/." "$dest/$item/"
+            if [ "$DRY_RUN" -eq 0 ]; then
+                find "$dest/$item" \( -name '__pycache__' -o -name '*.pyc' -o -name '*.orig' -o -name '*.bak' \) -exec rm -rf {} + 2>/dev/null || true
+            fi
+        fi
+    done
+    for item in "${QML_FILES[@]}"; do
+        run cp -a "$SCRIPT_DIR/$item" "$dest/$item"
+    done
+
+    # Enforce executable permissions on runtime helper scripts
+    local deploy_target="$dest"
+    [ "$DRY_RUN" -eq 1 ] && [ ! -d "$dest/assets" ] && deploy_target="$SCRIPT_DIR"
+    if [ -f "$deploy_target/assets/wrap_term_launch.sh" ]; then
+        run chmod +x "$dest/assets/wrap_term_launch.sh"
+    fi
+    shopt -s nullglob
+    for py in "$deploy_target/assets/scripts/"*.py; do
+        run chmod +x "$dest/assets/scripts/$(basename "$py")"
+    done
+    shopt -u nullglob
+}
+
 deploy_qml_shell() {
     local dest_real="" skip_copy=0
+
+    if [ -f "$CONFIG_HOME/.tapes-managed" ]; then
+        warn "A tapes tape is currently inserted ($CONFIG_HOME is managed by tapes)."
+        warn "Deploying directly to $QS_DEST will be reverted on 'tapes eject'. Prefer 'tapes eject' first or re-run with --tapes."
+    fi
 
     if [ -e "$QS_DEST" ] || [ -L "$QS_DEST" ]; then
         dest_real="$(readlink -f "$QS_DEST" 2>/dev/null || true)"
@@ -849,69 +1152,119 @@ deploy_qml_shell() {
             warn "$QS_DEST is a symlink to ${dest_real:-unknown}; removing symlink (target untouched) before deploying."
             run rm -f "$QS_DEST"
         elif [ -d "$QS_DEST" ]; then
-            local changed=0 item
-            for item in "${QML_DIRS[@]}" "${QML_FILES[@]}"; do
-                if [ -e "$QS_DEST/$item" ] && ! diff -rq -x '__pycache__' -x '*.pyc' -x '*.orig' -x '*.bak' "$SCRIPT_DIR/$item" "$QS_DEST/$item" >/dev/null 2>&1; then
-                    changed=1
-                    break
-                fi
-            done
-            if [ "$changed" -eq 1 ]; then
-                if [ "$NO_BACKUP" -eq 1 ]; then
-                    info "Existing config differs; skipping backup (--no-backup)."
-                else
-                    local backup="${QS_DEST}.bak.$(date +%Y%m%d-%H%M%S)"
-                    warn "Existing config differs from this repo. Backing up to $backup"
-                    run cp -a "$QS_DEST" "$backup"
-                    prune_backups
-                fi
-            fi
+            backup_if_changed "$QS_DEST"
         fi
     fi
 
     if [ "$skip_copy" -eq 0 ]; then
         log "Deploying the QML shell to $QS_DEST..."
-        run mkdir -p "$QS_DEST"
-        local has_rsync=0
-        command -v rsync >/dev/null 2>&1 && has_rsync=1
-        for item in "${QML_DIRS[@]}"; do
-            if [ "$has_rsync" -eq 1 ]; then
-                run mkdir -p "$QS_DEST/$item"
-                run rsync -a --delete \
-                    --exclude='__pycache__' \
-                    --exclude='*.pyc' \
-                    --exclude='*.orig' \
-                    --exclude='*.bak' \
-                    "$SCRIPT_DIR/$item/" "$QS_DEST/$item/"
-            else
-                run rm -rf "$QS_DEST/$item"
-                run mkdir -p "$QS_DEST/$item"
-                run cp -a "$SCRIPT_DIR/$item/." "$QS_DEST/$item/"
-                if [ "$DRY_RUN" -eq 0 ]; then
-                    find "$QS_DEST/$item" \( -name '__pycache__' -o -name '*.pyc' -o -name '*.orig' -o -name '*.bak' \) -exec rm -rf {} + 2>/dev/null || true
-                fi
-            fi
-        done
-        for item in "${QML_FILES[@]}"; do
-            run cp -a "$SCRIPT_DIR/$item" "$QS_DEST/$item"
-        done
+        sync_qml_tree "$QS_DEST"
     fi
-
-    # Enforce executable permissions on runtime helper scripts
-    local deploy_target="$QS_DEST"
-    [ "$DRY_RUN" -eq 1 ] && [ ! -d "$QS_DEST/assets" ] && deploy_target="$SCRIPT_DIR"
-    if [ -f "$deploy_target/assets/wrap_term_launch.sh" ]; then
-        run chmod +x "$QS_DEST/assets/wrap_term_launch.sh"
-    fi
-    shopt -s nullglob
-    local py
-    for py in "$deploy_target/assets/scripts/"*.py; do
-        run chmod +x "$QS_DEST/assets/scripts/$(basename "$py")"
-    done
-    shopt -u nullglob
 }
 
-deploy_qml_shell
+ensure_tapes_bin() {
+    case ":$PATH:" in
+        *":$HOME/.local/bin:"*) ;;
+        *) export PATH="$HOME/.local/bin:$PATH" ;;
+    esac
+
+    if command -v tapes >/dev/null 2>&1; then
+        log "tapes found: $(tapes --version 2>/dev/null | head -n 1 || command -v tapes)"
+        return 0
+    fi
+
+    warn "'tapes' CLI not found in PATH."
+    if [ "$MENU_USED" -eq 0 ] && [ "$ASSUME_YES" -eq 0 ]; then
+        confirm "Install tapes from https://github.com/futurekismo-oss/tapes now?" y || die "Install tapes first and re-run with --tapes."
+    fi
+
+    if [ "$DRY_RUN" -eq 1 ]; then
+        info "[dry-run] curl -fsSL $TAPES_INSTALL_URL | bash"
+        return 0
+    fi
+
+    command -v curl >/dev/null 2>&1 || die "curl is required to install tapes."
+    info "Installing tapes from $TAPES_INSTALL_URL..."
+    curl -fsSL "$TAPES_INSTALL_URL" | bash || die "Failed to install tapes."
+    command -v tapes >/dev/null 2>&1 || die "tapes binary still not found after installation."
+    log "Installed $(tapes --version 2>/dev/null | head -n 1 || command -v tapes)."
+}
+
+write_tape_manifest() {
+    local dest="$1" name="$2"
+    cat <<EOF > "$dest"
+[tape]
+name = "$name"
+desc = "Vacuited Shell (Caelestia# Quickshell desktop environment)"
+dependencies = ["qs", "caelestia", "hyprctl", "fish", "python3"]
+
+[hooks]
+insert = [
+    "sh -c 'pkill -x qs >/dev/null 2>&1 || true'",
+    "sh -c 'sleep 0.4; caelestia shell -d'",
+]
+eject = [
+    "sh -c 'caelestia shell -k >/dev/null 2>&1 || pkill -x qs >/dev/null 2>&1 || true'",
+]
+EOF
+}
+
+deploy_tapes_shell() {
+    ensure_tapes_bin
+
+    local tape_dir="$TAPES_ROOT/$TAPE_NAME"
+    local tape_qs="$tape_dir/quickshell/caelestia"
+    local has_extra_entries=0 entry_base=""
+
+    is_tape_active && TAPE_WAS_ACTIVE=1
+
+    if [ -d "$tape_dir" ]; then
+        local entry
+        shopt -s nullglob dotglob
+        for entry in "$tape_dir"/*; do
+            entry_base="$(basename "$entry")"
+            case "$entry_base" in
+                quickshell|tape.toml|.git|*.bak.*) ;;
+                *) has_extra_entries=1; break ;;
+            esac
+        done
+        shopt -u nullglob dotglob
+    fi
+
+    if [ "$TAPE_WAS_ACTIVE" -eq 1 ] || [ "$has_extra_entries" -eq 1 ]; then
+        if [ "$TAPE_WAS_ACTIVE" -eq 1 ]; then
+            info "Tape '$TAPE_NAME' is currently active; updating QML in place at $tape_qs..."
+        else
+            info "Tape '$TAPE_NAME' contains additional configs; updating QML in place at $tape_qs..."
+        fi
+        if [ -L "$tape_qs" ]; then
+            run rm -f "$tape_qs"
+        else
+            backup_if_changed "$tape_qs"
+        fi
+        sync_qml_tree "$tape_qs"
+        if [ ! -f "$tape_dir/tape.toml" ]; then
+            if [ "$DRY_RUN" -eq 1 ]; then
+                info "[dry-run] write $tape_dir/tape.toml"
+            else
+                mkdir -p "$tape_dir"
+                write_tape_manifest "$tape_dir/tape.toml" "$TAPE_NAME"
+            fi
+        fi
+    else
+        local tmp_tape
+        tmp_tape="$(mktemp -d)"
+        CLEANUP_PATHS+=("$tmp_tape")
+        log "Staging QML shell for tapes ($TAPE_NAME)..."
+        sync_qml_tree "$tmp_tape/quickshell/caelestia"
+        if [ "$DRY_RUN" -eq 1 ]; then
+            info "[dry-run] write $tmp_tape/tape.toml"
+        else
+            write_tape_manifest "$tmp_tape/tape.toml" "$TAPE_NAME"
+        fi
+        run tapes install "$tmp_tape" -n "$TAPE_NAME" --force --no-hooks
+    fi
+}
 
 check_quickshell_shadowing() {
     local qs_root="${CONFIG_HOME}/quickshell"
@@ -948,7 +1301,12 @@ check_quickshell_shadowing() {
     fi
 }
 
-check_quickshell_shadowing
+if [ "$TAPES_MODE" -eq 1 ]; then
+    deploy_tapes_shell
+else
+    deploy_qml_shell
+    check_quickshell_shadowing
+fi
 
 # ---------------------------------------------------------------------------
 # HP Victus hardware helper (optional)
@@ -957,7 +1315,7 @@ check_quickshell_shadowing
 HARDWARE_STATUS="skipped"
 if [ "$QML_ONLY" -eq 0 ]; then
     if [ "$HARDWARE" = auto ]; then
-        if compgen -G "/sys/devices/platform/hp-wmi/hwmon/hwmon*/pwm1_enable" >/dev/null; then
+        if detect_hp_victus; then
             HARDWARE=yes
         else
             HARDWARE=no
@@ -1014,18 +1372,25 @@ if [ "$DRY_RUN" -eq 0 ]; then
             [ -f "$qmldir" ] || die "Plugin install check failed: $qmldir missing."
         done
     fi
-    [ -f "$QS_DEST/shell.qml" ] || die "Deploy check failed: $QS_DEST/shell.qml missing."
+    if [ "$TAPES_MODE" -eq 1 ]; then
+        [ -f "$TAPES_ROOT/$TAPE_NAME/quickshell/caelestia/shell.qml" ] || die "Deploy check failed: $TAPES_ROOT/$TAPE_NAME/quickshell/caelestia/shell.qml missing."
+        [ -f "$TAPES_ROOT/$TAPE_NAME/tape.toml" ] || die "Deploy check failed: $TAPES_ROOT/$TAPE_NAME/tape.toml missing."
+    else
+        [ -f "$QS_DEST/shell.qml" ] || die "Deploy check failed: $QS_DEST/shell.qml missing."
+    fi
     log "Install verified."
 
     qs_bin="$(command -v qs 2>/dev/null || command -v quickshell 2>/dev/null || true)"
     if [ -n "$qs_bin" ]; then
-        qs_list_rc=0
-        qs_list_out="$("$qs_bin" -c caelestia list 2>&1)" || qs_list_rc=$?
-        if [ "$qs_list_rc" -ne 0 ]; then
-            warn "Quickshell could not discover the 'caelestia' config: $qs_list_out"
-            warn "Check for a stray shell.qml or manifest.conf in ${CONFIG_HOME}/quickshell/ (or unset QS_MANIFEST/QS_CONFIG_PATH)."
-        elif [[ "$qs_list_out" != "No running instances"* ]]; then
-            SHELL_RUNNING=1
+        if [ "$TAPES_MODE" -eq 0 ] || [ "$TAPE_WAS_ACTIVE" -eq 1 ]; then
+            qs_list_rc=0
+            qs_list_out="$("$qs_bin" -c caelestia list 2>&1)" || qs_list_rc=$?
+            if [ "$qs_list_rc" -ne 0 ]; then
+                warn "Quickshell could not discover the 'caelestia' config: $qs_list_out"
+                warn "Check for a stray shell.qml or manifest.conf in ${CONFIG_HOME}/quickshell/ (or unset QS_MANIFEST/QS_CONFIG_PATH)."
+            elif [[ "$qs_list_out" != "No running instances"* ]]; then
+                SHELL_RUNNING=1
+            fi
         fi
 
         if command -v python3 >/dev/null 2>&1; then
@@ -1088,13 +1453,35 @@ cat <<EOF
 
 === Done ===
   Mode:            $([ "$QML_ONLY" -eq 1 ] && echo "QML-only" || echo "Full (${VERSION}, ${GIT_REV:0:9})")
-  QML Target:      $QS_DEST
+  QML Target:      $([ "$TAPES_MODE" -eq 1 ] && echo "$TAPES_ROOT/$TAPE_NAME/quickshell/caelestia (tapes: $TAPE_NAME)" || echo "$QS_DEST")
   Plugin QML Dir:  $([ "$QML_ONLY" -eq 1 ] && echo "skipped" || echo "$QT_QML_DIR/Caelestia")
   Wallpaper Eng.:  $(command -v skwd-paper-v2 >/dev/null 2>&1 && echo "installed" || echo "not installed (optional)")
   Hardware Helper: $HARDWARE_STATUS
 EOF
 
-if [ -n "$LEGACY_QS_PIDS" ]; then
+if [ "$TAPES_MODE" -eq 1 ]; then
+    if [ "$TAPE_WAS_ACTIVE" -eq 1 ]; then
+        cat <<EOF
+
+Tape '$TAPE_NAME' is already active. Reload the running shell:
+    caelestia shell -d -r
+EOF
+    else
+        cat <<EOF
+
+Activate the tape with tapes:
+    tapes insert $TAPE_NAME
+
+Revert to your original config anytime:
+    tapes eject
+EOF
+        if [ "$DRY_RUN" -eq 0 ] && [ "$ASSUME_YES" -eq 0 ] && (: </dev/tty) 2>/dev/null; then
+            if confirm "Insert tape '$TAPE_NAME' now?" n; then
+                tapes insert "$TAPE_NAME"
+            fi
+        fi
+    fi
+elif [ -n "$LEGACY_QS_PIDS" ]; then
     cat <<EOF
 
 Stop the lingering system shell instance, then start the new shell:

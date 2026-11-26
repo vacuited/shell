@@ -1,0 +1,113 @@
+#!/bin/sh
+# vacuited-abi-check — Post-upgrade ABI & split-brain check for vacuited-shell / vacuited-cli.
+# Always exits 0 so pacman transactions never fail.
+
+find_qml_dir() {
+    for qp in qtpaths6 qtpaths-qt6 /usr/lib/qt6/bin/qtpaths6 /usr/lib64/qt6/bin/qtpaths6; do
+        if command -v "$qp" >/dev/null 2>&1 || [ -x "$qp" ]; then
+            dir="$("$qp" --query QT_INSTALL_QML 2>/dev/null || true)"
+            if [ -n "$dir" ] && [ -d "$dir" ]; then
+                printf '%s\n' "$dir"
+                return 0
+            fi
+        fi
+    done
+    if [ -d /usr/lib/qt6/qml ]; then
+        printf '%s\n' /usr/lib/qt6/qml
+    else
+        printf '%s\n' /usr/lib64/qt6/qml
+    fi
+}
+
+QML_DIR="$(find_qml_dir)"
+CAELESTIA_QML="$QML_DIR/Caelestia"
+
+# 1. Split-brain check: upstream caelestia-shell plugin vs user vacuited QML
+if [ -f "$CAELESTIA_QML/qmldir" ] \
+    && [ ! -f "$CAELESTIA_QML/.vacuited-plugin" ] \
+    && [ ! -f "$CAELESTIA_QML/Images/qmldir" ]; then
+    for home_dir in /home/*; do
+        [ -d "$home_dir" ] || continue
+        for qs_dir in "$home_dir/.config/quickshell/caelestia" "$home_dir/.tapes"/*/quickshell/caelestia; do
+            [ -d "$qs_dir" ] || continue
+            if [ -f "$qs_dir/services/Skwd.qml" ] \
+                || { [ -f "$qs_dir/shell.qml" ] && grep -qF "vacuited/shell" "$qs_dir/shell.qml" 2>/dev/null; }; then
+                printf '%s\n' "[vacuited] WARNING: $CAELESTIA_QML does not look like vacuited-shell's C++ plugin, but vacuited QML is still in $qs_dir." >&2
+                printf '%s\n' "[vacuited]   -> To keep vacuited-shell: re-run ./install.sh from your vacuited/shell repo." >&2
+                case "$qs_dir" in
+                    */.tapes/*)
+                        printf '%s\n' "[vacuited]   -> Or eject your vacuited tape ('tapes eject') if switching back to upstream." >&2
+                        ;;
+                    *)
+                        printf '%s\n' "[vacuited]   -> To switch to upstream caelestia-shell: remove $qs_dir" >&2
+                        ;;
+                esac
+            fi
+        done
+    done
+fi
+
+# 2. Plugin shared library ABI check
+if [ -d "$CAELESTIA_QML" ] && command -v ldd >/dev/null 2>&1; then
+    core_broken=""
+    qs_broken=""
+    need_libcava_rebuild=0
+
+    for so in "$CAELESTIA_QML"/lib/*.so "$CAELESTIA_QML"/*/*.so "$CAELESTIA_QML"/*.so; do
+        [ -f "$so" ] || continue
+        missing="$(ldd "$so" 2>/dev/null | awk '/=> not found/ { print $1 }' | tr '\n' ' ' | sed 's/ *$//')"
+        [ -n "$missing" ] || continue
+        case "$missing" in
+            *libcava*|*libsndio*) need_libcava_rebuild=1 ;;
+        esac
+        case "$so" in
+            *quickshare*) qs_broken="${qs_broken}  - ${so}: missing ${missing}\n" ;;
+            *) core_broken="${core_broken}  - ${so}: missing ${missing}\n" ;;
+        esac
+    done
+
+    if [ -n "$core_broken" ]; then
+        printf '%s\n' "[vacuited] WARNING: Core C++ plugin libraries have missing shared dependencies after system upgrade:" >&2
+        printf '%b' "$core_broken" >&2
+        if [ "$need_libcava_rebuild" -eq 1 ]; then
+            printf '%s\n' "[vacuited]   -> Rebuild libcava first (e.g. 'paru -S --rebuild libcava'), then re-run vacuited-shell ./install.sh." >&2
+        else
+            printf '%s\n' "[vacuited]   -> Re-run ./install.sh (or Nexus > Updates) from your vacuited/shell repo to rebuild the plugin." >&2
+        fi
+    fi
+
+    if [ -n "$qs_broken" ]; then
+        printf '%s\n' "[vacuited] WARNING: Optional Quick Share plugin has missing shared dependencies (shell will still start, Quick Share disabled):" >&2
+        printf '%b' "$qs_broken" >&2
+        printf '%s\n' "[vacuited]   -> Re-run ./install.sh from your vacuited/shell repo to rebuild Quick Share." >&2
+    fi
+fi
+
+# 3. Python minor-version bump check for ~/.local/bin/caelestia
+pyver=""
+if [ -L /usr/bin/python3 ]; then
+    pybin="$(readlink /usr/bin/python3 2>/dev/null || true)"
+    pybin="${pybin##*/}"
+    case "$pybin" in
+        python3.*) pyver="$pybin" ;;
+    esac
+fi
+
+if [ -n "$pyver" ]; then
+    for home_dir in /home/*; do
+        [ -d "$home_dir" ] || continue
+        [ -x "$home_dir/.local/bin/caelestia" ] || continue
+        if [ ! -d "$home_dir/.local/lib/$pyver/site-packages/caelestia" ] \
+            && [ ! -d "$home_dir/.local/lib64/$pyver/site-packages/caelestia" ]; then
+            for old_sp in "$home_dir/.local/lib"/python3.*/site-packages/caelestia "$home_dir/.local/lib64"/python3.*/site-packages/caelestia; do
+                if [ -d "$old_sp" ]; then
+                    printf '%s\n' "[vacuited] WARNING: Python upgraded to $pyver, but $(basename "$home_dir")'s vacuited-cli is still in $old_sp." >&2
+                    printf '%s\n' "[vacuited]   -> Re-run ./install.sh in your vacuited/cli repo (or 'vacuited/shell/install.sh --update-cli')." >&2
+                    break
+                fi
+            done
+        fi
+    done
+fi
+
+exit 0
