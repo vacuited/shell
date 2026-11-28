@@ -73,6 +73,11 @@ class SessionConfig : public settings::ObjectNode {
     CONFIG_NODE(SessionConfig, settings::ObjectNode)
 
     CONFIG_PROPERTY(bool, enabled, true)
+    CONFIG_PROPERTY(bool, powerHub, true)
+    CONFIG_PROPERTY(bool, powerHubTickSound, false)
+    CONFIG_PROPERTY(bool, powerHubConfirmDangerous, true)
+    CONFIG_PROPERTY(bool, powerHubStatusChips, true)
+    CONFIG_PROPERTY(QString, powerHubDialStyle, u"rim"_s)
     CONFIG_PROPERTY(int, dragThreshold, 30)
     CONFIG_PROPERTY(bool, vimKeybinds, false)
     CONFIG_SUBOBJECT(SessionIcons, icons)

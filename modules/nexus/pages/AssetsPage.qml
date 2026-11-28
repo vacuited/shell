@@ -50,6 +50,7 @@ PageBase {
             value: GlobalConfig.general.logo
             defaultValue: GlobalConfig.general.descriptorFor("logo").defaultValue
             previewSource: SysInfo.osLogo
+            useVacuitedDefaultPreview: SysInfo.isDefaultLogo
             write: v => GlobalConfig.general.logo = v
             reset: () => GlobalConfig.general.resetOption("logo")
         }
@@ -62,14 +63,14 @@ PageBase {
             onToggled: GlobalConfig.general.logo = checked ? "distro" : ""
         }
 
-        // Animated images
+        // Animated & power menu images
         SectionHeader {
-            text: Tr.tr("Animated images")
+            text: qsTr("Power menu & animated graphics")
         }
 
         StyledText {
             Layout.fillWidth: true
-            text: Tr.tr("Gifs played by the shell")
+            text: qsTr("Custom images or GIFs shown on the power menu and dashboard")
             color: Colours.palette.m3outline
             font: Tokens.font.label.small
             wrapMode: Text.WordWrap
@@ -79,12 +80,16 @@ PageBase {
             first: true
             previewAnimated: true
             filters: ["png", "jpg", "jpeg", "webp", "svg", "gif"]
-            label: Tr.tr("Session screen gif")
-            subtext: Tr.tr("Played on the power menu")
+            label: qsTr("Power menu emblem")
+            subtext: qsTr("Shown inside the power menu dial (defaults to Vacuited logo)")
             option: "sessionGif"
             value: GlobalConfig.paths.sessionGif
             defaultValue: GlobalConfig.paths.descriptorFor("sessionGif").defaultValue
             previewSource: Paths.absolutePath(GlobalConfig.paths.sessionGif)
+            useVacuitedDefaultPreview: {
+                const v = (GlobalConfig.paths.sessionGif || "").trim();
+                return v === "" || v === "vacuited" || v === "root:/assets/logo.svg" || v === GlobalConfig.paths.descriptorFor("sessionGif").defaultValue;
+            }
             write: v => GlobalConfig.paths.sessionGif = v
             reset: () => GlobalConfig.paths.resetOption("sessionGif")
         }

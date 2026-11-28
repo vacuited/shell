@@ -9,17 +9,19 @@ Item {
 
     required property ScreenState screenState
     required property bool sidebarVisible
-    readonly property real nonAnimWidth: content.implicitWidth
 
-    readonly property bool shouldBeActive: screenState.session && Config.session.enabled
+    readonly property bool powerHub: Config.session.powerHub === true
+    readonly property real nonAnimWidth: powerHub ? 0 : content.implicitWidth
+
+    readonly property bool shouldBeActive: !powerHub && screenState.session && Config.session.enabled
     property real offsetScale: shouldBeActive ? 0 : 1
     property real sidebarOffset: sidebarVisible ? 14 : 0
 
-    visible: offsetScale < 1
+    visible: !powerHub && offsetScale < 1
     anchors.leftMargin: Config.bar.position === "right" ? (-implicitWidth - 5 - sidebarOffset) * offsetScale : 0
     anchors.rightMargin: Config.bar.position !== "right" ? (-implicitWidth - 5 - sidebarOffset) * offsetScale : 0
-    implicitWidth: content.implicitWidth
-    implicitHeight: content.implicitHeight || 510 // Hard coded fallback for first open
+    implicitWidth: powerHub ? 0 : content.implicitWidth
+    implicitHeight: powerHub ? 0 : (content.implicitHeight || 510)
     opacity: 1 - offsetScale
 
     Behavior on offsetScale {
@@ -32,7 +34,7 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         anchors.left: parent.left
 
-        active: root.shouldBeActive || root.visible
+        active: !root.powerHub && (root.shouldBeActive || root.visible)
 
         sourceComponent: Content {
             screenState: root.screenState

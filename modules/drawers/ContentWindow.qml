@@ -12,6 +12,7 @@ import qs.components
 import qs.components.containers
 import qs.services
 import qs.modules.bar
+import qs.modules.session as Session
 import qs.daemons
 
 StyledWindow {
@@ -23,6 +24,7 @@ StyledWindow {
     readonly property alias interactionWrapper: interactions
 
     readonly property ScreenState screenState: ShellState.forScreen(screen)
+    readonly property bool usePowerHub: contentItem.Config.session.powerHub === true
 
     readonly property HyprlandMonitor monitor: Hypr.monitorFor(screen)
     readonly property bool hasSpecialWorkspace: (monitor?.lastIpcObject.specialWorkspace?.name.length ?? 0) > 0
@@ -66,7 +68,8 @@ StyledWindow {
 
     onHasFullscreenChanged: {
         screenState.launcher = false;
-        screenState.session = false;
+        if (!usePowerHub)
+            screenState.session = false;
         screenState.dashboard = false;
         panels.notch.expanded = false;
         panels.popouts.close();
@@ -74,10 +77,14 @@ StyledWindow {
 
     name: "drawers"
     WlrLayershell.exclusionMode: ExclusionMode.Ignore
-    WlrLayershell.layer: (fsTransitionProg > 0 && (contentItem.Config.general.showOverFullscreen || fsTransitionProg < 1 || panels.notch.visible)) || (hasSpecialWorkspace && hasFullscreenOnNormalWs) ? WlrLayer.Overlay : WlrLayer.Top
-    WlrLayershell.keyboardFocus: screenState.launcher || screenState.session || screenState.dashboard || screenState.sidebar || panels.popouts.hasCurrent ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+    WlrLayershell.layer: sessionMenu.opened || sessionMenu.visible || (fsTransitionProg > 0 && (contentItem.Config.general.showOverFullscreen || fsTransitionProg < 1 || panels.notch.visible)) || (hasSpecialWorkspace && hasFullscreenOnNormalWs) ? WlrLayer.Overlay : WlrLayer.Top
+    WlrLayershell.keyboardFocus: sessionMenu.opened
+        ? WlrKeyboardFocus.Exclusive
+        : screenState.launcher || (!usePowerHub && screenState.session) || screenState.dashboard || screenState.sidebar || panels.popouts.hasCurrent
+            ? WlrKeyboardFocus.OnDemand
+            : WlrKeyboardFocus.None
 
-    mask: hasFullscreen ? emptyRegion : regions
+    mask: sessionMenu.opened ? null : hasFullscreen ? emptyRegion : regions
 
     anchors.top: true
     anchors.bottom: true
@@ -122,8 +129,9 @@ StyledWindow {
         active: {
             const s = root.screenState;
             const conf = root.contentItem.Config;
+            if (s.session && conf.session.powerHub === true) return false;
             if (s.workspaceDrawer) return true;
-            if ((s.launcher && conf.launcher.enabled) || (s.session && conf.session.enabled) || (s.sidebar && conf.sidebar.enabled))
+            if ((s.launcher && conf.launcher.enabled) || (conf.session.powerHub !== true && s.session && conf.session.enabled) || (s.sidebar && conf.sidebar.enabled))
                 return true;
             if (!conf.dashboard.showOnHover && s.dashboard && conf.dashboard.enabled)
                 return true;
@@ -135,7 +143,8 @@ StyledWindow {
         onCleared: {
             root.screenState.workspaceDrawer = false;
             root.screenState.launcher = false;
-            root.screenState.session = false;
+            if (!root.usePowerHub)
+                root.screenState.session = false;
             root.screenState.sidebar = false;
             root.screenState.dashboard = false;
             panels.popouts.hasCurrent = false;
@@ -145,7 +154,7 @@ StyledWindow {
 
     StyledRect {
         anchors.fill: parent
-        opacity: (root.screenState.session && Config.session.enabled) || panels.popouts.detachedMode !== "" ? 0.5 : 0
+        opacity: (!root.usePowerHub && root.screenState.session && Config.session.enabled) || panels.popouts.detachedMode !== "" ? 0.5 : 0
         color: Colours.palette.m3scrim
 
         Behavior on opacity {
@@ -160,7 +169,7 @@ StyledWindow {
 
         Config.screen: root.screen.name
         anchors.fill: parent
-        opacity: GlobalConfig.appearance.pitchBlack ? 1 : (Colours.transparency.enabled ? Colours.transparency.base : root.surfaceColour.a)
+        opacity: (GlobalConfig.appearance.pitchBlack ? 1 : (Colours.transparency.enabled ? Colours.transparency.base : root.surfaceColour.a)) * (Colours.transparency.enabled ? (1 - sessionMenu.reveal) : 1)
         layer.enabled: true
         layer.effect: MultiEffect {
             shadowEnabled: true
@@ -506,6 +515,17 @@ StyledWindow {
 
             fullscreen: root.hasFullscreen
         }
+    }
+
+    Session.Menu {
+        id: sessionMenu
+
+        objectName: "sessionMenu"
+        anchors.fill: parent
+        z: 100
+        screen: root.screen
+        screenState: root.screenState
+        bar: bar
     }
 
     ShellState.ComponentRef {

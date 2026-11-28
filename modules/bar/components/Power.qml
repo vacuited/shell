@@ -7,6 +7,7 @@ Item {
     id: root
 
     required property ScreenState screenState
+    readonly property alias glyph: icon
 
     implicitWidth: icon.implicitHeight + Tokens.padding.small
     implicitHeight: icon.implicitHeight

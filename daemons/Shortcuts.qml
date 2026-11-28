@@ -53,7 +53,7 @@ Scope {
         name: "session"
         description: "Toggle session menu"
         onPressed: {
-            if (root.hasFullscreen)
+            if (root.hasFullscreen && GlobalConfig.session.powerHub !== true)
                 return;
             const screenState = ShellState.forActive();
             screenState.session = !screenState.session;
@@ -235,7 +235,7 @@ Scope {
     IpcHandler {
         function toggle(drawer: string): void {
             if (list().split("\n").includes(drawer)) {
-                if (root.hasFullscreen && ["launcher", "session", "dashboard"].includes(drawer))
+                if (root.hasFullscreen && (["launcher", "dashboard"].includes(drawer) || (drawer === "session" && GlobalConfig.session.powerHub !== true)))
                     return;
                 const screenState = ShellState.forActive();
                 screenState[drawer] = !screenState[drawer];
@@ -246,7 +246,7 @@ Scope {
 
         function toggleTab(drawer: string, tab: string): void {
             if (list().split("\n").includes(drawer)) {
-                if (root.hasFullscreen && ["launcher", "session", "dashboard"].includes(drawer))
+                if (root.hasFullscreen && (["launcher", "dashboard"].includes(drawer) || (drawer === "session" && GlobalConfig.session.powerHub !== true)))
                     return;
                 if (drawer === "sidebar" && tab !== "") {
                     Visibilities.initialSidebarTab = tab;

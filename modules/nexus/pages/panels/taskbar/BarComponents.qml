@@ -24,6 +24,7 @@ PageBase {
             power: qsTr("Power menu")
         })
 
+    readonly property bool powerHubActive: root.targetConfig.session.powerHub === true
     readonly property bool isHorizontal: root.targetConfig.bar.position === "top" || root.targetConfig.bar.position === "bottom"
     readonly property string startLabel: isHorizontal ? qsTr("Left") : qsTr("Top")
     readonly property string endLabel: isHorizontal ? qsTr("Right") : qsTr("Bottom")
@@ -36,6 +37,16 @@ PageBase {
         anchors.top: parent.top
         width: root.cappedWidth
         spacing: Tokens.spacing.extraSmall / 2
+
+        StyledText {
+            visible: root.powerHubActive
+            Layout.fillWidth: true
+            Layout.bottomMargin: Tokens.spacing.small
+            wrapMode: Text.WordWrap
+            color: Colours.palette.m3onSurfaceVariant
+            font: Tokens.font.label.medium
+            text: qsTr("Power menu is pinned to the bar corner while Power hub is enabled.")
+        }
 
         EntrySectionEditor {
             sectionLabel: root.startLabel
@@ -70,6 +81,8 @@ PageBase {
 
         ListEditor {
             function labelFor(item: var): string {
+                if (item.id === "power" && root.powerHubActive)
+                    return qsTr("Power menu (pinned by Power hub)");
                 const prettyName = root.builtinComponents[item.id];
                 if (prettyName)
                     return prettyName;
@@ -106,7 +119,9 @@ PageBase {
             acceptLabel: qsTr("Add")
 
             model: {
-                const builtins = Object.keys(root.builtinComponents).map(k => ({
+                const builtins = Object.keys(root.builtinComponents)
+                    .filter(k => !(root.powerHubActive && k === "power"))
+                    .map(k => ({
                             id: k,
                             label: root.builtinComponents[k]
                         }));

@@ -122,6 +122,13 @@ PageBase {
         }
 
         NavRow {
+            icon: "power_settings_new"
+            text: qsTr("Power hub")
+            subtext: root.targetConfig.session.powerHub === true ? qsTr("Enabled · radial menu, emblem") : qsTr("Disabled · classic side drawer")
+            onClicked: root.nState.openSubPage(19)
+        }
+
+        NavRow {
             icon: "workspaces"
             text: qsTr("Workspaces")
             subtext: qsTr("Indicators, window icons")

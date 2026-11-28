@@ -13,8 +13,12 @@ Item {
     required property var bar
     required property Brightness.Monitor monitor
     property color colour: Colours.palette.m3primary
+    property string titleOverride: ""
+    property string iconOverride: ""
 
     readonly property string windowTitle: {
+        if (root.titleOverride !== "")
+            return root.titleOverride;
         const title = Hypr.activeToplevel?.title;
         if (!title)
             return Tr.trCtx("Desktop", "shown when no window is focused");
@@ -97,7 +101,7 @@ Item {
 
     Loader {
         anchors.fill: parent
-        active: !Config.bar.activeWindow.showOnHover
+        active: root.titleOverride === "" && !Config.bar.activeWindow.showOnHover
 
         sourceComponent: MouseArea {
             cursorShape: Qt.PointingHandCursor
@@ -123,11 +127,13 @@ Item {
     MaterialIcon {
         id: icon
 
+        renderType: root.iconOverride !== "" ? Text.CurveRendering : Text.NativeRendering
+
         anchors.horizontalCenter: bar.isHorizontal ? undefined : parent.horizontalCenter
         anchors.verticalCenter: bar.isHorizontal ? parent.verticalCenter : undefined
 
         animate: true
-        text: Icons.getAppCategoryIcon(Hypr.activeToplevel?.lastIpcObject.class, "desktop_windows")
+        text: root.iconOverride !== "" ? root.iconOverride : Icons.getAppCategoryIcon(Hypr.activeToplevel?.lastIpcObject.class, "desktop_windows")
         color: root.colour
     }
 

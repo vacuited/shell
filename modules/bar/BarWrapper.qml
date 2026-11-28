@@ -19,6 +19,7 @@ Item {
 
     readonly property bool disabled: Strings.testRegexList(Config.bar.excludedScreens, screen.name)
     readonly property string position: Config.bar.position
+    readonly property var barContent: content.item
 
     readonly property int padding: Math.max(Tokens.padding.small, Config.border.thickness)
     readonly property int contentWidth: Tokens.sizes.bar.innerWidth + padding * 2

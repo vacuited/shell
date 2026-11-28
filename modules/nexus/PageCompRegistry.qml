@@ -232,6 +232,9 @@ QtObject {
                 Component {
                     FocusPanel {}
                 }
+                Component {
+                    BarPowerHub {}
+                }
             }
         },
         Component {

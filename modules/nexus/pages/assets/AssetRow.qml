@@ -42,6 +42,7 @@ ConnectedRect {
 
     // Animated assets are previewed with an animated image
     property bool previewAnimated
+    property bool useVacuitedDefaultPreview: false
     property list<string> filters: ["png", "jpg", "jpeg", "webp", "svg"]
     // Shown in place of the preview when there is no image to show. Assets the shell
     // always ships with are missing rather than unset, but a profile picture can simply
@@ -62,6 +63,8 @@ ConnectedRect {
         const source = root.fileManaged ? Qt.resolvedUrl(root.targetPath) : root.previewSource;
         return root.revision > 0 ? `${source}?v=${root.revision}` : source;
     }
+    readonly property bool useAnimatedPreview: root.previewAnimated && /\.(gif|webp|apng)(\?.*)?$/i.test(root.preview.toString())
+    readonly property bool showVacuitedLogo: root.useVacuitedDefaultPreview
     readonly property string sourceLabel: {
         if (root.fileManaged)
             return root.filePresent ? Paths.shortenHome(root.targetPath) : Tr.tr("None");
@@ -77,7 +80,9 @@ ConnectedRect {
     // Covers both the missing (empty path) and unreadable cases. Only the image in use
     // is given a source, so there is only ever one status to look at.
     readonly property bool previewFailed: {
-        const status = root.previewAnimated ? animatedPreview.status : staticPreview.status;
+        if (root.showVacuitedLogo)
+            return false;
+        const status = root.useAnimatedPreview ? animatedPreview.status : staticPreview.status;
         return status === Image.Error || status === Image.Null;
     }
 
@@ -105,7 +110,9 @@ ConnectedRect {
         copyProcess.previous = root.fileManaged ? "" : previous;
         copyProcess.source = source;
         copyProcess.copyTarget = target;
-        copyProcess.command = ["sh", "-c", "mkdir -p \"$1\" && cp -- \"$2\" \"$3\"", "sh", dir, source, target];
+        copyProcess.command = root.fileManaged
+            ? ["sh", "-c", "mkdir -p \"$1\" && cp -- \"$2\" \"$3\" && chmod 644 \"$3\"", "sh", dir, source, target]
+            : ["sh", "-c", "mkdir -p \"$1\" && cp -- \"$2\" \"$3\"", "sh", dir, source, target];
         copyProcess.running = true;
     }
 
@@ -161,15 +168,15 @@ ConnectedRect {
                 return;
             }
 
-            if (copyProcess.previous)
+            if (copyProcess.previous && copyProcess.previous !== copyProcess.copyTarget)
                 CUtils.deleteFile(Qt.resolvedUrl(copyProcess.previous));
 
             if (root.fileManaged) {
                 root.filePresent = true;
-                root.revision++;
             } else {
                 root.write(copyProcess.copyTarget);
             }
+            root.revision++;
 
             Toaster.toast(Tr.tr("Asset updated"), Paths.shortenHome(copyProcess.copyTarget), "image", Toast.Success);
         }
@@ -207,25 +214,34 @@ ConnectedRect {
                 onTapped: dialog.open()
             }
 
+            Loader {
+                anchors.fill: parent
+                anchors.margins: Tokens.padding.small
+                active: root.showVacuitedLogo
+                sourceComponent: Logo {}
+            }
+
             Image {
                 id: staticPreview
 
                 anchors.fill: parent
-                visible: !root.previewAnimated
+                visible: !root.showVacuitedLogo && !root.useAnimatedPreview
                 asynchronous: true
+                cache: false
                 fillMode: Image.PreserveAspectFit
                 sourceSize: Qt.size(Tokens.padding.extraExtraLarge * 2, Tokens.padding.extraExtraLarge * 2)
-                source: root.previewAnimated ? "" : root.preview
+                source: (root.showVacuitedLogo || root.useAnimatedPreview) ? "" : root.preview
             }
 
             AnimatedImage {
                 id: animatedPreview
 
                 anchors.fill: parent
-                visible: root.previewAnimated
+                visible: !root.showVacuitedLogo && root.useAnimatedPreview
                 asynchronous: true
+                cache: false
                 fillMode: Image.PreserveAspectFit
-                source: root.previewAnimated ? root.preview : ""
+                source: (!root.showVacuitedLogo && root.useAnimatedPreview) ? root.preview : ""
             }
 
             MaterialIcon {

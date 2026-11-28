@@ -15,6 +15,11 @@ Column {
 
     required property ScreenState screenState
 
+    readonly property string defaultSessionGif: GlobalConfig.paths.descriptorFor("sessionGif")?.defaultValue ?? "root:/assets/kurukuru.gif"
+    readonly property string rawSessionGif: (Config.paths.sessionGif || "").trim()
+    readonly property bool useVacuitedLogo: rawSessionGif === "" || rawSessionGif === "vacuited" || rawSessionGif === "root:/assets/logo.svg" || rawSessionGif === defaultSessionGif
+    readonly property string mascotPath: useVacuitedLogo ? "" : Paths.absolutePath(rawSessionGif)
+
     padding: Tokens.padding.large
     rightPadding: CUtils.clamp(padding - Config.border.thickness, 0, padding)
     spacing: Tokens.spacing.large
@@ -26,6 +31,7 @@ Column {
 
         SessionButton {
             id: topBtn
+
             required property var modelData
             required property int index
 
@@ -54,18 +60,49 @@ Column {
     }
 
     Loader {
-        active: Config.paths.sessionGif.trim() !== ""
+        active: root.useVacuitedLogo || root.mascotPath !== ""
+        sourceComponent: root.useVacuitedLogo
+            ? vacuitedEmblemComp
+            : (/\.(gif|webp|apng)(\?.*)?$/i.test(root.mascotPath) ? animatedEmblemComp : staticEmblemComp)
 
-        sourceComponent: AnimatedImage {
-            width: Tokens.sizes.session.button
-            height: Tokens.sizes.session.button
-            sourceSize.width: width * ((QsWindow.window as QsWindow)?.devicePixelRatio ?? 1)
+        Component {
+            id: vacuitedEmblemComp
 
-            playing: visible
-            asynchronous: true
-            speed: Config.general.sessionGifSpeed
-            source: Paths.absolutePath(Config.paths.sessionGif)
-            fillMode: AnimatedImage.PreserveAspectFit
+            Logo {
+                implicitWidth: Tokens.sizes.session.button
+                implicitHeight: Tokens.sizes.session.button
+            }
+        }
+
+        Component {
+            id: animatedEmblemComp
+
+            AnimatedImage {
+                width: Tokens.sizes.session.button
+                height: Tokens.sizes.session.button
+                sourceSize.width: width * ((QsWindow.window as QsWindow)?.devicePixelRatio ?? 1)
+                playing: visible
+                asynchronous: true
+                speed: Config.general.sessionGifSpeed
+                source: "file://" + root.mascotPath
+                fillMode: AnimatedImage.PreserveAspectFit
+            }
+        }
+
+        Component {
+            id: staticEmblemComp
+
+            Image {
+                width: Tokens.sizes.session.button
+                height: Tokens.sizes.session.button
+                sourceSize.width: width * ((QsWindow.window as QsWindow)?.devicePixelRatio ?? 1)
+                sourceSize.height: height * ((QsWindow.window as QsWindow)?.devicePixelRatio ?? 1)
+                asynchronous: true
+                smooth: true
+                mipmap: true
+                source: "file://" + root.mascotPath
+                fillMode: Image.PreserveAspectFit
+            }
         }
     }
 
@@ -99,15 +136,20 @@ Column {
             root.screenState.session = false;
             if (!SessionManager.exec(command)) {
                 if (command.length > 0) {
-                    if (command[0] === "hyprshutdown") {
+                    const exe = String(command[0]);
+                    if (exe === "hyprshutdown" || exe.endsWith("/hyprshutdown")) {
                         const postIdx = command.indexOf("--post-cmd");
                         const fallbackCmd = (postIdx !== -1 && postIdx + 1 < command.length) ? command[postIdx + 1] : "hyprctl dispatch exit";
-                        Quickshell.execDetached(["sh", "-c", 'if command -v hyprshutdown >/dev/null 2>&1; then exec "$@"; else eval "$CAELESTIA_FALLBACK"; fi', "sh", ...command], {
+                        Quickshell.execDetached([
+                            "sh", "-c",
+                            'if [ -x "$1" ] || command -v "$1" >/dev/null 2>&1; then exec "$@"; elif command -v hyprshutdown >/dev/null 2>&1; then shift; exec hyprshutdown "$@"; else eval "$CAELESTIA_FALLBACK"; fi',
+                            "sh", ...command
+                        ], {
                             environment: { "CAELESTIA_FALLBACK": fallbackCmd }
                         });
                         return;
                     }
-                    let hasShellOp = command.some(arg => arg === "&&" || arg === "||" || arg === ";" || arg === "|" || arg === ">" || arg === "<");
+                    const hasShellOp = command.some(arg => arg === "&&" || arg === "||" || arg === ";" || arg === "|" || arg === ">" || arg === "<");
                     if (hasShellOp || command.length === 1) {
                         Quickshell.execDetached(["sh", "-c", command.join(" ")]);
                     } else {

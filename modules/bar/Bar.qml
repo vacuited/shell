@@ -210,6 +210,7 @@ Item {
     EntrySection {
         id: endSection
 
+        appendPowerHub: true
         values: root.Config.bar.entries.end.values
     }
 
@@ -280,6 +281,7 @@ Item {
         id: section
 
         required property var values
+        property bool appendPowerHub: false
 
         readonly property int count: repeater.count
 
@@ -298,10 +300,21 @@ Item {
             id: repeater
 
             model: ScriptModel {
-                values: section.values.filter(e => e.enabled)
+                values: section.values.filter(e => e.enabled && !(root.Config.session.powerHub === true && e.id === "power"))
             }
 
             delegate: EntryChooser {}
+        }
+
+        Loader {
+            active: section.appendPowerHub && root.Config.session.powerHub === true && root.Config.session.enabled
+            visible: active
+            Layout.alignment: root.isHorizontal ? Qt.AlignVCenter : Qt.AlignHCenter
+
+            sourceComponent: Power {
+                objectName: "taskbarPowerButton"
+                screenState: root.screenState
+            }
         }
     }
 
